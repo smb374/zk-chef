@@ -77,7 +77,7 @@ func TestInitFreshVault(t *testing.T) {
 	if strings.Contains(string(b), "/home") {
 		t.Errorf("hook holds /home:\n%s", b)
 	}
-	for _, line := range strings.Split(string(b), "\n") {
+	for line := range strings.SplitSeq(string(b), "\n") {
 		f := strings.Fields(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "exec")))
 		if len(f) > 0 && strings.HasPrefix(f[0], "/") {
 			t.Errorf("hook runs absolute path: %q", line)
@@ -100,12 +100,12 @@ func TestInitAgentsMd(t *testing.T) {
 		want     string // wanted AGENTS.md bytes; ignored when wantCode is 2 (must be unchanged)
 	}{
 		{"absent", nil, 0, string(block)},
-		{"existing without block", ptr("# Mine\n\nkeep me"), 0, "# Mine\n\nkeep me\n\n" + string(block)},
-		{"existing with block", ptr(wellFormed), 0, wellFormed},
-		{"only open marker", ptr("a\n<!-- zk-chef -->\nb\n"), 2, ""},
-		{"only close marker", ptr("a\n<!-- /zk-chef -->\nb\n"), 2, ""},
-		{"close before open", ptr("<!-- /zk-chef -->\n<!-- zk-chef -->\n"), 2, ""},
-		{"duplicated", ptr(wellFormed + wellFormed), 2, ""},
+		{"existing without block", new("# Mine\n\nkeep me"), 0, "# Mine\n\nkeep me\n\n" + string(block)},
+		{"existing with block", new(wellFormed), 0, wellFormed},
+		{"only open marker", new("a\n<!-- zk-chef -->\nb\n"), 2, ""},
+		{"only close marker", new("a\n<!-- /zk-chef -->\nb\n"), 2, ""},
+		{"close before open", new("<!-- /zk-chef -->\n<!-- zk-chef -->\n"), 2, ""},
+		{"duplicated", new(wellFormed + wellFormed), 2, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -138,7 +138,6 @@ func TestInitAgentsMd(t *testing.T) {
 	}
 }
 
-func ptr(s string) *string { return &s }
 func TestInitRerun(t *testing.T) {
 	t.Run("changes no file", func(t *testing.T) {
 		env := setupVault(t, "1.2.3", map[string]string{"AGENTS.md": "# Mine\n"})
@@ -212,7 +211,7 @@ func TestInitMinVersion(t *testing.T) {
 			}
 			b, _ := os.ReadFile(".zk-chef/config.toml")
 			var lines []string
-			for _, l := range strings.Split(string(b), "\n") {
+			for l := range strings.SplitSeq(string(b), "\n") {
 				if strings.HasPrefix(l, "min_version") {
 					lines = append(lines, l)
 				}

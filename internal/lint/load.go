@@ -63,8 +63,8 @@ func LoadStaged(root string) (map[string][]byte, error) {
 	}
 	var names []string
 	seen := map[string]bool{}
-	for _, n := range strings.Split(string(listing), "\x00") {
-		top := strings.SplitN(n, "/", 2)[0]
+	for n := range strings.SplitSeq(string(listing), "\x00") {
+		top, _, _ := strings.Cut(n, "/")
 		if (n == ConfigPath || contains(loaded, top)) && !seen[n] {
 			seen[n] = true
 			names = append(names, n)
@@ -72,7 +72,9 @@ func LoadStaged(root string) (map[string][]byte, error) {
 	}
 	var req bytes.Buffer
 	for _, n := range names {
-		req.WriteString(":" + n + "\n")
+		req.WriteString(":")
+		req.WriteString(n)
+		req.WriteString("\n")
 	}
 	cat := exec.Command("git", "-C", root, "cat-file", "--batch")
 	cat.Stdin = &req

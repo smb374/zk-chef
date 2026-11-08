@@ -40,8 +40,8 @@ func installFlags(fs *flag.FlagSet, inv *invocation) {
 
 // homeDir is HOME from the verb's env, else the process env, else the OS user home.
 func homeDir(inv *invocation) (string, error) {
-	for i := len(inv.env) - 1; i >= 0; i-- {
-		if v, ok := strings.CutPrefix(inv.env[i], "HOME="); ok && v != "" {
+	for _, v := range slices.Backward(inv.env) {
+		if v, ok := strings.CutPrefix(v, "HOME="); ok && v != "" {
 			return v, nil
 		}
 	}

@@ -38,7 +38,7 @@ func pyRepr(v any) string {
 
 func checkFrontmatter(d *doc, add adder) {
 	fm := d.fm
-	folder := strings.SplitN(d.path, "/", 2)[0]
+	folder, _, _ := strings.Cut(d.path, "/")
 	for _, key := range []string{"id", "title", "kind"} {
 		if s, ok := fm[key].(string); !ok || strings.TrimSpace(s) == "" {
 			add("E_FRONTMATTER", d.path, 1, key+" must be a non-empty string (quote it in YAML)")

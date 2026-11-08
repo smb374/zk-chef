@@ -2,6 +2,7 @@ package version
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -29,10 +30,8 @@ func parse(s string) (semver, error) {
 	}
 	if hasPre {
 		v.pre = strings.Split(pre, ".")
-		for _, id := range v.pre {
-			if id == "" {
-				return v, fmt.Errorf("%q has an empty pre-release identifier", s)
-			}
+		if slices.Contains(v.pre, "") {
+			return v, fmt.Errorf("%q has an empty pre-release identifier", s)
 		}
 	}
 	return v, nil

@@ -177,14 +177,14 @@ func TestUpgradeAgentsMd(t *testing.T) {
 		wantCode int
 		want     string // wanted AGENTS.md bytes, {BLOCK} for the scaffold block; ignored when wantCode is 2 (must be unchanged)
 	}{
-		{"block replaced, text around it kept", ptr("intro\n" + stale + "\noutro\n"), 0, "intro\n{BLOCK}\noutro\n"},
-		{"block at file start and end", ptr(stale), 0, "{BLOCK}"},
-		{"no markers: block appended", ptr("# Mine\n\nkeep me"), 0, "# Mine\n\nkeep me\n\n{BLOCK}\n"},
+		{"block replaced, text around it kept", new("intro\n" + stale + "\noutro\n"), 0, "intro\n{BLOCK}\noutro\n"},
+		{"block at file start and end", new(stale), 0, "{BLOCK}"},
+		{"no markers: block appended", new("# Mine\n\nkeep me"), 0, "# Mine\n\nkeep me\n\n{BLOCK}\n"},
 		{"absent: created", nil, 0, "{BLOCK}\n"},
-		{"only open marker", ptr("a\n<!-- zk-chef -->\nb\n"), 2, ""},
-		{"only close marker", ptr("a\n<!-- /zk-chef -->\nb\n"), 2, ""},
-		{"close before open", ptr("<!-- /zk-chef -->\n<!-- zk-chef -->\n"), 2, ""},
-		{"duplicated", ptr(stale + "\n" + stale + "\n"), 2, ""},
+		{"only open marker", new("a\n<!-- zk-chef -->\nb\n"), 2, ""},
+		{"only close marker", new("a\n<!-- /zk-chef -->\nb\n"), 2, ""},
+		{"close before open", new("<!-- /zk-chef -->\n<!-- zk-chef -->\n"), 2, ""},
+		{"duplicated", new(stale + "\n" + stale + "\n"), 2, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

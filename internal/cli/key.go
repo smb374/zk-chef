@@ -27,7 +27,7 @@ func runGPG(inv *invocation, args ...string) ([]byte, error) {
 
 // firstFpr returns the first fpr: record of gpg --with-colons output.
 func firstFpr(colons []byte) string {
-	for _, ln := range strings.Split(string(colons), "\n") {
+	for ln := range strings.SplitSeq(string(colons), "\n") {
 		if f := strings.Split(ln, ":"); f[0] == "fpr" && len(f) > 9 {
 			return f[9]
 		}

@@ -27,7 +27,10 @@ type kv [2]string
 func doc(id, title, kind, body string, extra ...kv) string {
 	var fm strings.Builder
 	for _, e := range extra {
-		fm.WriteString(e[0] + ": " + e[1] + "\n")
+		fm.WriteString(e[0])
+		fm.WriteString(": ")
+		fm.WriteString(e[1])
+		fm.WriteString("\n")
 	}
 	return "---\nid: " + id + "\ntitle: " + title + "\nkind: " + kind + "\n" + fm.String() + "---\n" + body + "\n"
 }

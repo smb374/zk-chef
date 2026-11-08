@@ -43,7 +43,7 @@ func newSigner(t *testing.T) signer {
 	t.Cleanup(func() { _ = exec.Command("gpgconf", "--homedir", home, "--kill", "all").Run() })
 	gpg(t, home, "", "--passphrase", "", "--quick-gen-key", "zk-chef-test@example.com", "default", "default", "never")
 	var fpr string
-	for _, ln := range strings.Split(gpg(t, home, "", "--with-colons", "--list-keys"), "\n") {
+	for ln := range strings.SplitSeq(gpg(t, home, "", "--with-colons", "--list-keys"), "\n") {
 		if strings.HasPrefix(ln, "fpr:") {
 			fpr = strings.Split(ln, ":")[9]
 			break
