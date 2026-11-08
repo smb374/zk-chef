@@ -6,7 +6,7 @@ import (
 )
 
 func TestRunStubVerbs(t *testing.T) {
-	verbs := []string{"review", "status", "key", "ingest", "upgrade", "install", "self-update", "doctor"}
+	verbs := []string{"review", "status", "ingest", "upgrade", "install", "self-update", "doctor"}
 	for _, verb := range verbs {
 		t.Run(verb, func(t *testing.T) {
 			got := runIn(t, "dev", nil, verb)

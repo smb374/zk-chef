@@ -33,6 +33,7 @@ var handlers = map[string]func(*invocation) int{
 	"init": initVerb,
 	"lint": lintVerb,
 	"fix":  fixVerb,
+	"key":  keyVerb,
 }
 
 // verbFlags registers the flags a verb takes besides --json.
@@ -40,6 +41,7 @@ var verbFlags = map[string]func(*flag.FlagSet, *invocation){
 	"init": initFlags,
 	"lint": lintFlags,
 	"fix":  fixFlags,
+	"key":  rootFlag,
 }
 
 // Run executes one zk-chef invocation and returns the process exit code.

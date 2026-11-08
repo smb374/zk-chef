@@ -16,8 +16,8 @@ const signedBegin = "-----BEGIN PGP SIGNED MESSAGE-----"
 // messageKeys are the fields every signed review message must carry.
 var messageKeys = []string{"path", "sha256", "verdict", "date"}
 
-// normFpr strips spaces and upper-cases a fingerprint.
-func normFpr(s string) string {
+// NormFpr strips spaces and upper-cases a fingerprint.
+func NormFpr(s string) string {
 	return strings.ToUpper(strings.ReplaceAll(s, " ", ""))
 }
 
@@ -32,7 +32,7 @@ type verifier struct {
 func newVerifier(files map[string][]byte, pinned []string) *verifier {
 	v := &verifier{files: files, pinned: map[string]bool{}}
 	for _, f := range pinned {
-		v.pinned[normFpr(f)] = true
+		v.pinned[NormFpr(f)] = true
 	}
 	return v
 }
@@ -91,7 +91,7 @@ func (v *verifier) verify(block string) (string, string) {
 	if runErr != nil || len(valid) < 3 {
 		return "", "signature does not verify against keys/"
 	}
-	if !v.pinned[normFpr(valid[2])] && !v.pinned[normFpr(valid[len(valid)-1])] {
+	if !v.pinned[NormFpr(valid[2])] && !v.pinned[NormFpr(valid[len(valid)-1])] {
 		return "", fmt.Sprintf("signer %s is not pinned in %s", valid[len(valid)-1], ConfigPath)
 	}
 	return stdout.String(), ""
