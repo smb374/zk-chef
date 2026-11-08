@@ -25,16 +25,19 @@ type invocation struct {
 	env            []string
 	root           string // --root, for verbs that take it
 	staged         bool   // --staged, for lint
+	yes            bool   // -y, for init
 }
 
 // handlers maps implemented verbs to their code; any other verb is a stub.
 var handlers = map[string]func(*invocation) int{
+	"init": initVerb,
 	"lint": lintVerb,
 	"fix":  fixVerb,
 }
 
 // verbFlags registers the flags a verb takes besides --json.
 var verbFlags = map[string]func(*flag.FlagSet, *invocation){
+	"init": initFlags,
 	"lint": lintFlags,
 	"fix":  fixFlags,
 }

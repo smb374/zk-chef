@@ -34,6 +34,13 @@ func setupVault(t *testing.T, binVersion string, files map[string]string) []stri
 	home, gnupg := t.TempDir(), t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("GNUPGHOME", gnupg)
+	repo, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldAssets := Assets
+	Assets = os.DirFS(repo)
+	t.Cleanup(func() { Assets = oldAssets })
 	t.Chdir(root)
 
 	old := version.Version
