@@ -11,7 +11,7 @@ func vaultWith(minVersion string) map[string]string {
 
 const (
 	refused = "run zk-chef self-update"
-	passed  = "not implemented"
+	passed  = "" // the gate lets the verb run
 )
 
 func TestRunVersionGate(t *testing.T) {
@@ -24,15 +24,15 @@ func TestRunVersionGate(t *testing.T) {
 	}{
 		{"older binary refused", "1.0.0", vaultWith(`"1.2.0"`), []string{"lint"}, refused},
 		{"older binary refused for init", "1.0.0", vaultWith(`"1.2.0"`), []string{"init"}, refused},
-		{"equal passes", "1.2.0", vaultWith(`"1.2.0"`), []string{"upgrade"}, passed},
-		{"newer passes", "1.3.0", vaultWith(`"1.2.0"`), []string{"upgrade"}, passed},
-		{"compares numbers not text", "1.10.0", vaultWith(`"1.9.0"`), []string{"upgrade"}, passed},
+		{"equal passes", "1.2.0", vaultWith(`"1.2.0"`), []string{"lint"}, passed},
+		{"newer passes", "1.3.0", vaultWith(`"1.2.0"`), []string{"lint"}, passed},
+		{"compares numbers not text", "1.10.0", vaultWith(`"1.9.0"`), []string{"lint"}, passed},
 		{"v prefix on binary", "v1.0.0", vaultWith(`"1.2.0"`), []string{"lint"}, refused},
-		{"v prefix on pin", "1.2.0", vaultWith(`"v1.2.0"`), []string{"upgrade"}, passed},
+		{"v prefix on pin", "1.2.0", vaultWith(`"v1.2.0"`), []string{"lint"}, passed},
 		{"pre-release is older than its release", "1.2.0-rc.1", vaultWith(`"1.2.0"`), []string{"lint"}, refused},
-		{"dev passes", "dev", vaultWith(`"99.0.0"`), []string{"upgrade"}, passed},
-		{"absent key passes", "1.0.0", map[string]string{".zk-chef/config.toml": "word_count_warn = 400\n"}, []string{"upgrade"}, passed},
-		{"no config file passes", "1.0.0", nil, []string{"upgrade"}, passed},
+		{"dev passes", "dev", vaultWith(`"99.0.0"`), []string{"lint"}, passed},
+		{"absent key passes", "1.0.0", map[string]string{".zk-chef/config.toml": "word_count_warn = 400\n"}, []string{"lint"}, passed},
+		{"no config file passes", "1.0.0", nil, []string{"lint"}, passed},
 		{"invalid value refused", "1.0.0", vaultWith(`"banana"`), []string{"lint"}, "min_version"},
 		{"non-string value refused", "1.0.0", vaultWith("3"), []string{"lint"}, "min_version"},
 		{"invalid value refused for dev", "dev", vaultWith(`"banana"`), []string{"lint"}, "min_version"},
@@ -44,11 +44,15 @@ func TestRunVersionGate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := runIn(t, tt.binVersion, tt.files, tt.args...)
+			gated := strings.Contains(got.stderr, refused) || strings.Contains(got.stderr, "min_version")
+			if tt.wantStderr == passed {
+				if gated {
+					t.Errorf("stderr %q: gate refused the verb", got.stderr)
+				}
+				return
+			}
 			if got.code != 2 || !strings.Contains(got.stderr, tt.wantStderr) {
 				t.Errorf("got code %d stderr %q, want 2 and %q", got.code, got.stderr, tt.wantStderr)
-			}
-			if (tt.wantStderr == passed) != strings.Contains(got.stderr, "not implemented") {
-				t.Errorf("stderr %q: gate outcome differs from want %q", got.stderr, tt.wantStderr)
 			}
 		})
 	}
