@@ -6,7 +6,7 @@ import (
 )
 
 func TestRunStubVerbs(t *testing.T) {
-	verbs := []string{"review", "status", "ingest", "upgrade", "install", "self-update", "doctor"}
+	verbs := []string{"ingest", "upgrade", "install", "self-update", "doctor"}
 	for _, verb := range verbs {
 		t.Run(verb, func(t *testing.T) {
 			got := runIn(t, "dev", nil, verb)
@@ -19,7 +19,7 @@ func TestRunStubVerbs(t *testing.T) {
 }
 
 func TestRunJSONFlag(t *testing.T) {
-	got := runIn(t, "dev", nil, "review", "--json")
+	got := runIn(t, "dev", nil, "ingest", "--json")
 	want := `{"ok":false,"error":"not implemented"}` + "\n"
 	if got.code != 2 || got.stdout != want {
 		t.Errorf("got code %d stdout %q, want 2 %q", got.code, got.stdout, want)
