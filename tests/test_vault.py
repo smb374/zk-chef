@@ -392,7 +392,12 @@ def test_review_and_signatures():
                     lambda f: (
                         update(f),
                         edit(
-                            {"sources/s1.md": (b"review: reviewed", b"review: unreviewed")}
+                            {
+                                "sources/s1.md": (
+                                    b"review: reviewed",
+                                    b"review: unreviewed",
+                                )
+                            }
                         )(f),
                     )
                 )
@@ -460,6 +465,134 @@ def test_fix():
             and "[[n1|Old title]]\n```" in text
         )
         assert vault.fix(root, out=lambda *_: None) == 0
+
+
+def test_skill_dry_run():
+    """Follow the skills' commands in a real vault; lint reports 0 errors at each step."""
+    quiet = lambda *_: None
+    with tempfile.TemporaryDirectory(dir="/tmp") as t:
+        home, root = Path(t) / "g", Path(t) / "v"
+        home.mkdir()
+        fpr, pub = make_key(home)
+        vault.init(root, which=lambda n: "/bin/" + n, out=quiet)
+        assert (root / "AGENTS.md").is_file()
+        for skill in (
+            "vault-ops/SKILL.md",
+            "vault-ops/LINT.md",
+            "vault-writing/SKILL.md",
+        ):
+            assert (root / ".agents/skills" / skill).is_file(), skill
+        (root / "keys/me.asc").write_bytes(pub)
+        cfg = root / ".vault/config.toml"
+        cfg.write_text(
+            cfg.read_text().replace(
+                "pinned_fingerprints = []", f'pinned_fingerprints = ["{fpr}"]'
+            )
+        )
+
+        def zk_new(folder, title):
+            r = subprocess.run(
+                ["zk", "new", folder, "--title", title, "--print-path", "--no-input"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return Path(r.stdout.strip())
+
+        def lint_ok(step):
+            found = vault.lint_vault(vault.load_worktree(root))
+            errors = [f for f in found if f.code.startswith("E_")]
+            assert not errors, (step, errors)
+
+        def put(path, old, new, count=1):
+            path.write_text(path.read_text().replace(old, new, count))
+
+        os.environ["GNUPGHOME"] = str(home)
+        try:
+            # 1. ingest
+            src = zk_new("sources", "Ongaro 2014")
+            sid = src.stem
+            raw = root / "raw" / f"{sid}-paper.txt"
+            raw.write_bytes(b"one leader per term\n")
+            put(src, f"raw/{sid}-NAME", f"raw/{sid}-paper.txt")
+            put(
+                src,
+                "sha256: \n",
+                f"sha256: {hashlib.sha256(raw.read_bytes()).hexdigest()}\n",
+            )
+            src.write_text(
+                src.read_text()
+                + "\nWhy: consensus background.\n\n- Leaders are unique per term (p. 4).\n\n## Extract\n\none leader per term\n"
+            )
+            lint_ok("ingest")
+            # 2. review
+            vault.review(root, sid, "reviewed", yes=True, commit=False, out=quiet)
+            lint_ok("review")
+            # 3. write a note with a citation and a hub link
+            hub = f"[[{vault_cfg(root, 'sources_id')}|Sources]]"
+            old = zk_new("notes", "Raft elects at most one leader per term")
+            body = f"One leader per term [1, p. 4].\n\n## References\n\n1. [[{sid}|Ongaro 2014]]\n"
+            put(old, "Hubs: \n", f"Hubs: {hub}\n\n{body}")
+            lint_ok("note")
+            # 4. supersede it
+            new = zk_new(
+                "notes",
+                "Raft elects at most one leader per term except during partitions",
+            )
+            put(
+                new,
+                "Hubs: \n",
+                f"Hubs: {hub}\n\nRefines [[{old.stem}|Raft elects at most one leader per term]]; one leader per term [1, p. 4].\n\n## References\n\n1. [[{sid}|Ongaro 2014]]\n",
+            )
+            put(
+                old,
+                "kind: note\n",
+                f"kind: note\nstatus: superseded\nsuperseded_by: {new.stem}\n",
+            )
+            lint_ok("supersede")
+            # 5. same-name raw update; old block stays
+            raw.write_bytes(b"one leader per term, new edition\n")
+            put(
+                src,
+                f"sha256: {first_sha(src)}",
+                f"sha256: {hashlib.sha256(raw.read_bytes()).hexdigest()}",
+            )
+            put(src, "review: reviewed", "review: unreviewed")
+            lint_ok("raw update")
+            # 6. the hook accepts a commit
+            os.environ.update(
+                {
+                    "GIT_AUTHOR_NAME": "t",
+                    "GIT_AUTHOR_EMAIL": "t@t",
+                    "GIT_COMMITTER_NAME": "t",
+                    "GIT_COMMITTER_EMAIL": "t@t",
+                }
+            )
+            subprocess.run(["git", "-C", str(root), "add", "."], check=True)
+            r = subprocess.run(
+                ["git", "-C", str(root), "commit", "-qm", "ingest: x"],
+                capture_output=True,
+                check=False,
+            )
+            assert r.returncode == 0, r.stdout + r.stderr
+        finally:
+            subprocess.run(
+                ["gpgconf", "--homedir", str(home), "--kill", "all"], check=False
+            )
+            os.environ.pop("GNUPGHOME", None)
+
+
+def vault_cfg(root, key):
+    import tomllib
+
+    return tomllib.loads((root / ".vault/config.toml").read_text())[key]
+
+
+def first_sha(path):
+    import re
+
+    return re.search(r"(?m)^sha256: (\w+)$", path.read_text())[1]
 
 
 if __name__ == "__main__":
