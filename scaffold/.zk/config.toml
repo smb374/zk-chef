@@ -1,0 +1,35 @@
+[note]
+language = "en"
+default-title = "untitled"
+# UTC minute + 4 random lowercase alphanumerics. zk formats dates in local time, so call date.
+filename = "{{sh 'date -u +%Y%m%d%H%M'}}{{id}}"
+extension = "md"
+template = "note.md"
+id-charset = "alphanum"
+id-length = 4
+id-case = "lower"
+
+[format.markdown]
+link-format = "[[{{metadata.id}}|{{title}}]]"
+hashtags = false
+colon-tags = false
+
+[group.notes]
+paths = ["notes"]
+[group.notes.note]
+template = "note.md"
+
+[group.hubs]
+paths = ["hubs"]
+[group.hubs.note]
+template = "hub.md"
+
+[group.sources]
+paths = ["sources"]
+[group.sources.note]
+template = "source.md"
+
+[group.projects]
+paths = ["projects"]
+[group.projects.note]
+template = "log.md"
