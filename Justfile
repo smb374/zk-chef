@@ -9,3 +9,9 @@ test-one name:
 
 test:
     go test ./... -count=1
+
+add pkg:
+    go get {{pkg}}
+
+tidy:
+    go mod tidy
