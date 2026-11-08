@@ -27,6 +27,7 @@ type invocation struct {
 	staged         bool   // --staged, for lint
 	yes            bool   // -y, for init
 	noCommit       bool   // --no-commit, for review
+	title          string // --title, for ingest
 }
 
 // handlers maps implemented verbs to their code; any other verb is a stub.
@@ -35,6 +36,7 @@ var handlers = map[string]func(*invocation) int{
 	"lint":   lintVerb,
 	"fix":    fixVerb,
 	"key":    keyVerb,
+	"ingest": ingestVerb,
 	"review": reviewVerb,
 	"status": statusVerb,
 }
@@ -45,6 +47,7 @@ var verbFlags = map[string]func(*flag.FlagSet, *invocation){
 	"lint":   lintFlags,
 	"fix":    fixFlags,
 	"key":    rootFlag,
+	"ingest": ingestFlags,
 	"review": reviewFlags,
 	"status": rootFlag,
 }
@@ -73,10 +76,23 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, env []string)
 	if register, ok := verbFlags[verb]; ok {
 		register(fs, inv)
 	}
-	if err := fs.Parse(args[1:]); err != nil {
-		return 2
+	// Flags may follow positional arguments (zk-chef ingest PATH --title T); "--" ends flags.
+	rest := args[1:]
+	for {
+		if err := fs.Parse(rest); err != nil {
+			return 2
+		}
+		left := fs.Args()
+		if len(left) == 0 {
+			break
+		}
+		if len(rest) > len(left) && rest[len(rest)-len(left)-1] == "--" {
+			inv.args = append(inv.args, left...)
+			break
+		}
+		inv.args = append(inv.args, left[0])
+		rest = left[1:]
 	}
-	inv.args = fs.Args()
 	if h, ok := handlers[verb]; ok {
 		return h(inv)
 	}
