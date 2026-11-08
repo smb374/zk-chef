@@ -23,10 +23,21 @@ type invocation struct {
 	stdin          io.Reader
 	stdout, stderr io.Writer
 	env            []string
+	root           string // --root, for verbs that take it
+	staged         bool   // --staged, for lint
 }
 
 // handlers maps implemented verbs to their code; any other verb is a stub.
-var handlers = map[string]func(*invocation) int{}
+var handlers = map[string]func(*invocation) int{
+	"lint": lintVerb,
+	"fix":  fixVerb,
+}
+
+// verbFlags registers the flags a verb takes besides --json.
+var verbFlags = map[string]func(*flag.FlagSet, *invocation){
+	"lint": lintFlags,
+	"fix":  fixFlags,
+}
 
 // Run executes one zk-chef invocation and returns the process exit code.
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, env []string) int {
@@ -49,6 +60,9 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, env []string)
 	fs.Usage = func() { fmt.Fprintf(stderr, "usage: zk-chef %s [--json] [args]\n", verb) }
 	inv := &invocation{verb: verb, stdin: stdin, stdout: stdout, stderr: stderr, env: env}
 	fs.BoolVar(&inv.json, "json", false, "print one JSON object")
+	if register, ok := verbFlags[verb]; ok {
+		register(fs, inv)
+	}
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
 	}

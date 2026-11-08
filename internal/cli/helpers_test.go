@@ -16,9 +16,10 @@ type result struct {
 	stdout, stderr string
 }
 
-// runIn builds a temp-dir vault from files (path -> content), points HOME and
-// GNUPGHOME at temp dirs, sets the binary version, and runs Run from the vault root.
-func runIn(t *testing.T, binVersion string, files map[string]string, args ...string) result {
+// setupVault builds a temp-dir vault from files (path -> content), points HOME and
+// GNUPGHOME at temp dirs, sets the binary version, and changes into the vault root.
+// It returns the env slice for Run.
+func setupVault(t *testing.T, binVersion string, files map[string]string) []string {
 	t.Helper()
 	root := t.TempDir()
 	for p, content := range files {
@@ -38,8 +39,18 @@ func runIn(t *testing.T, binVersion string, files map[string]string, args ...str
 	old := version.Version
 	version.Version = binVersion
 	t.Cleanup(func() { version.Version = old })
+	return []string{"HOME=" + home, "GNUPGHOME=" + gnupg}
+}
 
+// run calls Run from the current directory.
+func run(env []string, args ...string) result {
 	var stdout, stderr bytes.Buffer
-	code := Run(args, strings.NewReader(""), &stdout, &stderr, []string{"HOME=" + home, "GNUPGHOME=" + gnupg})
+	code := Run(args, strings.NewReader(""), &stdout, &stderr, env)
 	return result{code, stdout.String(), stderr.String()}
+}
+
+// runIn builds a temp-dir vault from files and runs Run from the vault root.
+func runIn(t *testing.T, binVersion string, files map[string]string, args ...string) result {
+	t.Helper()
+	return run(setupVault(t, binVersion, files), args...)
 }
