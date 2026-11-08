@@ -14,3 +14,8 @@ Checked 2026-11-08 with zk 0.15.7, Python 3.14, PyYAML 6.0.3, git, gpg.
 - Frontmatter titles use `{{json title}}`. A JSON string is valid YAML, so quotes in titles are safe.
 - `zk new` takes the target dir relative to the working dir. Use `-W VAULT --notebook-dir VAULT` from scripts.
 - Seed hubs have fixed IDs; `.vault/config.toml` names them (`index_id`, `projects_id`, `sources_id`).
+
+## Release checks
+
+- **go install.** Partly checked. `TestGoInstallCarriesEmbeddedFiles` builds the module zip with `golang.org/x/mod/zip` and asserts that `scaffold/` (config, hook, zk config) and `skills/` are in it. This stands in for `go install github.com/smb374/zk-chef@latest`. Unchecked: a real `go install` after the first tag is pushed, because the repo is not pushed yet.
+- **Release assets.** `TestBuildScript` builds the four binaries and `checksums.txt` and checks the host binary prints the ldflags version. `TestInstallScript` runs `install.sh` against a local HTTP server. Unchecked: `release.yml` on GitHub, and `install.sh` against a real release in a clean container.
