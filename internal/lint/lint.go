@@ -30,8 +30,9 @@ var (
 )
 
 type config struct {
-	IndexID       string `toml:"index_id"`
-	WordCountWarn int    `toml:"word_count_warn"`
+	IndexID       string   `toml:"index_id"`
+	WordCountWarn int      `toml:"word_count_warn"`
+	Pinned        []string `toml:"pinned_fingerprints"`
 }
 
 func parseConfig(files map[string][]byte) (config, error) {
@@ -65,6 +66,8 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 	if err != nil {
 		return nil, err
 	}
+	v := newVerifier(files, cfg.Pinned)
+	defer v.close()
 	var out []Finding
 	add := func(code, path string, line int, msg string) {
 		out = append(out, Finding{code, path, line, msg})
@@ -208,6 +211,7 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 		} else if sum := sha256.Sum256(b); hex.EncodeToString(sum[:]) != want {
 			add("E_SHA256", d.path, 1, raw+" does not match sha256 in the note")
 		}
+		checkReview(d, files, v, add)
 	}
 	for p := range files {
 		if strings.HasPrefix(p, "raw/") && !strings.HasPrefix(path.Base(p), ".") && !rawPaths[p] {
