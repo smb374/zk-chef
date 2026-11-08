@@ -33,6 +33,7 @@ type invocation struct {
 // handlers maps implemented verbs to their code; any other verb is a stub.
 var handlers = map[string]func(*invocation) int{
 	"init":    initVerb,
+	"doctor":  doctorVerb,
 	"install": installVerb,
 	"lint":    lintVerb,
 	"fix":     fixVerb,
@@ -46,6 +47,7 @@ var handlers = map[string]func(*invocation) int{
 // verbFlags registers the flags a verb takes besides --json.
 var verbFlags = map[string]func(*flag.FlagSet, *invocation){
 	"init":    initFlags,
+	"doctor":  rootFlag,
 	"install": installFlags,
 	"lint":    lintFlags,
 	"fix":     fixFlags,
