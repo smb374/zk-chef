@@ -25,31 +25,33 @@ type invocation struct {
 	env            []string
 	root           string // --root, for verbs that take it
 	staged         bool   // --staged, for lint
-	yes            bool   // -y, for init
+	yes            bool   // -y, for init and install
 	noCommit       bool   // --no-commit, for review
 	title          string // --title, for ingest
 }
 
 // handlers maps implemented verbs to their code; any other verb is a stub.
 var handlers = map[string]func(*invocation) int{
-	"init":   initVerb,
-	"lint":   lintVerb,
-	"fix":    fixVerb,
-	"key":    keyVerb,
-	"ingest": ingestVerb,
-	"review": reviewVerb,
-	"status": statusVerb,
+	"init":    initVerb,
+	"install": installVerb,
+	"lint":    lintVerb,
+	"fix":     fixVerb,
+	"key":     keyVerb,
+	"ingest":  ingestVerb,
+	"review":  reviewVerb,
+	"status":  statusVerb,
 }
 
 // verbFlags registers the flags a verb takes besides --json.
 var verbFlags = map[string]func(*flag.FlagSet, *invocation){
-	"init":   initFlags,
-	"lint":   lintFlags,
-	"fix":    fixFlags,
-	"key":    rootFlag,
-	"ingest": ingestFlags,
-	"review": reviewFlags,
-	"status": rootFlag,
+	"init":    initFlags,
+	"install": installFlags,
+	"lint":    lintFlags,
+	"fix":     fixFlags,
+	"key":     rootFlag,
+	"ingest":  ingestFlags,
+	"review":  reviewFlags,
+	"status":  rootFlag,
 }
 
 // Run executes one zk-chef invocation and returns the process exit code.
