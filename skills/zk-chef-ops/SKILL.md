@@ -1,11 +1,11 @@
 ---
-name: vault-ops
-description: Vault bookkeeping with zk, git and scripts/vault.py. Use before ingesting a raw file, updating a raw file, superseding a note or source, running lint or fix, reading a lint code, or committing in a vault (a repo with .vault/config.toml).
+name: zk-chef-ops
+description: Vault bookkeeping with zk, git and zk-chef. Use before ingesting a raw file, updating a raw file, superseding a note or source, running lint or fix, reading a lint code, or committing in a vault (a repo with .zk-chef/config.toml).
 ---
 
-# vault-ops
+# zk-chef-ops
 
-This skill owns the commands, the history and the checks. `vault-writing` owns what you write inside a note.
+This skill owns the commands, the history and the checks. `zettel-writing` owns what you write inside a note.
 
 Run every command from the vault root. A note's ID is its filename stem (`YYYYmmddHHMM` in UTC + 4 random characters); the seed hubs keep their fixed IDs.
 
@@ -18,15 +18,15 @@ Run every command from the vault root. A note's ID is its filename stem (`YYYYmm
   - `--linked-by ID`: notes that ID links.
   - `--orphan`: notes nothing links.
   - a folder, e.g. `hubs`, with `--format "[[{{metadata.id}}|{{title}}]]"`: ready-made links.
-- **Check:** `python3 scripts/vault.py lint`. Findings read `path:line: CODE message`. Errors block the commit; warnings never do. Read `LINT.md` in this folder for any code you do not know.
-- **Refresh aliases:** `python3 scripts/vault.py fix` rewrites every stale link alias to the target's current title.
+- **Check:** `zk-chef lint`. Findings read `path:line: CODE message`. Errors block the commit; warnings never do. Read `LINT.md` in this folder for any code you do not know.
+- **Refresh aliases:** `zk-chef fix` rewrites every stale link alias to the target's current title.
 
 ## Ingest a raw file
 
 1. Create the source note with `zk new sources --title "<short title of the work>" --print-path --no-input`. Its ID names the raw file.
 2. Copy the file to `raw/<ID>-<original name>`.
 3. Set the frontmatter: `raw:` to that path, `sha256:` to the output of `sha256sum`, `review: unreviewed`. Add `authors`, `published`, `url` or `citation` (IEEE style) when you know them.
-4. Write the body as `vault-writing` describes under "Source notes".
+4. Write the body as `zettel-writing` describes under "Source notes".
 5. Run lint, then commit with `ingest: <title>`. Done when lint reports 0 errors.
 
 An unreviewed source is citable at once.
@@ -47,21 +47,21 @@ An unreviewed source is citable at once.
 
 Supersede when the claim itself changed. Wording, link and citation fixes are edits in place.
 
-1. Write the replacement NEW (`vault-writing`, "Write a note"; for a source, "Ingest a raw file").
+1. Write the replacement NEW (`zettel-writing`, "Write a note"; for a source, "Ingest a raw file").
 2. On OLD, add `status: superseded` and `superseded_by: NEW-ID` to the frontmatter. Leave OLD's content as it is.
 3. For each live note in `zk list --link-to OLD`, point its link at NEW. Done when lint shows no `W_SUPERSEDED_LINK`.
 4. Run lint and commit with `supersede: <what>`.
 
 ## Retitle
 
-A retitle keeps the claim and changes the wording. Edit `title:`, run `vault.py fix`, and commit with `edit: retitle <ID>`. A title that would assert something different is a supersede.
+A retitle keeps the claim and changes the wording. Edit `title:`, run `zk-chef fix`, and commit with `edit: retitle <ID>`. A title that would assert something different is a supersede.
 
 ## Commit
 
 - Commit once per coherent task: a new note with its link-backs, an ingest, a raw update with its citer fixes.
 - Run `git add` with the task's paths. Subject: `<verb>: <what>`, with the verb one of `ingest`, `note`, `edit`, `supersede`, `hub`, `log`, `fix`, `review`.
-- The pre-commit hook runs `vault.py lint --staged`. When it blocks, remove the cause (`LINT.md`) and commit again.
+- The pre-commit hook runs `zk-chef lint --staged`. When it blocks, remove the cause (`LINT.md`) and commit again.
 
 ## Review belongs to the human
 
-`vault.py review SRC-ID reviewed|disputed` signs the verdict. When a task needs a review, name that command in your reply and stop there.
+`zk-chef review SRC-ID reviewed|disputed` signs the verdict. When a task needs a review, name that command in your reply and stop there.

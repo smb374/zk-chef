@@ -1,11 +1,11 @@
 ---
-name: vault-writing
-description: Write vault content: claim titles, note bodies, link context, link-back, citations, source note bodies, hub maps and project logs. Use before creating or editing a note, hub, source note or log in a vault (a repo with .vault/config.toml).
+name: zettel-writing
+description: Write vault content: claim titles, note bodies, link context, link-back, citations, source note bodies, hub maps and project logs. Use before creating or editing a note, hub, source note or log in a vault (a repo with .zk-chef/config.toml).
 ---
 
-# vault-writing
+# zettel-writing
 
-`vault-ops` owns the commands, ingest, supersede and commits. This skill owns what you write.
+`zk-chef-ops` owns the commands, ingest, supersede and commits. This skill owns what you write.
 
 A vault holds **claims**: one per note, titled by the claim, joined by **link context**, grouped by **hubs** whose prose is a **map**. Evidence is cited paper-style.
 
@@ -18,11 +18,11 @@ A vault holds **claims**: one per note, titled by the claim, joined by **link co
 5. **Add link context.** Put each body link in a sentence that states the relationship: supports, contradicts, refines, is an example of, depends on, follows from. Done when a reader can decide to follow each link without opening it.
 6. **Cite the evidence** (see "Citations").
 7. **Link back.** For each link whose relationship is supports, contradicts, refines or is an example of, open the target, add a sentence that links the new note with its link context. Done when every such target names the new note. A passing mention or a References entry needs no link-back; `zk list --link-to ID` already lists citers.
-8. **Close.** Run lint and commit (`vault-ops`, "Commit"). One commit holds the note and its link-backs.
+8. **Close.** Run lint and commit (`zk-chef-ops`, "Commit"). One commit holds the note and its link-backs.
 
 ## Edit a note
 
-Edit in place while the claim stays the same: wording, link context, links, evidence, hubs. A reworded title with the same claim is a retitle (`vault-ops`). A title that would assert something different is a new note plus a supersede (`vault-ops`).
+Edit in place while the claim stays the same: wording, link context, links, evidence, hubs. A reworded title with the same claim is a retitle (`zk-chef-ops`). A title that would assert something different is a new note plus a supersede (`zk-chef-ops`).
 
 ## Citations
 
