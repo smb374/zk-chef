@@ -1,6 +1,8 @@
 #!/bin/sh
 # Installs the zk-chef binary from a GitHub release, then runs `zk-chef install`.
-# Env: ZK_CHEF_BASE_URL, ZK_CHEF_BIN_DIR, ZK_CHEF_INSTALL_ARGS.
+# Env: ZK_CHEF_BASE_URL, ZK_CHEF_BIN_DIR, ZK_CHEF_INSTALL_ARGS, ZK_CHEF_TTY.
+# ZK_CHEF_TTY is the terminal path (default /dev/tty). When stdin is not a terminal,
+# as in `curl ... | sh`, `zk-chef install` reads its prompt answers from it.
 set -eu
 
 BASE_URL=${ZK_CHEF_BASE_URL:-https://github.com/smb374/zk-chef/releases/latest/download}
@@ -56,5 +58,10 @@ esac
 
 set -f
 rc=0
-"$BIN_DIR/zk-chef" install ${ZK_CHEF_INSTALL_ARGS:-} || rc=$?
+tty=${ZK_CHEF_TTY:-/dev/tty}
+if [ ! -t 0 ] && (: <"$tty") 2>/dev/null; then
+	"$BIN_DIR/zk-chef" install ${ZK_CHEF_INSTALL_ARGS:-} <"$tty" || rc=$?
+else
+	"$BIN_DIR/zk-chef" install ${ZK_CHEF_INSTALL_ARGS:-} || rc=$?
+fi
 exit "$rc"

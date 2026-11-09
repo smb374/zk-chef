@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -141,9 +142,9 @@ func TestReleaseWorkflowParses(t *testing.T) {
 	}
 }
 
-// runInstall runs install.sh against a fake release server. It returns the exit code,
-// stderr, and the bin dir.
-func runInstall(t *testing.T, files map[string]string, extraEnv ...string) (int, string, string) {
+// runInstall runs install.sh against a fake release server with the given stdin (nil
+// means /dev/null). It returns the exit code, stderr, and the bin dir.
+func runInstall(t *testing.T, files map[string]string, stdin io.Reader, extraEnv ...string) (int, string, string) {
 	t.Helper()
 	needTools(t, "sh", "curl")
 	needSHA256(t)
@@ -166,6 +167,7 @@ func runInstall(t *testing.T, files map[string]string, extraEnv ...string) (int,
 		"ZK_CHEF_BASE_URL=" + srv.URL,
 		"ZK_CHEF_BIN_DIR=" + bin,
 	}, extraEnv...)
+	cmd.Stdin = stdin
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	code := 0
@@ -189,19 +191,21 @@ func TestInstallScript(t *testing.T) {
 		h := sha256.Sum256([]byte(body))
 		return hex.EncodeToString(h[:])
 	}
-	// The fake binary appends its args to the file named by $RECORD, set below per run.
+	// The fake binary appends its args to the file named by $RECORD, set below per run,
+	// and writes its stdin to $RECORD.stdin unless stdin is a terminal (a `go test` child can
+	// inherit one through /dev/tty, and reading it would block).
 	fake := func(record string) string {
-		return "#!/bin/sh\necho \"$*\" >> '" + record + "'\nexit 0\n"
+		return "#!/bin/sh\necho \"$*\" >> '" + record + "'\n[ -t 0 ] || cat > '" + record + ".stdin'\nexit 0\n"
 	}
 	// runCase builds the server files after the record path is known, so the fake can embed it.
-	runCase := func(t *testing.T, sums func(body string) string, extraEnv ...string) (int, string, string, string) {
+	runCase := func(t *testing.T, sums func(body string) string, stdin io.Reader, extraEnv ...string) (int, string, string, string) {
 		t.Helper()
 		record := filepath.Join(t.TempDir(), "record")
 		body := fake(record)
 		code, stderr, bin := runInstall(t, map[string]string{
 			asset:           body,
 			"checksums.txt": sums(body),
-		}, extraEnv...)
+		}, stdin, extraEnv...)
 		return code, stderr, bin, record
 	}
 	good := func(body string) string {
@@ -209,7 +213,7 @@ func TestInstallScript(t *testing.T) {
 	}
 
 	t.Run("installs and runs install", func(t *testing.T) {
-		code, stderr, bin, record := runCase(t, good)
+		code, stderr, bin, record := runCase(t, good, nil)
 		if code != 0 {
 			t.Fatalf("exit %d, stderr %q", code, stderr)
 		}
@@ -228,9 +232,31 @@ func TestInstallScript(t *testing.T) {
 		}
 	})
 	t.Run("passes ZK_CHEF_INSTALL_ARGS", func(t *testing.T) {
-		code, stderr, _, record := runCase(t, good, "ZK_CHEF_INSTALL_ARGS=--a --b")
+		code, stderr, _, record := runCase(t, good, nil, "ZK_CHEF_INSTALL_ARGS=--a --b")
 		if b, _ := os.ReadFile(record); code != 0 || string(b) != "install --a --b\n" {
 			t.Errorf("exit %d, recorded %q, stderr %q", code, b, stderr)
+		}
+	})
+	t.Run("reads stdin from the terminal path when stdin is piped", func(t *testing.T) {
+		tty := filepath.Join(t.TempDir(), "tty")
+		if err := os.WriteFile(tty, []byte("y"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		code, stderr, _, record := runCase(t, good, strings.NewReader("piped"), "ZK_CHEF_TTY="+tty)
+		if b, _ := os.ReadFile(record + ".stdin"); code != 0 || string(b) != "y" {
+			t.Errorf("exit %d, recorded stdin %q, want %q, stderr %q", code, b, "y", stderr)
+		}
+	})
+	t.Run("keeps piped stdin when the terminal path is missing", func(t *testing.T) {
+		tty := filepath.Join(t.TempDir(), "no-such-tty")
+		code, stderr, _, record := runCase(t, good, strings.NewReader("piped"), "ZK_CHEF_TTY="+tty)
+		if b, _ := os.ReadFile(record + ".stdin"); code != 0 || string(b) != "piped" {
+			t.Errorf("exit %d, recorded stdin %q, want %q, stderr %q", code, b, "piped", stderr)
+		}
+	})
+	t.Run("runs with nil stdin and default terminal path", func(t *testing.T) {
+		if code, stderr, _, _ := runCase(t, good, nil); code != 0 {
+			t.Errorf("exit %d, stderr %q", code, stderr)
 		}
 	})
 	refusals := []struct {
@@ -245,7 +271,7 @@ func TestInstallScript(t *testing.T) {
 	}
 	for _, tt := range refusals {
 		t.Run(tt.name, func(t *testing.T) {
-			code, stderr, bin, record := runCase(t, tt.sums, tt.env...)
+			code, stderr, bin, record := runCase(t, tt.sums, nil, tt.env...)
 			if code == 0 || !strings.Contains(stderr, tt.message) {
 				t.Errorf("exit %d, stderr %q, want non-zero with %q", code, stderr, tt.message)
 			}
