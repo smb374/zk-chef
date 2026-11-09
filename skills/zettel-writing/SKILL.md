@@ -46,7 +46,7 @@ A source note is a **reference note**, like a wiki `File:` page. Title: the work
 4. `## Extract`: the text extracted from the raw file, for search. Demote its headings to H3 or lower (or plain bold) so they do not enter the note outline.
 5. `## Review`: the human's signed blocks (leave it alone).
 
-Fill the frontmatter fields you know: `authors`, `published`. `zk-chef ingest` sets `url:` for a URL; the rest is by hand. A source ingested from a URL needs `citation:` in IEEE form: `citation: A. Author, "Title," Site, Oct. 30, 2026. [Online]. Available: https://example.org/x`. Include the empty `## Review` heading even though lint does not check it.
+Fill the frontmatter fields you know: `authors`, `published`. `zk-chef ingest` sets `url:` for a URL; the rest is by hand. A source with `url:` needs `citation:` in IEEE form, or lint fails: `citation: A. Author, "Title," Site, Oct. 30, 2026. [Online]. Available: https://example.org/x`. Include the empty `## Review` heading; lint fails without it.
 
 Ideas the file prompts go into concept notes that cite the source.
 

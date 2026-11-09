@@ -73,9 +73,7 @@ const sourceHubs = "Hubs: [[000000000000src0|Sources]]\n\nWhy.\n\n## Extract\n\n
 // source builds sources/s1.md with the review blocks under ## Review, newest first.
 func source(reviewState, sha string, blocks ...string) string {
 	body := sourceHubs
-	if len(blocks) > 0 {
-		body += "## Review\n\n" + strings.Join(blocks, "")
-	}
+	body += "## Review\n\n" + strings.Join(blocks, "")
 	return doc("s1", "Source one", "source", body, kv{"raw", "raw/s1-a.bin"}, kv{"sha256", sha}, kv{"review", reviewState})
 }
 

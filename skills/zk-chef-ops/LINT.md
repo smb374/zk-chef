@@ -7,7 +7,8 @@
 | Code | Cause | Fix |
 | --- | --- | --- |
 | `E_BROKEN_LINK` | A `[[ID\|Title]]` names an ID that does not exist | Correct the ID or remove the link |
-| `E_FRONTMATTER` | A required field is missing or invalid; `id`, `title`, `kind` need quoted strings; a source needs `raw` (`raw/<ID>-<name>`), `sha256`, `review`; `status` is `superseded` with an existing `superseded_by`; hubs and logs have no `status` | Set the field the message names |
+| `E_FRONTMATTER` | A required field is missing or invalid; `id`, `title`, `kind` need quoted strings; a source needs `raw` (`raw/<ID>-<name>`), `sha256`, `review`, and `citation` when it has `url`; `status` is `superseded` with an existing `superseded_by`; hubs and logs have no `status` | Set the field the message names |
+| `E_REVIEW_HEADING` | A source note has no `## Review` heading | Add an empty `## Review` heading at the end |
 | `E_WRONG_FOLDER` | `kind` does not match the folder (`notes`=note, `hubs`=hub, `sources`=source, `projects`=log) | Fix `kind` or move the file |
 | `E_DUPLICATE_ID` | Two files share an ID, or `id` differs from the filename | Make `id` equal the filename stem |
 | `E_HUBS_LINE` | The first body line is not `Hubs: [[ID\|Hub]] · [[ID\|Hub]]`, or it links a note that is not another hub | Write the line with real hubs; `zk list hubs --format "[[{{metadata.id}}\|{{title}}]]"` gives links |
@@ -27,3 +28,8 @@
 | `W_SUPERSEDED_LINK` | A live note links a superseded note | Point the link at `superseded_by` |
 | `W_MARKER` | `TODO:`, `GAP:` or `CONTRADICTION:` is present | Resolve it, or keep it as a deliberate marker |
 | `W_WORD_COUNT` | A claim note is longer than `word_count_warn` | Split it by claim |
+| `W_HUB_MAP` | Members of a hub link each other, but its map has no ordered walk (`1. ...`) and no `GAP:` line | Write the walk, or the `GAP:` lines (`zettel-writing`, "Hubs") |
+
+## Not checked
+
+Lint cannot read meaning. These rules depend on you: `Inference:` markers on claims that go beyond the source, the "as of" date for fast-changing subjects, and the quality of a hub walk.

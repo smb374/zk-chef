@@ -67,6 +67,9 @@ func checkFrontmatter(d *doc, add adder) {
 				add("E_FRONTMATTER", d.path, 1, "source needs "+key+" (a string)")
 			}
 		}
+		if d.str("url") != "" && d.str("citation") == "" {
+			add("E_FRONTMATTER", d.path, 1, "source with url needs citation (IEEE form)")
+		}
 		if !slices.Contains(reviews, d.str("review")) {
 			add("E_FRONTMATTER", d.path, 1, "review must be one of "+strings.Join(reviews, ", "))
 		}
@@ -82,6 +85,30 @@ func kindValues() []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// hubMapMissing reports a hub whose members link each other but whose map holds neither an
+// ordered walk (1. ...) nor a GAP: line.
+func hubMapMissing(d *doc, members []string, linked map[string][]string) bool {
+	in := map[string]bool{}
+	for _, m := range members {
+		in[m] = true
+	}
+	interlinked := false
+	for _, m := range members {
+		for _, t := range linked[m] {
+			interlinked = interlinked || (t != m && in[t])
+		}
+	}
+	if !interlinked {
+		return false
+	}
+	for _, l := range d.scanned() {
+		if entryRe.MatchString(l.text) || strings.Contains(l.text, "GAP:") {
+			return false
+		}
+	}
+	return true
 }
 
 // citeRe finds [3] and [3, p. 4]. Go has no lookaround, so citations() checks the neighbours.

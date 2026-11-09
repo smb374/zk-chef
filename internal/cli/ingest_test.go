@@ -255,8 +255,12 @@ func TestIngestedSourcePassesLint(t *testing.T) {
 				t.Fatalf("ingest exit %d: %s", got.code, got.stderr)
 			}
 			path := strings.TrimSpace(got.stdout)
-			body := "\nWhy this source matters.\n\n## Extract\n\nSome extracted text.\n"
-			if err := os.WriteFile(path, []byte(readFile(t, path)+body), 0o644); err != nil {
+			body := "\nWhy this source matters.\n\n## Extract\n\nSome extracted text.\n\n## Review\n"
+			text := readFile(t, path)
+			if tt.name == "URL" {
+				text = strings.Replace(text, "\nurl:", "\ncitation: \"A. Author, T.\"\nurl:", 1)
+			}
+			if err := os.WriteFile(path, []byte(text+body), 0o644); err != nil {
 				t.Fatal(err)
 			}
 			if l := run(env, "lint"); l.code != 0 {

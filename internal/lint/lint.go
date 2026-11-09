@@ -112,7 +112,8 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 	if byID[cfg.IndexID] == nil {
 		add("E_UNREACHABLE", ConfigPath, 1, fmt.Sprintf("index hub %s not found", cfg.IndexID))
 	}
-	edges := map[string][]string{} // hub id -> ids of the docs that name it in their Hubs line
+	edges := map[string][]string{}  // hub id -> ids of the docs that name it in their Hubs line
+	linked := map[string][]string{} // doc id -> ids its body links, past the Hubs line
 	for _, d := range good {
 		live := d.fm["status"] != "superseded"
 		bodyLinks, words := 0, 0
@@ -132,6 +133,7 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 				}
 				if l.n != d.lines[0].n {
 					bodyLinks++
+					linked[d.str("id")] = append(linked[d.str("id")], target.str("id"))
 				}
 			}
 			if m := markerRe.FindString(l.text); m != "" {
@@ -199,6 +201,11 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 			add("E_UNREACHABLE", d.path, 1, "does not reach the Index hub through Hubs lines")
 		}
 	}
+	for _, d := range good {
+		if d.str("kind") == "hub" && d.str("id") != cfg.IndexID && hubMapMissing(d, edges[d.str("id")], linked) {
+			add("W_HUB_MAP", d.path, d.lines[0].n, "members link each other, but the map has no ordered walk or GAP: line")
+		}
+	}
 
 	rawPaths := map[string]bool{}
 	for _, d := range good {
@@ -207,6 +214,9 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 		}
 		raw, want := d.str("raw"), d.str("sha256")
 		rawPaths[raw] = true
+		if !slices.ContainsFunc(d.lines, func(l line) bool { return l.section == "Review" }) {
+			add("E_REVIEW_HEADING", d.path, 1, "source needs a ## Review heading")
+		}
 		if !strings.HasPrefix(raw, "raw/"+d.str("id")+"-") {
 			add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("raw must be raw/%s-<name>", d.str("id")))
 		}

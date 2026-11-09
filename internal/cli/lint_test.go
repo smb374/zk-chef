@@ -56,7 +56,7 @@ func baseVault(t *testing.T) map[string]string {
 		files[p] = string(b)
 	}
 	files["sources/s1.md"] = doc("s1", "Source one", "source",
-		"Hubs: [[000000000000src0|Sources]]\n\nWhy.",
+		"Hubs: [[000000000000src0|Sources]]\n\nWhy.\n\n## Review",
 		kv{"raw", "raw/s1-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})
 	files["raw/s1-a.bin"] = rawBytes
 	files["notes/n1.md"] = doc("n1", "Leaders are unique", "note",
@@ -241,6 +241,8 @@ func TestLintErrors(t *testing.T) {
 		{name: "E_SHA256", want: "E_SHA256", changes: map[string]string{"raw/s1-a.bin": "changed"}},
 		{name: "a Hubs line that links a non-hub is E_HUBS_LINE", want: "E_HUBS_LINE", changes: map[string]string{
 			"notes/n2.md": n("Hubs: [[n1|Leaders are unique]]\n\n[[n1|x]]")}},
+		{name: "E_REVIEW_HEADING", want: "E_REVIEW_HEADING", changes: map[string]string{"sources/s1.md": doc("s1", "Source one", "source", "Hubs: [[000000000000src0|Sources]]\n\nWhy.", kv{"raw", "raw/s1-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})}},
+		{name: "a URL source without citation is E_FRONTMATTER", want: "E_FRONTMATTER", changes: map[string]string{"sources/s1.md": doc("s1", "Source one", "source", "Hubs: [[000000000000src0|Sources]]\n\n## Review", kv{"raw", "raw/s1-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"}, kv{"url", "https://example.com/x"})}},
 	})
 }
 
@@ -267,6 +269,15 @@ func TestLintWarnings(t *testing.T) {
 	n2 := func(body string) map[string]string {
 		return map[string]string{"notes/n2.md": doc("n2", "Two", "note", hubLine+"\n\n"+body)}
 	}
+	// hubMap builds hub h1 under the Index, with members a1 and a2 that link each other.
+	hubMap := func(body string) map[string]string {
+		m := "Hubs: [[h1|H1]]\n\n"
+		return map[string]string{
+			"hubs/h1.md":  doc("h1", "H1", "hub", "Hubs: [[INDEX|Index]]\n\n"+body),
+			"notes/a1.md": doc("a1", "A", "note", m+"[[a2|B]] refines it."),
+			"notes/a2.md": doc("a2", "B", "note", m+"[[a1|A]] comes first."),
+		}
+	}
 	oldN3 := doc("n3", "Old", "note", hubLine+"\n\n[[n1|Leaders are unique]]", kv{"status", "superseded"}, kv{"superseded_by", "n1"})
 	runCodeCases(t, []codeCase{
 		{name: "W_STALE_ALIAS", want: "W_STALE_ALIAS", changes: n2("See [[n1|Old title]].")},
@@ -275,11 +286,14 @@ func TestLintWarnings(t *testing.T) {
 		{name: "W_WORD_COUNT", want: "W_WORD_COUNT", changes: n2(strings.Repeat("word ", 500) + "[[n1|Leaders are unique]]")},
 		{name: "W_SUPERSEDED_LINK", want: "W_SUPERSEDED_LINK", changes: map[string]string{
 			"notes/n3.md": oldN3, "notes/n2.md": doc("n2", "Two", "note", hubLine+"\n\nSee [[n3|Old]].")}},
+		{name: "W_HUB_MAP", want: "W_HUB_MAP", changes: hubMap("A short scope line.")},
+		{name: "a hub map with a GAP: line is clean", absent: "W_HUB_MAP", changes: hubMap("GAP: a note on retries.")},
+		{name: "a hub map with a walk is clean", absent: "W_HUB_MAP", changes: hubMap("1. [[a1|A]]\n2. [[a2|B]] follows A.")},
 	})
 
 	t.Run("Extract and code fences are not scanned", func(t *testing.T) {
 		src := doc("s1", "Source one", "source",
-			"Hubs: [[000000000000src0|Sources]]\n\n## Extract\n\nTODO: [[x]] [3]\n\n```\nGAP: [[y]]\n```",
+			"Hubs: [[000000000000src0|Sources]]\n\n## Extract\n\nTODO: [[x]] [3]\n\n```\nGAP: [[y]]\n```\n\n## Review",
 			kv{"raw", "raw/s1-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})
 		got := runIn(t, "dev", with_(t, map[string]string{"sources/s1.md": src}), "lint")
 		if got.code != 0 || got.stdout != "0 errors, 0 warnings\n" {

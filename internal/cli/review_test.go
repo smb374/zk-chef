@@ -175,7 +175,7 @@ func runStdin(env []string, stdin string, args ...string) result {
 func extraSource(id, review string) map[string]string {
 	raw := "raw of " + id + "\n"
 	return map[string]string{
-		"sources/" + id + ".md": doc(id, "Title "+id, "source", sourceHubs, kv{"raw", "raw/" + id + "-a.bin"}, kv{"sha256", fmt.Sprintf("%x", sha256.Sum256([]byte(raw)))}, kv{"review", review}),
+		"sources/" + id + ".md": doc(id, "Title "+id, "source", sourceHubs+"## Review\n\n", kv{"raw", "raw/" + id + "-a.bin"}, kv{"sha256", fmt.Sprintf("%x", sha256.Sum256([]byte(raw)))}, kv{"review", review}),
 		"raw/" + id + "-a.bin":  raw,
 	}
 }
