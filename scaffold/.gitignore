@@ -1,0 +1,13 @@
+# zk query index. zk rebuilds it on demand (zk-org/zk discussion #263).
+.zk/notebook.db
+.zk/notebook.db-*
+
+# Obsidian UI state. It changes on every click.
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache/
+.trash/
+
+# OS files
+.DS_Store
+Thumbs.db
