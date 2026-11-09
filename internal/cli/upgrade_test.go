@@ -64,7 +64,7 @@ func TestUpgradeYesAppliesOwnedFiles(t *testing.T) {
 			t.Errorf("stdout lacks a unified diff header for %s:\n%s", p, got.stdout)
 		}
 	}
-	if !strings.Contains(got.stdout, "\n-exit 0\n") || !strings.Contains(got.stdout, "\n+\texec zk-chef lint --staged\n") {
+	if !strings.Contains(got.stdout, "\n-exit 0\n") || !strings.Contains(got.stdout, "\n+\texec zk-chef lint --staged --root .\n") {
 		t.Errorf("diff lacks the removed and added hook lines:\n%s", got.stdout)
 	}
 	if st, err := os.Stat(hook); err != nil || st.Mode()&0o111 == 0 {

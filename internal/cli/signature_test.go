@@ -40,6 +40,9 @@ func newSigner(t *testing.T) signer {
 	t.Helper()
 	requireGPG(t)
 	home := t.TempDir()
+	if err := os.Chmod(home, 0o700); err != nil { // gpg warns about a group- or world-accessible home
+		t.Fatal(err)
+	}
 	t.Cleanup(func() { _ = exec.Command("gpgconf", "--homedir", home, "--kill", "all").Run() })
 	gpg(t, home, "", "--passphrase", "", "--quick-gen-key", "zk-chef-test@example.com", "default", "default", "never")
 	var fpr string
@@ -55,7 +58,7 @@ func newSigner(t *testing.T) signer {
 // fenced signs message and wraps it as v1 review does: a fenced block plus a blank line.
 func (s signer) fenced(t *testing.T, message string) string {
 	t.Helper()
-	signed := gpg(t, s.home, message, "--clearsign", "--armor")
+	signed := gpg(t, s.home, message, "--local-user", s.fpr, "--clearsign", "--armor")
 	return "```\n" + strings.TrimRight(signed, "\n") + "\n```\n\n"
 }
 

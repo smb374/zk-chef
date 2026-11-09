@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,11 +17,6 @@ import (
 	"strings"
 	"time"
 )
-
-func ingestFlags(fs *flag.FlagSet, inv *invocation) {
-	rootFlag(fs, inv)
-	fs.StringVar(&inv.title, "title", "", "note title (required)")
-}
 
 // HTTPClient downloads ingest URLs. Tests replace it with a fake Transport.
 var HTTPClient = &http.Client{Timeout: 60 * time.Second}

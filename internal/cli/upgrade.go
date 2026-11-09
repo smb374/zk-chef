@@ -3,7 +3,6 @@ package cli
 import (
 	"bufio"
 	"errors"
-	"flag"
 	"fmt"
 	"io/fs"
 	"os"
@@ -17,11 +16,6 @@ import (
 )
 
 const hookPath = ".githooks/pre-commit"
-
-func upgradeFlags(fs *flag.FlagSet, inv *invocation) {
-	rootFlag(fs, inv)
-	fs.BoolVar(&inv.yes, "y", false, "apply every change without asking")
-}
 
 // ownedFile is a file the scaffold owns, with the bytes the scaffold wants.
 type ownedFile struct {

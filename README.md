@@ -51,7 +51,7 @@ Without a fingerprint, it uses your first secret key. It exports the public key 
 
 The agent loads the skills from `AGENTS.md`. It creates notes with `zk new`, edits files and commits. The hook runs `zk-chef lint --staged` on every commit.
 
-Every verb accepts `--json`. Verbs that work on a vault accept `--root DIR` (default `.`).
+Every verb accepts `--json` and `--help`. Verbs that work on a vault pick it in this order: `--root DIR`, the `ZK_CHEF_ROOT` env var, the current directory. There is no search up the directory tree. `zk-chef --help` lists the verbs.
 
 | Command | Who | What it does |
 | --- | --- | --- |

@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,11 +24,6 @@ var errRawChanged = errors.New("raw file changed since ingest; inspect it, then 
 func failCode(inv *invocation, code int, msg string) int {
 	fail(inv, msg)
 	return code
-}
-
-func reviewFlags(fs *flag.FlagSet, inv *invocation) {
-	rootFlag(fs, inv)
-	fs.BoolVar(&inv.noCommit, "no-commit", false, "sign the note but do not commit")
 }
 
 var (

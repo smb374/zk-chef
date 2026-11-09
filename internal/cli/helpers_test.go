@@ -32,6 +32,9 @@ func setupVault(t *testing.T, binVersion string, files map[string]string) []stri
 		}
 	}
 	home, gnupg := t.TempDir(), t.TempDir()
+	if err := os.Chmod(gnupg, 0o700); err != nil { // gpg warns about a group- or world-accessible home
+		t.Fatal(err)
+	}
 	t.Setenv("HOME", home)
 	t.Setenv("GNUPGHOME", gnupg)
 	repo, err := filepath.Abs(filepath.Join("..", ".."))

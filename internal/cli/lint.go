@@ -2,7 +2,6 @@ package cli
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -10,15 +9,6 @@ import (
 
 	"github.com/smb374/zk-chef/internal/lint"
 )
-
-func rootFlag(fs *flag.FlagSet, inv *invocation) {
-	fs.StringVar(&inv.root, "root", ".", "vault root")
-}
-
-func lintFlags(fs *flag.FlagSet, inv *invocation) {
-	rootFlag(fs, inv)
-	fs.BoolVar(&inv.staged, "staged", false, "check the git index instead of the worktree")
-}
 
 // writeJSON prints v as one line, without HTML escaping.
 func writeJSON(w io.Writer, v any) {

@@ -1,9 +1,9 @@
 #!/bin/sh
 if command -v zk-chef >/dev/null 2>&1; then
-	exec zk-chef lint --staged
+	exec zk-chef lint --staged --root .
 fi
 if [ -x "$HOME/.local/bin/zk-chef" ]; then
-	exec "$HOME/.local/bin/zk-chef" lint --staged
+	exec "$HOME/.local/bin/zk-chef" lint --staged --root .
 fi
 echo "zk-chef not found; run install.sh or zk-chef install" >&2
 exit 1

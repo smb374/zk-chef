@@ -1,14 +1,11 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"path/filepath"
 
 	"github.com/smb374/zk-chef/internal/lint"
 )
-
-func fixFlags(fs *flag.FlagSet, inv *invocation) { rootFlag(fs, inv) }
 
 func fixVerb(inv *invocation) int {
 	root, err := filepath.Abs(inv.root)

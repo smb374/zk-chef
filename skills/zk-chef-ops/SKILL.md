@@ -7,7 +7,7 @@ description: Vault bookkeeping with zk, git and zk-chef. Use before ingesting a 
 
 This skill owns the commands, the history and the checks. `zettel-writing` owns what you write inside a note.
 
-Run every command from the vault root. A note's ID is its filename stem (`YYYYmmddHHMM` in UTC + 4 random characters); the seed hubs keep their fixed IDs.
+Run every command from the vault root, or give `zk-chef` the vault with `--root DIR` (or the `ZK_CHEF_ROOT` env var). `--root` applies to `zk-chef` only; run `zk` and `git` from the vault root. `zk-chef <verb> --help` shows the flags of a verb. A note's ID is its filename stem (`YYYYmmddHHMM` in UTC + 4 random characters); the seed hubs keep their fixed IDs.
 
 ## Commands
 

@@ -2,17 +2,18 @@
 package cli
 
 import (
-	"flag"
+	"context"
 	"fmt"
 	"io"
 	"slices"
 	"strings"
 
 	"github.com/smb374/zk-chef/internal/version"
+	"github.com/urfave/cli/v3"
 )
 
-// verbs lists every verb in usage order.
-var verbs = []string{"init", "install", "self-update", "upgrade", "doctor", "key", "ingest", "lint", "fix", "review", "status"}
+// rootEnv names the env var that sets the vault root when --root is absent.
+const rootEnv = "ZK_CHEF_ROOT"
 
 // invocation is what a verb handler receives after flag parsing.
 type invocation struct {
@@ -30,33 +31,112 @@ type invocation struct {
 	title          string // --title, for ingest
 }
 
-// handlers maps each verb to its code.
-var handlers = map[string]func(*invocation) int{
-	"init":        initVerb,
-	"doctor":      doctorVerb,
-	"install":     installVerb,
-	"lint":        lintVerb,
-	"fix":         fixVerb,
-	"key":         keyVerb,
-	"ingest":      ingestVerb,
-	"review":      reviewVerb,
-	"status":      statusVerb,
-	"upgrade":     upgradeVerb,
-	"self-update": selfUpdateVerb,
+// verb describes one verb: its help text, its flags and its code.
+type verb struct {
+	name, usage, argsUsage string
+	root                   bool              // takes --root
+	flags                  func() []cli.Flag // fresh flags per command, so no state outlives one Run
+	run                    func(*invocation) int
 }
 
-// verbFlags registers the flags a verb takes besides --json.
-var verbFlags = map[string]func(*flag.FlagSet, *invocation){
-	"init":    initFlags,
-	"doctor":  rootFlag,
-	"install": installFlags,
-	"lint":    lintFlags,
-	"fix":     fixFlags,
-	"key":     rootFlag,
-	"ingest":  ingestFlags,
-	"review":  reviewFlags,
-	"status":  rootFlag,
-	"upgrade": upgradeFlags,
+func boolFlag(name, usage string) cli.Flag {
+	return &cli.BoolFlag{Name: name, Usage: usage}
+}
+
+// usageLine opens every usage message.
+const usageLine = "usage: zk-chef <verb> [--json] [args]"
+
+// verbs lists every verb in usage order.
+var verbs = []verb{
+	{name: "init", usage: "scaffold a new vault", argsUsage: "[DIR]", run: initVerb,
+		flags: func() []cli.Flag { return []cli.Flag{boolFlag("y", "accept defaults; init never prompts")} }},
+	{name: "install", usage: "install zk and the agent skills", run: installVerb,
+		flags: func() []cli.Flag {
+			return []cli.Flag{
+				boolFlag("y", "download zk without asking"),
+				boolFlag("skills-only", "write the skills and nothing else; self-update runs the new binary this way"),
+			}
+		}},
+	{name: "self-update", usage: "replace this binary with the latest release", run: selfUpdateVerb},
+	{name: "upgrade", usage: "bring the vault's scaffold files up to this binary's version", root: true, run: upgradeVerb,
+		flags: func() []cli.Flag { return []cli.Flag{boolFlag("y", "apply every change without asking")} }},
+	{name: "doctor", usage: "check the vault and its tools", root: true, run: doctorVerb},
+	{name: "key", usage: "manage pinned reviewer keys", argsUsage: "add [FPR] | list | rm FPR", root: true, run: keyVerb},
+	{name: "ingest", usage: "ingest a raw file or URL as a source note", argsUsage: "PATH|URL", root: true, run: ingestVerb,
+		flags: func() []cli.Flag { return []cli.Flag{&cli.StringFlag{Name: "title", Usage: "note title (required)"}} }},
+	{name: "lint", usage: "check the vault against the rules", root: true, run: lintVerb,
+		flags: func() []cli.Flag {
+			return []cli.Flag{boolFlag("staged", "check the git index instead of the worktree")}
+		}},
+	{name: "fix", usage: "rewrite stale link aliases to current titles", root: true, run: fixVerb},
+	{name: "review", usage: "sign a source's review, or list the review queue", argsUsage: "[SRC-ID reviewed|disputed]", root: true, run: reviewVerb,
+		flags: func() []cli.Flag { return []cli.Flag{boolFlag("no-commit", "sign the note but do not commit")} }},
+	{name: "status", usage: "summarize the vault", root: true, run: statusVerb},
+}
+
+// verbNames lists the verb names in usage order.
+func verbNames() []string {
+	names := make([]string, len(verbs))
+	for i, v := range verbs {
+		names[i] = v.name
+	}
+	return names
+}
+
+// envValue returns the last value of key in env (KEY=value entries), or "".
+func envValue(env []string, key string) string {
+	for _, kv := range slices.Backward(env) {
+		if v, ok := strings.CutPrefix(kv, key+"="); ok {
+			return v
+		}
+	}
+	return ""
+}
+
+// command turns a verb into a urfave command. The action stores the exit code in *code.
+func (v verb) command(base invocation, code *int) *cli.Command {
+	flags := []cli.Flag{boolFlag("json", "print one JSON object")}
+	if v.flags != nil {
+		flags = append(flags, v.flags()...)
+	}
+	if v.root {
+		flags = append(flags, &cli.StringFlag{Name: "root", Usage: "vault root (default: $" + rootEnv + ", else the current directory)"})
+	}
+	return &cli.Command{
+		Name:            v.name,
+		Usage:           v.usage,
+		ArgsUsage:       v.argsUsage,
+		UsageText:       "zk-chef " + v.name + " [flags] " + v.argsUsage,
+		Flags:           flags,
+		HideHelpCommand: true,
+		OnUsageError:    func(_ context.Context, _ *cli.Command, err error, _ bool) error { return err },
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			inv := base
+			inv.verb = v.name
+			inv.args = cmd.Args().Slice()
+			inv.json = cmd.Bool("json")
+			inv.yes = cmd.Bool("y")
+			inv.skillsOnly = cmd.Bool("skills-only")
+			inv.staged = cmd.Bool("staged")
+			inv.noCommit = cmd.Bool("no-commit")
+			inv.title = cmd.String("title")
+			if v.root {
+				inv.root = cmd.String("root")
+				if inv.root == "" {
+					inv.root = envValue(inv.env, rootEnv)
+				}
+				if inv.root == "" {
+					inv.root = "."
+				}
+			}
+			if !ungated[v.name] && !gate(inv.root, inv.stderr) {
+				*code = 2
+				return nil
+			}
+			*code = v.run(&inv)
+			return nil
+		},
+	}
 }
 
 // Run executes one zk-chef invocation and returns the process exit code.
@@ -68,42 +148,35 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, env []string)
 		fmt.Fprintln(stdout, version.Current())
 		return 0
 	}
-	verb := args[0]
-	if !slices.Contains(verbs, verb) {
+	if name := args[0]; !slices.Contains(verbNames(), name) && !slices.Contains([]string{"help", "-h", "--help"}, name) {
 		return usage(stderr)
 	}
-	fs := flag.NewFlagSet("zk-chef "+verb, flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	fs.Usage = func() { fmt.Fprintf(stderr, "usage: zk-chef %s [--json] [args]\n", verb) }
-	inv := &invocation{verb: verb, stdin: stdin, stdout: stdout, stderr: stderr, env: env}
-	fs.BoolVar(&inv.json, "json", false, "print one JSON object")
-	if register, ok := verbFlags[verb]; ok {
-		register(fs, inv)
+	code := 0
+	base := invocation{stdin: stdin, stdout: stdout, stderr: stderr, env: env}
+	root := &cli.Command{
+		Name:           "zk-chef",
+		Usage:          "maintain an LLM-written Zettelkasten vault",
+		UsageText:      "zk-chef <verb> [flags] [args]\n   zk-chef <verb> --help\n   zk-chef --version",
+		Writer:         stdout,
+		ErrWriter:      stderr,
+		OnUsageError:   func(_ context.Context, _ *cli.Command, err error, _ bool) error { return err },
+		ExitErrHandler: func(context.Context, *cli.Command, error) {},
 	}
-	// Flags may follow positional arguments (zk-chef ingest PATH --title T); "--" ends flags.
-	rest := args[1:]
-	for {
-		if err := fs.Parse(rest); err != nil {
-			return 2
-		}
-		left := fs.Args()
-		if len(left) == 0 {
-			break
-		}
-		if len(rest) > len(left) && rest[len(rest)-len(left)-1] == "--" {
-			inv.args = append(inv.args, left...)
-			break
-		}
-		inv.args = append(inv.args, left[0])
-		rest = left[1:]
+	for _, v := range verbs {
+		root.Commands = append(root.Commands, v.command(base, &code))
 	}
-	if !ungated[verb] && !gate(inv.root, stderr) {
+	if err := root.Run(context.Background(), append([]string{"zk-chef"}, args...)); err != nil {
+		hint := "zk-chef --help"
+		if slices.Contains(verbNames(), args[0]) {
+			hint = "zk-chef " + args[0] + " --help"
+		}
+		fmt.Fprintf(stderr, "zk-chef: %v\n%s; run %s\n", err, usageLine, hint)
 		return 2
 	}
-	return handlers[verb](inv)
+	return code
 }
 
 func usage(stderr io.Writer) int {
-	fmt.Fprintf(stderr, "usage: zk-chef <verb> [--json] [args]\nverbs: %s\n       zk-chef --version\n", strings.Join(verbs, ", "))
+	fmt.Fprintf(stderr, usageLine+"\nverbs: %s\n       zk-chef --version\n       zk-chef <verb> --help\n", strings.Join(verbNames(), ", "))
 	return 2
 }

@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -34,17 +33,10 @@ var hostOS, hostArch = runtime.GOOS, runtime.GOARCH
 // ownerMarker is the file that tells install a skill dir was written by zk-chef.
 const ownerMarker = ".zk-chef-owned"
 
-func installFlags(fs *flag.FlagSet, inv *invocation) {
-	fs.BoolVar(&inv.yes, "y", false, "download zk without asking")
-	fs.BoolVar(&inv.skillsOnly, "skills-only", false, "write the skills and nothing else; self-update runs the new binary this way")
-}
-
 // homeDir is HOME from the verb's env, else the process env, else the OS user home.
 func homeDir(inv *invocation) (string, error) {
-	for _, v := range slices.Backward(inv.env) {
-		if v, ok := strings.CutPrefix(v, "HOME="); ok && v != "" {
-			return v, nil
-		}
+	if v := envValue(inv.env, "HOME"); v != "" {
+		return v, nil
 	}
 	if v := os.Getenv("HOME"); v != "" {
 		return v, nil

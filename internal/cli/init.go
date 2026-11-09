@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"io/fs"
 	"os"
@@ -18,10 +17,6 @@ import (
 var Assets fs.FS
 
 var vaultFolders = []string{"notes", "hubs", "sources", "projects", "raw", "keys"}
-
-func initFlags(fs *flag.FlagSet, inv *invocation) {
-	fs.BoolVar(&inv.yes, "y", false, "accept defaults; init never prompts")
-}
 
 // copyMissing copies files from src to dst without overwriting. It returns the created
 // paths and the paths whose existing file differs from the source, both slash-separated.
