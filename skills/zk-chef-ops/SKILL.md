@@ -56,7 +56,7 @@ Supersede when the claim itself changed. Wording, link and citation fixes are ed
 ## Add a hub
 
 1. Create it with `zk new hubs`. Its `Hubs:` line names the parent hub.
-2. Add a link to it in the parent hub's map (for a top-level hub, the Index). Done when `zk list --link-to HUB-ID` lists the parent.
+2. Add a link to it in the parent hub's map (for a top-level hub, the Index in `INDEX.md`). Done when `zk list --link-to HUB-ID` lists the parent.
 3. Commit with `hub: <title>`, apart from any ingest.
 
 ## Retitle
