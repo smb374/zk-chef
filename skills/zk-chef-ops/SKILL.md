@@ -1,17 +1,18 @@
 ---
 name: zk-chef-ops
-description: Vault bookkeeping with zk, git and zk-chef. Use before ingesting a raw file, updating a raw file, superseding a note or source, running lint or fix, reading a lint code, or committing in a vault (a repo with .zk-chef/config.toml).
+description: >
+  Vault bookkeeping with zk, git and zk-chef. Use before ingesting a raw file, updating a raw file, superseding a note or source, running lint or fix, reading a lint code, or committing in a vault (a repo with .zk-chef/config.toml).
 ---
 
 # zk-chef-ops
 
 This skill owns the commands, the history and the checks. `zettel-writing` owns what you write inside a note.
 
-Run every command from the vault root, or give `zk-chef` the vault with `--root DIR` (or the `ZK_CHEF_ROOT` env var). `--root` applies to `zk-chef` only; run `zk` and `git` from the vault root. `zk-chef <verb> --help` shows the flags of a verb. A note's ID is its filename stem (`YYYYmmddHHMM` in UTC + 4 random characters); the seed hubs keep their fixed IDs.
+Run every command from the vault root, or give `zk-chef` the vault with `--root DIR` (or the `ZK_CHEF_ROOT` env var). `--root` applies to `zk-chef` only; run `zk` and `git` from the vault root. When you must run `zk new` from elsewhere, pass `--notebook-dir DIR` and an absolute folder path. `zk-chef <verb> --help` shows the flags of a verb. A note's ID is its filename stem (`YYYYmmddHHMM` in UTC + 4 random characters); the seed hubs keep their fixed IDs.
 
 ## Commands
 
-- **Create:** `zk new <dir> --title "<title>" --print-path --no-input`, with `<dir>` one of `notes`, `hubs`, `sources`, `projects`. It prints the new file's path. The folder's template fills the frontmatter and the Hubs line.
+- **Create:** `zk new <dir> --title "<title>" --print-path --no-input`, with `<dir>` one of `notes`, `hubs`, `sources`, `projects`. It prints the new file's path. The folder's template fills the frontmatter and leaves the `Hubs:` line empty: fill it before you commit. Run `zk new` one call at a time. Parallel calls lock the database, and a failed call leaves a stray note file: delete it.
 - **Query:** run `zk index --quiet` first, then `zk list --quiet --format "{{path}}  {{title}}"` with one of:
   - `--match "<query>"`: full-text search, including `## Extract`.
   - `--link-to ID`: notes that link ID (its citers, or a hub's members).
@@ -23,11 +24,11 @@ Run every command from the vault root, or give `zk-chef` the vault with `--root 
 
 ## Ingest a raw file
 
-1. Create the source note with `zk new sources --title "<short title of the work>" --print-path --no-input`. Its ID names the raw file.
-2. Copy the file to `raw/<ID>-<original name>`.
-3. Set the frontmatter: `raw:` to that path, `sha256:` to the output of `sha256sum`, `review: unreviewed`. Add `authors`, `published`, `url` or `citation` (IEEE style) when you know them.
-4. Write the body as `zettel-writing` describes under "Source notes".
-5. Run lint, then commit with `ingest: <title>`. Done when lint reports 0 errors.
+Ingest the primary source, not a summary of it. For web docs, ingest the URL. Do not ingest LLM-written or agent-written research as evidence; ingest the primary URLs it cites. Such a brief may be a source only when the human asks for it.
+
+1. Run `zk-chef ingest --title "<short title of the work>" PATH|URL`. It creates the source note, copies the file to `raw/<ID>-<original name>`, and sets `raw:`, `sha256:` and `review: unreviewed`; for a URL it also sets `url:` and downloads the raw bytes (HTML stays HTML). It prints the note path (`--json` adds `raw` and `sha256`). It does not fill `## Extract`, `citation:`, `authors`, `published` or the body: add them by hand. A URL source needs `citation:` in IEEE form: `citation: A. Author, "Title," Site, Oct. 30, 2026. [Online]. Available: https://example.org/x`.
+2. Write the body as `zettel-writing` describes under "Source notes".
+3. Run lint, then commit with `ingest: <title>`. Done when lint reports 0 errors.
 
 An unreviewed source is citable at once.
 
@@ -52,6 +53,12 @@ Supersede when the claim itself changed. Wording, link and citation fixes are ed
 3. For each live note in `zk list --link-to OLD`, point its link at NEW. Done when lint shows no `W_SUPERSEDED_LINK`.
 4. Run lint and commit with `supersede: <what>`.
 
+## Add a hub
+
+1. Create it with `zk new hubs`. Its `Hubs:` line names the parent hub.
+2. Add a link to it in the parent hub's map (for a top-level hub, the Index). Done when `zk list --link-to HUB-ID` lists the parent.
+3. Commit with `hub: <title>`, apart from any ingest.
+
 ## Retitle
 
 A retitle keeps the claim and changes the wording. Edit `title:`, run `zk-chef fix`, and commit with `edit: retitle <ID>`. A title that would assert something different is a supersede.
@@ -59,9 +66,12 @@ A retitle keeps the claim and changes the wording. Edit `title:`, run `zk-chef f
 ## Commit
 
 - Commit once per coherent task: a new note with its link-backs, an ingest, a raw update with its citer fixes.
+- Keep a `hub:` commit (new hub, its Index or parent-map edit) apart from the `ingest:` commit.
 - Run `git add` with the task's paths. Subject: `<verb>: <what>`, with the verb one of `ingest`, `note`, `edit`, `supersede`, `hub`, `log`, `fix`, `review`.
 - The pre-commit hook runs `zk-chef lint --staged`. When it blocks, remove the cause (`LINT.md`) and commit again.
 
 ## Review belongs to the human
 
-`zk-chef review SRC-ID reviewed|disputed` signs the verdict. When a task needs a review, name that command in your reply and stop there.
+`zk-chef review SRC-ID reviewed|disputed` signs the verdict. When a task needs a review, name that command in your reply and stop there. Do not hand-edit `## Review`.
+
+In your reply, also list open items the vault shows: `zk-chef doctor` failures (for example `pinned-key`: the human runs `zk-chef key add`), unreviewed sources that notes rest on, and untracked tool folders (`.obsidian/`, `.zk/notebook.db`) that belong in `.gitignore`.

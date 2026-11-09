@@ -1,6 +1,7 @@
 ---
 name: zettel-writing
-description: Write vault content: claim titles, note bodies, link context, link-back, citations, source note bodies, hub maps and project logs. Use before creating or editing a note, hub, source note or log in a vault (a repo with .zk-chef/config.toml).
+description: >
+  Write vault content: claim titles, note bodies, link context, link-back, citations, source note bodies, hub maps and project logs. Use before creating or editing a note, hub, source note or log in a vault (a repo with .zk-chef/config.toml).
 ---
 
 # zettel-writing
@@ -12,9 +13,9 @@ A vault holds **claims**: one per note, titled by the claim, joined by **link co
 ## Write a note
 
 1. **Search.** Run `zk list --match "<topic>"`. Done when you know whether a live note already makes your claim; if one does, use "Edit a note".
-2. **Title the claim.** Create the file with `zk new notes --title "<claim>" --print-path --no-input`. The title is one complete, positive sentence: "Raft elects at most one leader per term". Done when the title alone tells a reader what the note asserts. A title that needs "and" is two notes.
+2. **Title the claim.** Create the file with `zk new notes --title "<claim>" --print-path --no-input`. The title is one complete, positive sentence: "Raft elects at most one leader per term". Done when the title alone tells a reader what the note asserts. A title that needs "and" joining two predicates or two subjects is two notes; split it before you write the body.
 3. **Place it.** List the hubs (`zk list hubs --format "[[{{metadata.id}}|{{title}}]]"`). Write the first body line as `Hubs: [[ID|Hub]] · [[ID|Hub]]` with every hub whose category the claim fits. Until a cluster justifies a new hub, use the closest existing one.
-4. **Write the body.** State the claim in your own words: what it says, when it holds, what follows. Factor by concept. Material about one source belongs in its source note. A claim true only inside one project belongs under that project's hub.
+4. **Write the body.** State the claim in your own words: what it says, when it holds, what follows. Mark a claim that goes beyond the cited source with "Inference:" at its start, and cite the sources it builds on. For a fast-changing subject (products, tools, versions), state the "as of" date of the evidence in the body. Factor by concept. Material about one source belongs in its source note. A claim true only inside one project belongs under that project's hub.
 5. **Add link context.** Put each body link in a sentence that states the relationship: supports, contradicts, refines, is an example of, depends on, follows from. Done when a reader can decide to follow each link without opening it.
 6. **Cite the evidence** (see "Citations").
 7. **Link back.** For each link whose relationship is supports, contradicts, refines or is an example of, open the target, add a sentence that links the new note with its link context. Done when every such target names the new note. A passing mention or a References entry needs no link-back; `zk list --link-to ID` already lists citers.
@@ -26,13 +27,13 @@ Edit in place while the claim stays the same: wording, link context, links, evid
 
 ## Citations
 
-- **Inline:** `[n]` or `[n, locator]` after the claim it supports: `one leader per term [1, §5.2].` Several: `[1], [3, p. 9]`. A locator is `p. 4`, `§5.2` or `12:30`.
+- **Inline:** `[n]` or `[n, locator]` after the claim it supports: `one leader per term [1, §5.2].` Several: `[1], [3, p. 9]`. A locator is `p. 4`, `§5.2` or `12:30`. For a source with no pages or numbered sections (web docs), use `§` plus the heading text, unquoted: `[1, § Summary]`.
 - **References:** one `## References` heading, the last H2, with a numbered list. Each entry is one of:
   - a source or note: `1. [[ID|Ongaro 2014]]`
   - a URL: `2. A. Author, "Title," Site, Oct. 30, 2026. [Online]. Available: https://example.org/x`
   - the human: `3. [user, 2026-11-08] statement`
 - **Numbering:** order of first inline use, from 1, without gaps. Renumber on every edit that changes the order. Done when every inline `[n]` has entry n and every entry is cited inline.
-- **Review status:** an unreviewed source is citable. When a note or an answer rests on a source, report that source's `review:` value. A `disputed` source needs a sentence that says why you cite it.
+- **Review status:** an unreviewed source is citable. When a note or an answer rests on a source, report that source's `review:` value in the reply. When a claim is load-bearing and its source is unreviewed, say so in the note body, so a reader of the note sees it. A `disputed` source needs a sentence that says why you cite it.
 - A note without evidence has no References section.
 
 ## Source notes
@@ -42,8 +43,10 @@ A source note is a **reference note**, like a wiki `File:` page. Title: the work
 1. `Hubs: [[ID|Sources]]` plus topic hubs.
 2. One line on why the file was ingested.
 3. Short paraphrases of what the file says, each with a locator.
-4. `## Extract`: the text extracted from the raw file, for search.
+4. `## Extract`: the text extracted from the raw file, for search. Demote its headings to H3 or lower (or plain bold) so they do not enter the note outline.
 5. `## Review`: the human's signed blocks (leave it alone).
+
+Fill the frontmatter fields you know: `authors`, `published`. `zk-chef ingest` sets `url:` for a URL; the rest is by hand. A source ingested from a URL needs `citation:` in IEEE form: `citation: A. Author, "Title," Site, Oct. 30, 2026. [Online]. Available: https://example.org/x`. Include the empty `## Review` heading even though lint does not check it.
 
 Ideas the file prompts go into concept notes that cite the source.
 
@@ -56,7 +59,8 @@ A hub is a **category**, like a wiki `Category:` page. Its title is a noun phras
 - **New hubs:** create one when a cluster forms, meaning several notes in one hub link each other on a subtopic.
 - **The map** is the hub's prose. It holds no claims; an overview that argues is a note that the map links.
   - New hub: one line stating the category's scope.
-  - Once members relate to each other or a gap appears: an ordered walk. Entry note first, then each member in reading order with a sentence relating it to the one before. Name tensions. Write each missing note as a `GAP:` line. Done when a reader can pick the right entry note from the map alone.
+  - When two members link each other, or a gap appears: an ordered walk. Entry note first, then each member in reading order with a sentence relating it to the one before. Name tensions. Write each missing note as a `GAP:` line. Done when a reader can pick the right entry note from the map alone.
+- **Gaps:** when research covers a topic that has no claim note yet, write a `GAP:` line in the hub's map for it. Do this in the same task as the research.
 - When a new member changes the reading order or fills a `GAP:`, update the map in the same commit.
 
 ## Logs
