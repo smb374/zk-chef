@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -76,30 +75,7 @@ func writeConfig(root string, cfg map[string]any) error {
 	return os.WriteFile(filepath.Join(root, lint.ConfigPath), b, 0o644)
 }
 
-// keyFlags re-parses inv.args so --json and --root also work after the subcommand and its argument.
-func keyFlags(inv *invocation) bool {
-	fs := flag.NewFlagSet("zk-chef key", flag.ContinueOnError)
-	fs.SetOutput(inv.stderr)
-	fs.BoolVar(&inv.json, "json", inv.json, "print one JSON object")
-	fs.StringVar(&inv.root, "root", inv.root, "vault root")
-	var positional []string
-	for rest := inv.args; ; {
-		if fs.Parse(rest) != nil {
-			return false
-		}
-		if fs.NArg() == 0 {
-			break
-		}
-		positional, rest = append(positional, fs.Arg(0)), fs.Args()[1:]
-	}
-	inv.args = positional
-	return true
-}
-
 func keyVerb(inv *invocation) int {
-	if !keyFlags(inv) {
-		return 2
-	}
 	root, err := filepath.Abs(inv.root)
 	if err != nil {
 		return fail(inv, "zk-chef key: "+err.Error())

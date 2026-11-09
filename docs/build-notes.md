@@ -13,7 +13,7 @@ Checked 2026-11-08 with zk 0.15.7, Python 3.14, PyYAML 6.0.3, git, gpg.
 - zk's `format-date` uses local time and has no timezone option. The ID needs UTC, so the filename template calls `{{sh 'date -u +%Y%m%d%H%M'}}`.
 - Frontmatter titles use `{{json title}}`. A JSON string is valid YAML, so quotes in titles are safe.
 - `zk new` takes the target dir relative to the working dir. Use `-W VAULT --notebook-dir VAULT` from scripts.
-- Seed hubs have fixed IDs; `.vault/config.toml` names them (`index_id`, `projects_id`, `sources_id`).
+- Seed hubs have fixed IDs; `.zk-chef/config.toml` names them (`index_id`, `projects_id`, `sources_id`).
 
 ## Release checks
 

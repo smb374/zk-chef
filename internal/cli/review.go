@@ -130,27 +130,6 @@ func signSource(inv *invocation, root, id, verdict string) error {
 	return gitRun(inv, root, "commit", "-m", "review: "+id+" "+verdict, "--", rel)
 }
 
-// reviewArgs re-parses inv.args so flags also work after SRC-ID and the verdict.
-func reviewArgs(inv *invocation) bool {
-	fs := flag.NewFlagSet("zk-chef review", flag.ContinueOnError)
-	fs.SetOutput(inv.stderr)
-	fs.BoolVar(&inv.json, "json", inv.json, "print one JSON object")
-	fs.StringVar(&inv.root, "root", inv.root, "vault root")
-	fs.BoolVar(&inv.noCommit, "no-commit", inv.noCommit, "sign the note but do not commit")
-	var positional []string
-	for rest := inv.args; ; {
-		if fs.Parse(rest) != nil {
-			return false
-		}
-		if fs.NArg() == 0 {
-			break
-		}
-		positional, rest = append(positional, fs.Arg(0)), fs.Args()[1:]
-	}
-	inv.args = positional
-	return true
-}
-
 // reviewQueue walks the unreviewed sources by ID and signs the verdict the user types for each.
 func reviewQueue(inv *invocation, root string) int {
 	files, err := lint.LoadWorktree(root)
@@ -207,9 +186,6 @@ queue:
 }
 
 func reviewVerb(inv *invocation) int {
-	if !reviewArgs(inv) {
-		return 2
-	}
 	if len(inv.args) == 0 {
 		if inv.json {
 			return fail(inv, "zk-chef review: --json needs SRC-ID")

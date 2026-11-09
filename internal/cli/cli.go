@@ -72,9 +72,6 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, env []string)
 	if !slices.Contains(verbs, verb) {
 		return usage(stderr)
 	}
-	if !ungated[verb] && !gate(stderr) {
-		return 2
-	}
 	fs := flag.NewFlagSet("zk-chef "+verb, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() { fmt.Fprintf(stderr, "usage: zk-chef %s [--json] [args]\n", verb) }
@@ -99,6 +96,9 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, env []string)
 		}
 		inv.args = append(inv.args, left[0])
 		rest = left[1:]
+	}
+	if !ungated[verb] && !gate(inv.root, stderr) {
+		return 2
 	}
 	return handlers[verb](inv)
 }

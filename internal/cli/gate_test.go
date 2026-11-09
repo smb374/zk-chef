@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -53,6 +54,69 @@ func TestRunVersionGate(t *testing.T) {
 			}
 			if got.code != 2 || !strings.Contains(got.stderr, tt.wantStderr) {
 				t.Errorf("got code %d stderr %q, want 2 and %q", got.code, got.stderr, tt.wantStderr)
+			}
+		})
+	}
+}
+
+func TestGateUsesRootFlag(t *testing.T) {
+	tests := []struct {
+		name, binVersion string
+		cwdElsewhere     bool // run from another directory, with --root
+		wantRefused      bool
+	}{
+		{"older binary refused through --root", "1.0.0", true, true},
+		{"newer binary passes through --root", "1.3.0", true, false},
+		{"older binary refused in cwd without --root", "1.0.0", false, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := setupVault(t, tt.binVersion, vaultWith(`"1.2.0"`))
+			args := []string{"lint"}
+			if tt.cwdElsewhere {
+				root, err := os.Getwd()
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Chdir(t.TempDir())
+				args = append(args, "--root", root)
+			}
+			got := run(env, args...)
+			if tt.wantRefused {
+				if got.code != 2 || !strings.Contains(got.stderr, "min_version") {
+					t.Errorf("got code %d stderr %q, want 2 and min_version", got.code, got.stderr)
+				}
+				return
+			}
+			if strings.Contains(got.stderr, refused) {
+				t.Errorf("got code %d stderr %q, want the gate to let the verb run", got.code, got.stderr)
+			}
+		})
+	}
+}
+
+// Run puts every token after "--" into the arguments, so a "--root" there must not move the
+// vault after the gate ran: the verb is refused, by the gate or as bad usage.
+func TestGateRootFlagAfterDoubleDash(t *testing.T) {
+	tests := []struct {
+		verb string
+		args []string
+	}{
+		{"key", []string{"list"}},
+		{"review", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.verb, func(t *testing.T) {
+			env := setupVault(t, "1.0.0", vaultWith(`"1.2.0"`))
+			root, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Chdir(t.TempDir())
+			args := append([]string{tt.verb, "--"}, tt.args...)
+			got := run(env, append(args, "--root", root)...)
+			if got.code != 2 || got.stdout != "" {
+				t.Errorf("got code %d stdout %q stderr %q, want 2 and no stdout", got.code, got.stdout, got.stderr)
 			}
 		})
 	}

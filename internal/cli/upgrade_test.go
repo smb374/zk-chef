@@ -269,6 +269,42 @@ func TestUpgradeConfig(t *testing.T) {
 	}
 }
 
+// The version gate reads --root, so an older binary cannot lower the pin of another vault.
+func TestUpgradeRefusedByPinFromOtherDirectory(t *testing.T) {
+	env := upgradeVault(t)
+	var cfg map[string]any
+	if err := toml.Unmarshal([]byte(readFile(t, ".zk-chef/config.toml")), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg["min_version"] = "2.0.0"
+	if err := writeConfig(".", cfg); err != nil {
+		t.Fatal(err)
+	}
+	gitOut(t, "commit", "-aqm", "set pin")
+	before := gitOut(t, "rev-parse", "HEAD")
+	root, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	setBinaryVersion(t, "1.3.0")
+	t.Chdir(t.TempDir())
+	got := run(env, "upgrade", "-y", "--root", root)
+	if got.code != 2 || !strings.Contains(got.stderr, "min_version") {
+		t.Errorf("exit %d stderr %q, want 2 and min_version", got.code, got.stderr)
+	}
+	t.Chdir(root)
+	cfg = nil
+	if err := toml.Unmarshal([]byte(readFile(t, ".zk-chef/config.toml")), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg["min_version"] != "2.0.0" {
+		t.Errorf("min_version = %v, want 2.0.0", cfg["min_version"])
+	}
+	if after := gitOut(t, "rev-parse", "HEAD"); after != before {
+		t.Errorf("HEAD moved from %s to %s", before, after)
+	}
+}
+
 func TestUpgradeCommit(t *testing.T) {
 	tests := []struct {
 		name, binVersion, wantSubject string
