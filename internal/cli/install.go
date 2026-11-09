@@ -36,6 +36,7 @@ const ownerMarker = ".zk-chef-owned"
 
 func installFlags(fs *flag.FlagSet, inv *invocation) {
 	fs.BoolVar(&inv.yes, "y", false, "download zk without asking")
+	fs.BoolVar(&inv.skillsOnly, "skills-only", false, "write the skills and nothing else; self-update runs the new binary this way")
 }
 
 // homeDir is HOME from the verb's env, else the process env, else the OS user home.
@@ -74,6 +75,15 @@ func installVerb(inv *invocation) int {
 				fmt.Fprintf(inv.stdout, "kept %s: not written by zk-chef\n", s.Name)
 			}
 		}
+	}
+	if inv.skillsOnly {
+		if inv.json {
+			writeJSON(inv.stdout, struct {
+				OK     bool          `json:"ok"`
+				Skills []skillResult `json:"skills"`
+			}{true, skills})
+		}
+		return 0
 	}
 	status, tag, zkErr := ensureZK(inv, home)
 	if !onPath(filepath.Join(home, ".local", "bin")) {

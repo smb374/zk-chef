@@ -42,6 +42,12 @@ func setupVault(t *testing.T, binVersion string, files map[string]string) []stri
 	Assets = os.DirFS(repo)
 	t.Cleanup(func() { Assets = oldAssets })
 	t.Chdir(root)
+	// A test that runs self-update without its own server must never reach the network
+	// or replace the test binary.
+	oldBase, oldExe := selfUpdateBase, selfExecutable
+	selfUpdateBase = "http://127.0.0.1:1"
+	selfExecutable = func() (string, error) { return filepath.Join(root, "zk-chef-under-test"), nil }
+	t.Cleanup(func() { selfUpdateBase, selfExecutable = oldBase, oldExe })
 
 	old := version.Version
 	version.Version = binVersion

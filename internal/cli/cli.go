@@ -2,7 +2,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -26,22 +25,24 @@ type invocation struct {
 	root           string // --root, for verbs that take it
 	staged         bool   // --staged, for lint
 	yes            bool   // -y, for init, install and upgrade
+	skillsOnly     bool   // --skills-only, for install
 	noCommit       bool   // --no-commit, for review
 	title          string // --title, for ingest
 }
 
-// handlers maps implemented verbs to their code; any other verb is a stub.
+// handlers maps each verb to its code.
 var handlers = map[string]func(*invocation) int{
-	"init":    initVerb,
-	"doctor":  doctorVerb,
-	"install": installVerb,
-	"lint":    lintVerb,
-	"fix":     fixVerb,
-	"key":     keyVerb,
-	"ingest":  ingestVerb,
-	"review":  reviewVerb,
-	"status":  statusVerb,
-	"upgrade": upgradeVerb,
+	"init":        initVerb,
+	"doctor":      doctorVerb,
+	"install":     installVerb,
+	"lint":        lintVerb,
+	"fix":         fixVerb,
+	"key":         keyVerb,
+	"ingest":      ingestVerb,
+	"review":      reviewVerb,
+	"status":      statusVerb,
+	"upgrade":     upgradeVerb,
+	"self-update": selfUpdateVerb,
 }
 
 // verbFlags registers the flags a verb takes besides --json.
@@ -99,22 +100,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, env []string)
 		inv.args = append(inv.args, left[0])
 		rest = left[1:]
 	}
-	if h, ok := handlers[verb]; ok {
-		return h(inv)
-	}
-	return notImplemented(inv)
-}
-
-func notImplemented(inv *invocation) int {
-	fmt.Fprintf(inv.stderr, "zk-chef %s: not implemented\n", inv.verb)
-	if inv.json {
-		b, _ := json.Marshal(struct {
-			OK    bool   `json:"ok"`
-			Error string `json:"error"`
-		}{false, "not implemented"})
-		fmt.Fprintf(inv.stdout, "%s\n", b)
-	}
-	return 2
+	return handlers[verb](inv)
 }
 
 func usage(stderr io.Writer) int {
