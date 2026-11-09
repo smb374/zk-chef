@@ -24,11 +24,14 @@ Run every command from the vault root, or give `zk-chef` the vault with `--root 
 
 ## Ingest a raw file
 
-Ingest the primary source, not a summary of it. For web docs, ingest the URL. Do not ingest LLM-written or agent-written research as evidence; ingest the primary URLs it cites. Such a brief may be a source only when the human asks for it.
+Cite a web URL directly in `## References` (`zettel-writing`, "Citations"). Ingest a URL only after the human approves it. Ingest a local file when the human hands it over. Ingest the primary source, not a summary of it. An LLM-written or agent-written brief is not evidence: cite or ingest the primary URLs it cites. Such a brief may be a source only when the human asks for it.
 
-1. Run `zk-chef ingest --title "<short title of the work>" PATH|URL`. It creates the source note, copies the file to `raw/<ID>-<original name>`, and sets `raw:`, `sha256:` and `review: unreviewed`; for a URL it also sets `url:` and downloads the raw bytes (HTML stays HTML). It prints the note path (`--json` adds `raw` and `sha256`). It does not fill `## Extract`, `citation:`, `authors`, `published` or the body: add them by hand. A URL source needs `citation:` in IEEE form: `citation: A. Author, "Title," Site, Oct. 30, 2026. [Online]. Available: https://example.org/x`.
+**Propose.** After a task that cites URLs, list the load-bearing ones, numbered, each with a reason in one line. A URL is load-bearing when a claim fails without it. Skip a URL that only gives context. Done when each listed URL has a number and a reason. Ingest nothing until the human answers with numbers.
+
+1. For each approved URL, run `zk-chef ingest --title "<short title of the work>" PATH|URL`. It creates the source note, copies the file to `raw/<ID>-<original name>`, and sets `raw:`, `sha256:` and `review: unreviewed`; for a URL it also sets `url:` and downloads the raw bytes (HTML stays HTML). It prints the note path (`--json` adds `raw` and `sha256`). It does not fill `## Extract`, `citation:`, `authors`, `published` or the body: add them by hand. A URL source needs `citation:` in IEEE form: `citation: A. Author, "Title," Site, Oct. 30, 2026. [Online]. Available: https://example.org/x`.
 2. Write the body as `zettel-writing` describes under "Source notes".
-3. Run lint, then commit with `ingest: <title>`. Done when lint reports 0 errors.
+3. In each note that cites the URL directly, keep its References entry and append `, Archive: [[ID|Title]]`. Find the notes with `ffgrep` on the URL. Done when every direct entry for the URL ends with the Archive link.
+4. Run lint, then commit with `ingest: <title>`. Done when lint reports 0 errors.
 
 An unreviewed source is citable at once.
 

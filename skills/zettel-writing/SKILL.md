@@ -19,7 +19,7 @@ A vault holds **claims**: one per note, titled by the claim, joined by **link co
 5. **Add link context.** Put each body link in a sentence that states the relationship: supports, contradicts, refines, is an example of, depends on, follows from. Done when a reader can decide to follow each link without opening it.
 6. **Cite the evidence** (see "Citations").
 7. **Link back.** For each link whose relationship is supports, contradicts, refines or is an example of, open the target, add a sentence that links the new note with its link context. Done when every such target names the new note. A passing mention or a References entry needs no link-back; `zk list --link-to ID` already lists citers.
-8. **Close.** Run lint and commit (`zk-chef-ops`, "Commit"). One commit holds the note and its link-backs.
+8. **Close.** Run lint and commit (`zk-chef-ops`, "Commit"). One commit holds the note and its link-backs. Then propose the load-bearing URLs to ingest (`zk-chef-ops`, "Ingest a raw file"); do not ingest them yourself.
 
 ## Edit a note
 
@@ -30,7 +30,7 @@ Edit in place while the claim stays the same: wording, link context, links, evid
 - **Inline:** `[n]` or `[n, locator]` after the claim it supports: `one leader per term [1, §5.2].` Several: `[1], [3, p. 9]`. A locator is `p. 4`, `§5.2` or `12:30`. For a source with no pages or numbered sections (web docs), use `§` plus the heading text, unquoted: `[1, § Summary]`.
 - **References:** one `## References` heading, the last H2, with a numbered list. Each entry is one of:
   - a source or note: `1. [[ID|Ongaro 2014]]`
-  - a URL: `2. A. Author, "Title," Site, Oct. 30, 2026. [Online]. Available: https://example.org/x`
+  - a URL (the default for web sources): `2. A. Author, "Title," Site, Oct. 30, 2026. [Online]. Available: https://example.org/x`. After ingest, the entry ends with `, Archive: [[ID|Title]]`.
   - the human: `3. [user, 2026-11-08] statement`
 - **Numbering:** order of first inline use, from 1, without gaps. Renumber on every edit that changes the order. Done when every inline `[n]` has entry n and every entry is cited inline.
 - **Review status:** an unreviewed source is citable. When a note or an answer rests on a source, report that source's `review:` value in the reply. When a claim is load-bearing and its source is unreviewed, say so in the note body, so a reader of the note sees it. A `disputed` source needs a sentence that says why you cite it.
