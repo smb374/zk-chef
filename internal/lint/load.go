@@ -17,8 +17,11 @@ const ConfigPath = ".zk-chef/config.toml"
 // folderKind maps each note folder to the kind it holds.
 var folderKind = map[string]string{"notes": "note", "hubs": "hub", "sources": "source", "projects": "log"}
 
-// loaded lists every folder lint reads; raw/ and keys/ are read as bytes only.
-var loaded = []string{"notes", "hubs", "sources", "projects", "raw", "keys"}
+// IndexPath is the root index hub, which sits beside AGENTS.md.
+const IndexPath = "INDEX.md"
+
+// loaded lists every folder lint reads, plus the root index file; raw/ and keys/ are read as bytes only.
+var loaded = []string{IndexPath, "notes", "hubs", "sources", "projects", "raw", "keys"}
 
 // LoadWorktree reads the lint inputs under root into a map of slash paths to bytes.
 func LoadWorktree(root string) (map[string][]byte, error) {

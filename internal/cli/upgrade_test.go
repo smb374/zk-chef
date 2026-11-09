@@ -249,7 +249,7 @@ func TestUpgradeConfig(t *testing.T) {
 				"word_count_warn":     int64(1),
 				"pinned_fingerprints": []any{"AAAA"},
 				"min_version":         tt.wantMin,
-				"index_id":            "000000000000idx0",
+				"index_id":            "INDEX",
 				"projects_id":         "000000000000prj0",
 				"sources_id":          "000000000000src0",
 			}

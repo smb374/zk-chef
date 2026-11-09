@@ -14,7 +14,7 @@ import (
 
 // Fixtures ported from tests/test_vault.py (IDX, HUB, doc, RAW, SHA, base, codes, with_).
 const (
-	idxID    = "000000000000idx0"
+	idxID    = "INDEX"
 	hubLine  = "Hubs: [[" + idxID + "|Index]]"
 	rawBytes = "raw bytes\n\nwith newlines\n"
 )
@@ -44,7 +44,7 @@ func baseVault(t *testing.T) map[string]string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	paths := []string{".zk-chef/config.toml"}
+	paths := []string{".zk-chef/config.toml", "INDEX.md"}
 	for _, h := range hubs {
 		paths = append(paths, "hubs/"+h.Name())
 	}

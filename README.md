@@ -29,7 +29,7 @@ zk-chef init /path/to/vault
 `init` is safe to run again. It does these things:
 
 - runs `git init` when needed;
-- copies the scaffold (zk config and templates, `.zk-chef/config.toml`, pre-commit hook, seed hubs) and never overwrites a file;
+- copies the scaffold (zk config and templates, `.zk-chef/config.toml`, pre-commit hook, seed hubs, and the root `INDEX.md` beside `AGENTS.md`) and never overwrites a file;
 - adds a `<!-- zk-chef -->` block to `AGENTS.md`, or creates the file;
 - creates `notes/ hubs/ sources/ projects/ raw/ keys/`;
 - sets `core.hooksPath` to `.githooks`;

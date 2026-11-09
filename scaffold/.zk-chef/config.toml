@@ -2,6 +2,6 @@
 pinned_fingerprints = []
 # Claim notes above this body word count get W_WORD_COUNT.
 word_count_warn = 400
-index_id = "000000000000idx0"
+index_id = "INDEX"
 projects_id = "000000000000prj0"
 sources_id = "000000000000src0"

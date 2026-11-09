@@ -50,6 +50,10 @@ func parseConfig(files map[string][]byte) (config, error) {
 func parseDocs(files map[string][]byte) []*doc {
 	var docs []*doc
 	for p, b := range files {
+		if p == IndexPath {
+			docs = append(docs, parseDoc(p, strings.ToValidUTF8(string(b), "\ufffd")))
+			continue
+		}
 		folder, name, ok := strings.Cut(p, "/")
 		if _, isNoteFolder := folderKind[folder]; ok && isNoteFolder && strings.HasSuffix(name, ".md") && !strings.Contains(name, "/") {
 			docs = append(docs, parseDoc(p, strings.ToValidUTF8(string(b), "\ufffd")))
