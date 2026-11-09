@@ -1,6 +1,6 @@
 # Build notes: results
 
-Checked 2026-11-08 with zk 0.15.7, Python 3.14, PyYAML 6.0.3, git, gpg.
+Checked 2026-11-08 with zk 0.15.7, git, gpg. Items 1 to 5 were checked during the v1 (Python) build and carried into the Go binary.
 
 1. **ID in frontmatter.** Pass. `id: {{filename-stem}}` equals the filename.
 2. **Obsidian resolution.** Unverified. Needs a manual check by the human.
