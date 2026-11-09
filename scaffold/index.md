@@ -1,5 +1,5 @@
 ---
-id: INDEX
+id: index
 title: Index
 kind: hub
 ---

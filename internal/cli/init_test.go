@@ -53,7 +53,7 @@ func TestInitFreshVault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{".zk/config.toml", ".zk-chef/config.toml", ".githooks/pre-commit", "AGENTS.md", "INDEX.md"} {
+	for _, p := range []string{".zk/config.toml", ".zk-chef/config.toml", ".githooks/pre-commit", "AGENTS.md", "index.md"} {
 		if _, err := os.Stat(filepath.Join(v, p)); err != nil {
 			t.Errorf("missing file %s: %v", p, err)
 		}

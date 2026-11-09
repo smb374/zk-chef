@@ -18,7 +18,7 @@ const ConfigPath = ".zk-chef/config.toml"
 var folderKind = map[string]string{"notes": "note", "hubs": "hub", "sources": "source", "projects": "log"}
 
 // IndexPath is the root index hub, which sits beside AGENTS.md.
-const IndexPath = "INDEX.md"
+const IndexPath = "index.md"
 
 // loaded lists every folder lint reads, plus the root index file; raw/ and keys/ are read as bytes only.
 var loaded = []string{IndexPath, "notes", "hubs", "sources", "projects", "raw", "keys"}

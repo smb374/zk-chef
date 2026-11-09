@@ -29,7 +29,7 @@ zk-chef init /path/to/vault
 `init` is safe to run again. It does these things:
 
 - runs `git init` when needed;
-- copies the scaffold (zk config and templates, `.zk-chef/config.toml`, pre-commit hook, seed hubs, and the root `INDEX.md` beside `AGENTS.md`) and never overwrites a file;
+- copies the scaffold (zk config and templates, `.zk-chef/config.toml`, pre-commit hook, seed hubs, and the root `index.md` beside `AGENTS.md`) and never overwrites a file;
 - adds a `<!-- zk-chef -->` block to `AGENTS.md`, or creates the file;
 - creates `notes/ hubs/ sources/ projects/ raw/ keys/`;
 - sets `core.hooksPath` to `.githooks`;
@@ -68,6 +68,36 @@ Every verb accepts `--json` and `--help`. Verbs that work on a vault pick it in 
 | `zk-chef status` | agent | Lists new and re-review sources, disputed sources still cited, and lint counts |
 
 Lint codes and fixes are in `skills/zk-chef-ops/LINT.md`.
+
+## Publish a vault as a site (Quartz)
+
+A vault is plain Markdown with `[[ID|Title]]` links. [Quartz](https://quartz.jzhao.xyz) v5 builds it into a static site with wikilinks, backlinks, search and a graph. It needs Node 22 or newer. Tested on 2026-11-09 with Quartz branch `v5` at commit `3c7cba4`; there is no v5 release tag newer than `v5.0.0`, so pin a commit.
+
+```sh
+git clone --branch v5 https://github.com/jackyzha0/quartz.git site
+cd site
+git checkout 3c7cba4
+npm ci
+cp quartz.config.default.yaml quartz.config.yaml
+```
+
+In `quartz.config.yaml`, set `baseUrl` and `pageTitle`. Only four folders and `index.md` are copied, so `raw/` never enters `content/`. Then copy the vault in and build:
+
+```sh
+VAULT=/path/to/vault
+rm -rf content && mkdir content
+cp -r "$VAULT"/{notes,hubs,sources,projects} "$VAULT/index.md" content/
+npx quartz plugin install --from-config
+npx quartz build --serve   # or without --serve; output goes to public/
+```
+
+Notes:
+
+- Quartz resolves a bare ID such as `[[202611091044tnn3|Title]]` when exactly one file has that name. Keep note names unique across folders, which the lint already requires.
+- Quartz reads dates from git. Copied files give a "not tracked by git" warning and wrong dates; this is harmless.
+- A published note that links to a note in an ignored folder gets a broken link.
+- Quartz lists backlinks by frontmatter `title`. Every note has one.
+- The test build of 23 files took about 3 s.
 
 ## Repo layout
 

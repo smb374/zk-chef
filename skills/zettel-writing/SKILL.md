@@ -52,7 +52,7 @@ Ideas the file prompts go into concept notes that cite the source.
 
 ## Hubs
 
-A hub is a **category**, like a wiki `Category:` page. Its title is a noun phrase: "Consensus protocols". Its file lives in `hubs/` and its Hubs line names its parent hub, so every hub reaches Index. The Index is the one exception: it is `INDEX.md` in the vault root, beside `AGENTS.md`, and links as `[[INDEX|Index]]`.
+A hub is a **category**, like a wiki `Category:` page. Its title is a noun phrase: "Consensus protocols". Its file lives in `hubs/` and its Hubs line names its parent hub, so every hub reaches Index. The Index is the one exception: it is `index.md` in the vault root, beside `AGENTS.md`, and links as `[[index|Index]]`.
 
 - **Members** join through their own Hubs lines; `zk list --link-to HUB-ID` lists them.
 - **Projects:** each project gets a hub under the Projects hub.

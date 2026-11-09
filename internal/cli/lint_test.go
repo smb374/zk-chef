@@ -14,7 +14,7 @@ import (
 
 // Fixtures ported from tests/test_vault.py (IDX, HUB, doc, RAW, SHA, base, codes, with_).
 const (
-	idxID    = "INDEX"
+	idxID    = "index"
 	hubLine  = "Hubs: [[" + idxID + "|Index]]"
 	rawBytes = "raw bytes\n\nwith newlines\n"
 )
@@ -44,7 +44,7 @@ func baseVault(t *testing.T) map[string]string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	paths := []string{".zk-chef/config.toml", "INDEX.md"}
+	paths := []string{".zk-chef/config.toml", "index.md"}
 	for _, h := range hubs {
 		paths = append(paths, "hubs/"+h.Name())
 	}
@@ -273,7 +273,7 @@ func TestLintWarnings(t *testing.T) {
 	hubMap := func(body string) map[string]string {
 		m := "Hubs: [[h1|H1]]\n\n"
 		return map[string]string{
-			"hubs/h1.md":  doc("h1", "H1", "hub", "Hubs: [[INDEX|Index]]\n\n"+body),
+			"hubs/h1.md":  doc("h1", "H1", "hub", "Hubs: [[index|Index]]\n\n"+body),
 			"notes/a1.md": doc("a1", "A", "note", m+"[[a2|B]] refines it."),
 			"notes/a2.md": doc("a2", "B", "note", m+"[[a1|A]] comes first."),
 		}

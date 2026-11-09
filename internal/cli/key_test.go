@@ -129,7 +129,7 @@ func TestKeyAddKeepsOtherConfigKeys(t *testing.T) {
 	want := struct {
 		n                int
 		idx, prj, source string
-	}{400, "INDEX", "000000000000prj0", "000000000000src0"}
+	}{400, "index", "000000000000prj0", "000000000000src0"}
 	if cfg.WordCountWarn != want.n || cfg.IndexID != want.idx || cfg.ProjectsID != want.prj || cfg.SourcesID != want.source {
 		t.Errorf("config %+v after add, want the scaffold values %+v", cfg, want)
 	}
