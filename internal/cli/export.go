@@ -44,6 +44,14 @@ func exportFrontmatter(fm string) (string, error) {
 // exportTarget is where a page goes in the export and the title its links show.
 type exportTarget struct{ path, title string }
 
+// exportHead is the frontmatter an export reads from each page.
+type exportHead struct {
+	Title        string
+	Kind         string
+	Status       string
+	SupersededBy string `yaml:"superseded_by"`
+}
+
 // exportLinkText escapes the characters that end or start Markdown link text.
 var exportLinkText = strings.NewReplacer(`\`, `\\`, "[", `\[`, "]", `\]`)
 
@@ -82,6 +90,7 @@ func exportSection(name, from string, set map[string]bool, targets map[string]ex
 // exportPages maps each page's path under the export to its exported text. Lint has passed, so every page parses.
 func exportPages(files map[string][]byte) (map[string]string, error) {
 	texts := map[string]string{}
+	heads := map[string]exportHead{}
 	targets := map[string]exportTarget{} // page id (the file stem) -> target
 	for p, b := range files {
 		folder, name, _ := strings.Cut(p, "/")
@@ -92,11 +101,12 @@ func exportPages(files map[string][]byte) (map[string]string, error) {
 		if !ok {
 			return nil, fmt.Errorf("%s: missing frontmatter", p)
 		}
-		var head struct{ Title string }
+		var head exportHead
 		if err := yaml.Unmarshal([]byte(fm), &head); err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
 		}
 		texts[p] = string(b)
+		heads[p] = head
 		targets[strings.TrimSuffix(path.Base(p), ".md")] = exportTarget{p, head.Title}
 	}
 	// members[id] and linkedBy[id] hold the ids of the pages that name id in their Hubs line or link it elsewhere.
@@ -133,10 +143,21 @@ func exportPages(files map[string][]byte) (map[string]string, error) {
 		if err != nil {
 			return nil, err
 		}
+		if heads[p].Kind == "source" {
+			text = lint.StripExtract(text)
+		}
 		fm, body, _ := lint.SplitFrontmatter(text)
 		kept, err := exportFrontmatter(fm)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
+		}
+		if heads[p].Status == "superseded" {
+			t := targets[heads[p].SupersededBy]
+			link, err := exportLink(p, t, t.title)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", p, err)
+			}
+			body = "Superseded by " + link + ".\n\n" + body
 		}
 		backlinks := map[string]bool{}
 		for id := range linkedBy[self] {

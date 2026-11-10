@@ -344,3 +344,71 @@ func TestExportMembersOnlyForHubsWithMembers(t *testing.T) {
 		}
 	}
 }
+
+// extractSource is a source whose body holds paraphrases, an Extract section and a Review block.
+func extractSource(body string) map[string]string {
+	return map[string]string{"sources/s1.md": doc("s1", "Source one", "source", body,
+		kv{"raw", "raw/s1-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})}
+}
+
+func TestExportExtractStripsSectionKeepsReviewAndParaphrases(t *testing.T) {
+	tree := exportOK(t, with_(t, extractSource(
+		"Hubs: [[000000000000src0|Sources]]\n\nWhy. Paraphrase [1, p. 2].\n\n## Extract\n\nquoted text\n\n### Part\n\nmore quoted\n\n## Review\n\nreviewed text")))
+	want := "---\ntitle: Source one\nkind: source\nreview: unreviewed\n---\nHubs: [Sources](../hubs/000000000000src0.md)\n\nWhy. Paraphrase [1, p. 2].\n\n## Review\n\nreviewed text\n\n## Backlinks\n\n- [Leaders are unique](../notes/n1.md)\n"
+	if got := tree["sources/s1.md"]; got != want {
+		t.Errorf("sources/s1.md = %q, want %q", got, want)
+	}
+}
+
+func TestExportExtractStripsSectionAtEndOfFile(t *testing.T) {
+	tree := exportOK(t, with_(t, extractSource(
+		"Hubs: [[000000000000src0|Sources]]\n\nWhy.\n\n## Review\n\nreviewed text\n\n## Extract\n\nquoted text")))
+	if got := tree["sources/s1.md"]; strings.Contains(got, "Extract") || strings.Contains(got, "quoted") || !strings.Contains(got, "## Review\n\nreviewed text\n") {
+		t.Errorf("sources/s1.md = %q, want Review kept and no Extract", got)
+	}
+}
+
+func TestExportExtractWithoutSectionIsUnchanged(t *testing.T) {
+	tree := exportOK(t, with_(t, extractSource(
+		"Hubs: [[000000000000src0|Sources]]\n\nWhy.\n\n## Review\n\nreviewed text")))
+	want := "---\ntitle: Source one\nkind: source\nreview: unreviewed\n---\nHubs: [Sources](../hubs/000000000000src0.md)\n\nWhy.\n\n## Review\n\nreviewed text\n\n## Backlinks\n\n- [Leaders are unique](../notes/n1.md)\n"
+	if got := tree["sources/s1.md"]; got != want {
+		t.Errorf("sources/s1.md = %q, want %q", got, want)
+	}
+}
+
+func TestExportExtractFencedHeadingIsNotASection(t *testing.T) {
+	tree := exportOK(t, with_(t, extractSource(
+		"Hubs: [[000000000000src0|Sources]]\n\nWhy.\n\n```\n## Extract\nfenced\n```\n\n## Review")))
+	if got := tree["sources/s1.md"]; !strings.Contains(got, "```\n## Extract\nfenced\n```\n\n## Review") {
+		t.Errorf("sources/s1.md = %q, want the fenced block kept", got)
+	}
+}
+
+func TestExportSupersededNoticeLinksReplacement(t *testing.T) {
+	tree := exportOK(t, with_(t, map[string]string{
+		"notes/n1.md": doc("n1", "Leaders are unique", "note", hubLine+"\n\nOld claim.",
+			kv{"status", "superseded"}, kv{"superseded_by", "n2"}),
+		"notes/n2.md": doc("n2", "Array [a] of x", "note", hubLine+"\n\nNew claim."),
+	}))
+	want := "---\ntitle: Leaders are unique\nkind: note\nstatus: superseded\nsuperseded_by: n2\n---\nSuperseded by [Array \\[a\\] of x](n2.md).\n\nHubs: [Index](../index.md)\n\nOld claim.\n"
+	if got := tree["notes/n1.md"]; got != want {
+		t.Errorf("notes/n1.md = %q, want %q", got, want)
+	}
+	if _, ok := tree["notes/n2.md"]; !ok {
+		t.Errorf("tree %v has no notes/n2.md, the replacement", slices.Collect(maps.Keys(tree)))
+	}
+}
+
+func TestExportSupersededLiveNoteHasNoNotice(t *testing.T) {
+	tree := exportOK(t, with_(t, map[string]string{
+		"notes/n1.md": doc("n1", "Leaders are unique", "note", hubLine+"\n\nOld claim.",
+			kv{"status", "superseded"}, kv{"superseded_by", "n2"}),
+		"notes/n2.md": doc("n2", "New note", "note", hubLine+"\n\nNew claim."),
+	}))
+	for p, page := range tree {
+		if p != "notes/n1.md" && strings.Contains(page, "Superseded by") {
+			t.Errorf("%s = %q, want no notice on a live page", p, page)
+		}
+	}
+}

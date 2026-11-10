@@ -89,6 +89,22 @@ func SplitFrontmatter(text string) (fm, body string, ok bool) {
 	return text[m[2]:m[3]], text[m[1]:], true
 }
 
+// StripExtract returns text without its Extract section: the "## Extract" heading and every line up to the next H2 or the end of the file.
+// Headings in code fences do not count. text must have frontmatter.
+func StripExtract(text string) string {
+	m := frontmatterRe.FindStringSubmatchIndex(text)
+	if m == nil {
+		return text
+	}
+	var kept []string
+	for _, l := range parseDoc("", text).lines {
+		if l.section != "Extract" {
+			kept = append(kept, l.text)
+		}
+	}
+	return text[:m[1]] + strings.Join(kept, "\n")
+}
+
 func contains(list []string, s string) bool {
 	return slices.Contains(list, s)
 }
