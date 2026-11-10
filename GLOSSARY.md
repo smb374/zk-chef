@@ -21,5 +21,5 @@ The section that Export appends to a page. It lists the pages that link to that 
 _Avoid_: Inbound links, citers
 
 **Members**:
-The Backlinks section of a hub, shown under the heading "Members". It has no separate source: a hub's members are the pages that link to it.
+The section of a hub that lists the pages whose `Hubs:` line names it. It is separate from Backlinks: a parent or a prose mention that links to the hub is a backlink, not a member.
 _Avoid_: Children, forward links
