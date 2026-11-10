@@ -79,6 +79,32 @@ func parseDoc(path, text string) *doc {
 	return d
 }
 
+// SplitFrontmatter returns the YAML between the opening and closing --- lines and the body after them.
+// ok is false when text has no frontmatter.
+func SplitFrontmatter(text string) (fm, body string, ok bool) {
+	m := frontmatterRe.FindStringSubmatchIndex(text)
+	if m == nil {
+		return "", "", false
+	}
+	return text[m[2]:m[3]], text[m[1]:], true
+}
+
+// StripExtract returns text without its Extract section: the "## Extract" heading and every line up to the next H2 or the end of the file.
+// Headings in code fences do not count. text must have frontmatter.
+func StripExtract(text string) string {
+	m := frontmatterRe.FindStringSubmatchIndex(text)
+	if m == nil {
+		return text
+	}
+	var kept []string
+	for _, l := range parseDoc("", text).lines {
+		if l.section != "Extract" {
+			kept = append(kept, l.text)
+		}
+	}
+	return text[:m[1]] + strings.Join(kept, "\n")
+}
+
 func contains(list []string, s string) bool {
 	return slices.Contains(list, s)
 }
@@ -92,4 +118,53 @@ func (d *doc) scanned() []line {
 		}
 	}
 	return out
+}
+
+// RewriteLinks replaces each [[ID]] or [[ID|alias]] in the lines lint scans, so links in code fences,
+// Extract and Review stay as written. It calls repl with the trimmed ID, the alias, and whether an alias is present.
+func RewriteLinks(text string, repl func(id, alias string, aliased bool) (string, error)) (string, error) {
+	_, body, ok := SplitFrontmatter(text)
+	if !ok {
+		return "", fmt.Errorf("missing frontmatter")
+	}
+	lines := strings.Split(body, "\n")
+	for i, l := range parseDoc("", text).lines {
+		if !l.scan {
+			continue
+		}
+		var out strings.Builder
+		last := 0
+		for _, m := range linkRe.FindAllStringSubmatchIndex(l.text, -1) {
+			alias := ""
+			if m[4] >= 0 {
+				alias = l.text[m[4]:m[5]]
+			}
+			link, err := repl(strings.TrimSpace(l.text[m[2]:m[3]]), alias, m[4] >= 0)
+			if err != nil {
+				return "", err
+			}
+			out.WriteString(l.text[last:m[0]] + link)
+			last = m[1]
+		}
+		out.WriteString(l.text[last:])
+		lines[i] = out.String()
+	}
+	return text[:len(text)-len(body)] + strings.Join(lines, "\n"), nil
+}
+
+// BodyLinks returns the trimmed IDs of the links in the lines lint scans. IDs on a first body line
+// that starts with "Hubs: " are in hubs; every other ID is in others.
+func BodyLinks(text string) (hubs, others []string) {
+	d := parseDoc("", text)
+	for _, l := range d.scanned() {
+		for _, m := range linkRe.FindAllStringSubmatch(l.text, -1) {
+			id := strings.TrimSpace(m[1])
+			if l.n == d.lines[0].n && strings.HasPrefix(l.text, "Hubs: ") {
+				hubs = append(hubs, id)
+			} else {
+				others = append(others, id)
+			}
+		}
+	}
+	return hubs, others
 }

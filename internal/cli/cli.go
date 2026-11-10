@@ -29,6 +29,7 @@ type invocation struct {
 	skillsOnly     bool   // --skills-only, for install
 	noCommit       bool   // --no-commit, for review
 	title          string // --title, for ingest
+	generator      string // --generator, for export
 }
 
 // verb describes one verb: its help text, its flags and its code.
@@ -72,6 +73,10 @@ var verbs = []verb{
 	{name: "review", usage: "sign a source's review, or list the review queue", argsUsage: "[SRC-ID reviewed|disputed]", root: true, run: reviewVerb,
 		flags: func() []cli.Flag { return []cli.Flag{boolFlag("no-commit", "sign the note but do not commit")} }},
 	{name: "status", usage: "summarize the vault", root: true, run: statusVerb},
+	{name: "export", usage: "write a copy of the vault for a static site generator", argsUsage: "DIR", root: true, run: exportVerb,
+		flags: func() []cli.Flag {
+			return []cli.Flag{&cli.StringFlag{Name: "generator", Usage: "shape the output for a site generator: hugo (default: generic)"}}
+		}},
 }
 
 // verbNames lists the verb names in usage order.
@@ -120,6 +125,7 @@ func (v verb) command(base invocation, code *int) *cli.Command {
 			inv.staged = cmd.Bool("staged")
 			inv.noCommit = cmd.Bool("no-commit")
 			inv.title = cmd.String("title")
+			inv.generator = cmd.String("generator")
 			if v.root {
 				inv.root = cmd.String("root")
 				if inv.root == "" {
