@@ -1,0 +1,20 @@
+name: ci
+
+# Runs on pull requests. Pre-tag check on any branch: gh workflow run ci.yml --ref <branch>
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: peaceiris/actions-hugo@v3
+        with:
+          hugo-version: "latest"
+      - run: go vet ./...
+      - run: go test -short ./...

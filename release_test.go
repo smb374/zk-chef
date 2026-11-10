@@ -39,6 +39,9 @@ func needSHA256(t *testing.T) {
 }
 
 func TestBuildScript(t *testing.T) {
+	if testing.Short() {
+		t.Skip("release workflow runs build.sh next")
+	}
 	needTools(t, "sh", "go")
 	needSHA256(t)
 	out := filepath.Join(t.TempDir(), "dist")
@@ -135,7 +138,7 @@ func TestReleaseWorkflowParses(t *testing.T) {
 		}
 	}
 	all := strings.Join(runs, "\n")
-	for _, want := range []string{"go vet ./...", "go test ./...", "build.sh", "gh release create"} {
+	for _, want := range []string{"go vet ./...", "go test -short ./...", "build.sh", "gh release create"} {
 		if !strings.Contains(all, want) {
 			t.Errorf("run steps lack %q", want)
 		}
