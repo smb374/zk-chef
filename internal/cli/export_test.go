@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -67,7 +68,7 @@ func TestExportCleanVaultLayout(t *testing.T) {
 	tree := readTree(t, out)
 	want := map[string]string{
 		"notes/n1.md":    "---\ntitle: Leaders are unique\nkind: note\n---\nHubs: [Index](../index.md)\n\nOne leader per term [1, p. 4].\n\n## References\n\n1. [Source one](../sources/s1.md)\n",
-		"sources/s1.md":  "---\ntitle: Source one\nkind: source\nreview: unreviewed\nurl: https://example.com/x\ncitation: Doe 2026\nauthors: [Doe, Roe]\npublished: 2026-01-02\n---\nHubs: [Sources](../hubs/000000000000src0.md)\n\nWhy.\n\n## Review\n",
+		"sources/s1.md":  "---\ntitle: Source one\nkind: source\nreview: unreviewed\nurl: https://example.com/x\ncitation: Doe 2026\nauthors: [Doe, Roe]\npublished: 2026-01-02\n---\nHubs: [Sources](../hubs/000000000000src0.md)\n\nWhy.\n\n## Review\n\n## Backlinks\n\n- [Leaders are unique](../notes/n1.md)\n",
 		"projects/p1.md": "---\ntitle: Project one\nkind: log\n---\nHubs: [Index](../index.md)\n\nDecision.\n",
 	}
 	for p, w := range want {
@@ -172,8 +173,8 @@ func TestExportLinksFromRootPage(t *testing.T) {
 		"index.md": doc("index", "Index", "hub", "- [[000000000000src0|Sources]]\n- [[n1]]\n- [[s1|Reading]]"),
 	}))
 	want := "---\ntitle: Index\nkind: hub\n---\n- [Sources](hubs/000000000000src0.md)\n- [Leaders are unique](notes/n1.md)\n- [Reading](sources/s1.md)\n"
-	if tree["index.md"] != want {
-		t.Errorf("index.md = %q, want %q", tree["index.md"], want)
+	if !strings.HasPrefix(tree["index.md"], want) {
+		t.Errorf("index.md = %q, want it to start with %q", tree["index.md"], want)
 	}
 }
 
@@ -183,8 +184,8 @@ func TestExportLinksFromFolderPage(t *testing.T) {
 		"notes/n2.md": doc("n2", "Note two", "note", hubLine+"\n\nBack to [[n1]]."),
 	}))
 	want := "---\ntitle: Leaders are unique\nkind: note\n---\nHubs: [Index](../index.md)\n\nSee [Note two](n2.md), [Two](n2.md), [Source one](../sources/s1.md) and [Reading](../sources/s1.md). Claim [1, p. 4].\n\n## References\n\n1. [Source one](../sources/s1.md)\n"
-	if tree["notes/n1.md"] != want {
-		t.Errorf("notes/n1.md = %q, want %q", tree["notes/n1.md"], want)
+	if !strings.HasPrefix(tree["notes/n1.md"], want) {
+		t.Errorf("notes/n1.md = %q, want it to start with %q", tree["notes/n1.md"], want)
 	}
 }
 
@@ -193,8 +194,8 @@ func TestExportLinksAcrossFolders(t *testing.T) {
 		"hubs/000000000000src0.md": doc("000000000000src0", "Sources", "hub", "Hubs: [[index|Index]]\n\n- [[n1]]\n- [[s1|Reading]]\n- [[000000000000prj0]]"),
 	}))
 	want := "---\ntitle: Sources\nkind: hub\n---\nHubs: [Index](../index.md)\n\n- [Leaders are unique](../notes/n1.md)\n- [Reading](../sources/s1.md)\n- [Projects](000000000000prj0.md)\n"
-	if tree["hubs/000000000000src0.md"] != want {
-		t.Errorf("hubs/000000000000src0.md = %q, want %q", tree["hubs/000000000000src0.md"], want)
+	if !strings.HasPrefix(tree["hubs/000000000000src0.md"], want) {
+		t.Errorf("hubs/000000000000src0.md = %q, want it to start with %q", tree["hubs/000000000000src0.md"], want)
 	}
 }
 
@@ -204,8 +205,8 @@ func TestExportLinksEscapeBrackets(t *testing.T) {
 		"notes/n1.md": doc("n1", "Leaders are unique", "note", hubLine+"\n\nSee [[n2]] and [[s1|Source [one]]."),
 	}))
 	want := "---\ntitle: Leaders are unique\nkind: note\n---\nHubs: [Index](../index.md)\n\nSee [Array \\[a\\] of x](n2.md) and [Source \\[one](../sources/s1.md).\n"
-	if tree["notes/n1.md"] != want {
-		t.Errorf("notes/n1.md = %q, want %q", tree["notes/n1.md"], want)
+	if !strings.HasPrefix(tree["notes/n1.md"], want) {
+		t.Errorf("notes/n1.md = %q, want it to start with %q", tree["notes/n1.md"], want)
 	}
 }
 
@@ -232,5 +233,114 @@ func TestExportLinksLeaveExcludedPlaces(t *testing.T) {
 	}
 	if !strings.Contains(tree["notes/n1.md"], "Live [Reading](../sources/s1.md).") {
 		t.Errorf("notes/n1.md = %q, want the live link converted", tree["notes/n1.md"])
+	}
+}
+
+// backlinkVault adds notes that link n1, n2 and the Sources hub in several ways.
+func backlinkVault(t *testing.T) map[string]string {
+	t.Helper()
+	return with_(t, map[string]string{
+		"notes/n2.md": doc("n2", "Zed note", "note", hubLine+"\n\nBack to [[n1]]."),
+		"notes/n3.md": doc("n3", "Alpha note", "note", hubLine+"\n\nBack to [[n1|Leaders]] and [[n1]] again."),
+	})
+}
+
+func TestExportBacklinksListsLinkingPagesSortedByTitle(t *testing.T) {
+	tree := exportOK(t, backlinkVault(t))
+	want := "---\ntitle: Leaders are unique\nkind: note\n---\nHubs: [Index](../index.md)\n\nOne leader per term [1, p. 4].\n\n## References\n\n1. [Source one](../sources/s1.md)\n\n## Backlinks\n\n- [Alpha note](n3.md)\n- [Zed note](n2.md)\n"
+	if !strings.HasPrefix(tree["notes/n1.md"], want) {
+		t.Errorf("notes/n1.md = %q, want it to start with %q", tree["notes/n1.md"], want)
+	}
+	wantS1 := "\n## Backlinks\n\n- [Leaders are unique](../notes/n1.md)\n"
+	if !strings.HasSuffix(tree["sources/s1.md"], wantS1) {
+		t.Errorf("sources/s1.md = %q, want it to end with %q", tree["sources/s1.md"], wantS1)
+	}
+}
+
+func TestExportBacklinksOmitSectionWithoutBacklinks(t *testing.T) {
+	tree := exportOK(t, backlinkVault(t))
+	for _, p := range []string{"notes/n2.md", "notes/n3.md", "projects/p1.md"} {
+		if page, ok := tree[p]; ok && strings.Contains(page, "## Backlinks") {
+			t.Errorf("%s = %q, want no Backlinks section", p, page)
+		}
+	}
+}
+
+func TestExportBacklinksSkipSelfFenceExtractAndReview(t *testing.T) {
+	tree := exportOK(t, with_(t, map[string]string{
+		"notes/n1.md": doc("n1", "Leaders are unique", "note",
+			hubLine+"\n\nSelf [[n1]]. One leader per term [1, p. 4].\n\n## References\n\n1. [[s1|Source one]]"),
+		"notes/n2.md": doc("n2", "Zed note", "note",
+			hubLine+"\n\nLive [[s1]].\n\n```\nfenced [[n1]]\n```\n\n## Extract\n\nquoted [[n1]]"),
+		"sources/s1.md": doc("s1", "Source one", "source",
+			"Hubs: [[000000000000src0|Sources]]\n\nWhy.\n\n## Review\n\nreviewed [[n1]]",
+			kv{"raw", "raw/s1-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"}),
+	}))
+	if page := tree["notes/n1.md"]; strings.Contains(page, "## Backlinks") {
+		t.Errorf("notes/n1.md = %q, want no Backlinks section", page)
+	}
+}
+
+func TestExportBacklinksEscapeBracketsInTitles(t *testing.T) {
+	tree := exportOK(t, with_(t, map[string]string{
+		"notes/n2.md": doc("n2", "Array [a] of x", "note", hubLine+"\n\nBack to [[n1]]."),
+	}))
+	if want := "\n## Backlinks\n\n- [Array \\[a\\] of x](n2.md)\n"; !strings.HasSuffix(tree["notes/n1.md"], want) {
+		t.Errorf("notes/n1.md = %q, want it to end with %q", tree["notes/n1.md"], want)
+	}
+}
+
+func TestExportBacklinksSameOutputOnTwoRuns(t *testing.T) {
+	files := backlinkVault(t)
+	first, second := exportOK(t, files), exportOK(t, files)
+	if !maps.Equal(first, second) {
+		t.Errorf("two runs differ: %v vs %v", first, second)
+	}
+}
+
+// memberVault adds a Raft hub with two members, a prose mention and a member that also links the hub in its body.
+func memberVault(t *testing.T) map[string]string {
+	t.Helper()
+	return with_(t, map[string]string{
+		"hubs/000000000000raf0.md": doc("000000000000raf0", "Raft", "hub", "Hubs: [[index|Index]]\n\n- [[n2]]\n- [[n3]]"),
+		"notes/n2.md":              doc("n2", "Zed note", "note", "Hubs: [[000000000000raf0|Raft]]\n\nSee [[n3]] and [[000000000000raf0]]."),
+		"notes/n3.md":              doc("n3", "Alpha note", "note", "Hubs: [[000000000000raf0|Raft]]\n\nSee [[n2]]."),
+		"notes/n4.md":              doc("n4", "Mentions", "note", hubLine+"\n\nTalks about [[000000000000raf0|Raft]] and [[n2]]."),
+	})
+}
+
+func TestExportMembersListsHubsLineNamersSortedByTitle(t *testing.T) {
+	tree := exportOK(t, memberVault(t))
+	want := "\n## Members\n\n- [Alpha note](../notes/n3.md)\n- [Zed note](../notes/n2.md)\n\n## Backlinks\n"
+	if page := tree["hubs/000000000000raf0.md"]; !strings.Contains(page, want) {
+		t.Errorf("hubs/000000000000raf0.md = %q, want it to contain %q", page, want)
+	}
+}
+
+func TestExportMembersExcludeProseMentionAndAreNotBacklinks(t *testing.T) {
+	tree := exportOK(t, memberVault(t))
+	want := "---\ntitle: Raft\nkind: hub\n---\nHubs: [Index](../index.md)\n\n- [Zed note](../notes/n2.md)\n- [Alpha note](../notes/n3.md)\n\n## Members\n\n- [Alpha note](../notes/n3.md)\n- [Zed note](../notes/n2.md)\n\n## Backlinks\n\n- [Mentions](../notes/n4.md)\n"
+	if got := tree["hubs/000000000000raf0.md"]; got != want {
+		t.Errorf("hubs/000000000000raf0.md = %q, want %q", got, want)
+	}
+}
+
+func TestExportMembersParentHubIsBacklinkNotMember(t *testing.T) {
+	tree := exportOK(t, exportVault(t))
+	want := "---\ntitle: Sources\nkind: hub\n---\nHubs: [Index](../index.md)\n\nOne source note per raw file.\n\n## Members\n\n- [Source one](../sources/s1.md)\n\n## Backlinks\n\n- [Index](../index.md)\n"
+	if got := tree["hubs/000000000000src0.md"]; got != want {
+		t.Errorf("hubs/000000000000src0.md = %q, want %q", got, want)
+	}
+}
+
+func TestExportMembersOnlyForHubsWithMembers(t *testing.T) {
+	tree := exportOK(t, exportVault(t))
+	if page := tree["hubs/000000000000prj0.md"]; strings.Contains(page, "## Members") {
+		t.Errorf("hubs/000000000000prj0.md = %q, want no Members section for a hub without members", page)
+	}
+	for p, page := range tree {
+		if !strings.Contains(page, "\nkind: hub\n") && strings.Contains(page, "## Members") {
+			t.Errorf("%s = %q, want no Members section on a non-hub", p, page)
+		}
 	}
 }

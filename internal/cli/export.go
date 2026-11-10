@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"os"
 	"path"
@@ -46,6 +47,38 @@ type exportTarget struct{ path, title string }
 // exportLinkText escapes the characters that end or start Markdown link text.
 var exportLinkText = strings.NewReplacer(`\`, `\\`, "[", `\[`, "]", `\]`)
 
+// exportLink is a Markdown link from page from to target t, showing text.
+func exportLink(from string, t exportTarget, text string) (string, error) {
+	rel, err := filepath.Rel(filepath.FromSlash(path.Dir(from)), filepath.FromSlash(t.path))
+	if err != nil {
+		return "", err
+	}
+	return "[" + exportLinkText.Replace(text) + "](" + filepath.ToSlash(rel) + ")", nil
+}
+
+// exportSection returns "\n## name\n\n" and one list entry per source page, sorted by title, for the pages in set; "" when set is empty.
+func exportSection(name, from string, set map[string]bool, targets map[string]exportTarget) (string, error) {
+	var items []exportTarget
+	for id := range set {
+		items = append(items, targets[id])
+	}
+	slices.SortFunc(items, func(a, b exportTarget) int {
+		return cmp.Or(strings.Compare(a.title, b.title), strings.Compare(a.path, b.path))
+	})
+	var sb strings.Builder
+	for _, t := range items {
+		link, err := exportLink(from, t, t.title)
+		if err != nil {
+			return "", err
+		}
+		sb.WriteString("- " + link + "\n")
+	}
+	if sb.Len() == 0 {
+		return "", nil
+	}
+	return "\n## " + name + "\n\n" + sb.String(), nil
+}
+
 // exportPages maps each page's path under the export to its exported text. Lint has passed, so every page parses.
 func exportPages(files map[string][]byte) (map[string]string, error) {
 	texts := map[string]string{}
@@ -66,9 +99,27 @@ func exportPages(files map[string][]byte) (map[string]string, error) {
 		texts[p] = string(b)
 		targets[strings.TrimSuffix(path.Base(p), ".md")] = exportTarget{p, head.Title}
 	}
+	// members[id] and linkedBy[id] hold the ids of the pages that name id in their Hubs line or link it elsewhere.
+	members, linkedBy := map[string]map[string]bool{}, map[string]map[string]bool{}
+	note := func(into map[string]map[string]bool, to, from string) {
+		if into[to] == nil {
+			into[to] = map[string]bool{}
+		}
+		into[to][from] = true
+	}
+	for p, text := range texts {
+		self := strings.TrimSuffix(path.Base(p), ".md")
+		hubs, others := lint.BodyLinks(text)
+		for _, id := range hubs {
+			note(members, id, self)
+		}
+		for _, id := range others {
+			note(linkedBy, id, self)
+		}
+	}
 	pages := map[string]string{}
 	for p, text := range texts {
-		from := path.Dir(p)
+		self := strings.TrimSuffix(path.Base(p), ".md")
 		text, err := lint.RewriteLinks(text, func(id, alias string, aliased bool) (string, error) {
 			t, ok := targets[id]
 			if !ok {
@@ -77,11 +128,7 @@ func exportPages(files map[string][]byte) (map[string]string, error) {
 			if !aliased {
 				alias = t.title
 			}
-			rel, err := filepath.Rel(filepath.FromSlash(from), filepath.FromSlash(t.path))
-			if err != nil {
-				return "", err
-			}
-			return "[" + exportLinkText.Replace(alias) + "](" + filepath.ToSlash(rel) + ")", nil
+			return exportLink(p, t, alias)
 		})
 		if err != nil {
 			return nil, err
@@ -90,6 +137,23 @@ func exportPages(files map[string][]byte) (map[string]string, error) {
 		kept, err := exportFrontmatter(fm)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
+		}
+		backlinks := map[string]bool{}
+		for id := range linkedBy[self] {
+			if id != self && !members[self][id] {
+				backlinks[id] = true
+			}
+		}
+		membersText, err := exportSection("Members", p, members[self], targets)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", p, err)
+		}
+		backlinksText, err := exportSection("Backlinks", p, backlinks, targets)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", p, err)
+		}
+		if tail := membersText + backlinksText; tail != "" {
+			body = strings.TrimRight(body, "\n") + "\n" + tail
 		}
 		pages[p] = "---\n" + kept + "---\n" + body
 	}

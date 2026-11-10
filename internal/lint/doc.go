@@ -135,3 +135,20 @@ func RewriteLinks(text string, repl func(id, alias string, aliased bool) (string
 	}
 	return text[:len(text)-len(body)] + strings.Join(lines, "\n"), nil
 }
+
+// BodyLinks returns the trimmed IDs of the links in the lines lint scans. IDs on a first body line
+// that starts with "Hubs: " are in hubs; every other ID is in others.
+func BodyLinks(text string) (hubs, others []string) {
+	d := parseDoc("", text)
+	for _, l := range d.scanned() {
+		for _, m := range linkRe.FindAllStringSubmatch(l.text, -1) {
+			id := strings.TrimSpace(m[1])
+			if l.n == d.lines[0].n && strings.HasPrefix(l.text, "Hubs: ") {
+				hubs = append(hubs, id)
+			} else {
+				others = append(others, id)
+			}
+		}
+	}
+	return hubs, others
+}
