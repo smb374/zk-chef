@@ -65,7 +65,7 @@ func TestExportCleanVaultLayout(t *testing.T) {
 	if got.code != 0 {
 		t.Fatalf("got code %d stdout %q stderr %q, want 0", got.code, got.stdout, got.stderr)
 	}
-	tree := readTree(t, out)
+	tree := withoutManifest(readTree(t, out))
 	want := map[string]string{
 		"notes/n1.md":    "---\ntitle: Leaders are unique\nkind: note\n---\nHubs: [Index](../index.md)\n\nOne leader per term [1, p. 4].\n\n## References\n\n1. [Source one](../sources/s1.md)\n",
 		"sources/s1.md":  "---\ntitle: Source one\nkind: source\nreview: unreviewed\nurl: https://example.com/x\ncitation: Doe 2026\nauthors: [Doe, Roe]\npublished: 2026-01-02\n---\nHubs: [Sources](../hubs/000000000000src0.md)\n\nWhy.\n\n## Review\n\n## Backlinks\n\n- [Leaders are unique](../notes/n1.md)\n",
@@ -139,7 +139,7 @@ func TestExportJSONReport(t *testing.T) {
 		t.Fatalf("stdout %q stderr %q is not a report: %v", got.stdout, got.stderr, err)
 	}
 	var onDisk []string
-	for p := range readTree(t, out) {
+	for p := range withoutManifest(readTree(t, out)) {
 		onDisk = append(onDisk, p)
 	}
 	slices.Sort(onDisk)
@@ -410,5 +410,124 @@ func TestExportSupersededLiveNoteHasNoNotice(t *testing.T) {
 		if p != "notes/n1.md" && strings.Contains(page, "Superseded by") {
 			t.Errorf("%s = %q, want no notice on a live page", p, page)
 		}
+	}
+}
+
+// exportManifestName is the file in OUT that lists what the last run wrote.
+const exportManifestName = ".zk-chef-export.json"
+
+// withoutManifest drops the manifest from a tree.
+func withoutManifest(tree map[string]string) map[string]string {
+	tree = maps.Clone(tree)
+	delete(tree, exportManifestName)
+	return tree
+}
+
+func TestExportManifestRemovedNoteDisappears(t *testing.T) {
+	out := t.TempDir()
+	env := setupVault(t, "dev", with_(t, map[string]string{
+		"notes/n2.md": doc("n2", "Note two", "note", hubLine+"\n\nSecond."),
+	}))
+	if got := run(env, "export", out); got.code != 0 {
+		t.Fatalf("first run: code %d stderr %q, want 0", got.code, got.stderr)
+	}
+	if _, ok := readTree(t, out)["notes/n2.md"]; !ok {
+		t.Fatalf("first run did not write notes/n2.md")
+	}
+	if err := os.Remove("notes/n2.md"); err != nil {
+		t.Fatal(err)
+	}
+	got := run(env, "export", "--json", out)
+	var r struct {
+		Counts struct{ Written, Removed int } `json:"counts"`
+	}
+	if err := json.Unmarshal([]byte(got.stdout), &r); err != nil {
+		t.Fatalf("stdout %q stderr %q is not a report: %v", got.stdout, got.stderr, err)
+	}
+	if _, ok := readTree(t, out)["notes/n2.md"]; ok || got.code != 0 || r.Counts.Removed != 1 {
+		t.Errorf("code %d counts %+v tree %v, want 0, removed 1 and no notes/n2.md", got.code, r.Counts, slices.Collect(maps.Keys(readTree(t, out))))
+	}
+}
+
+func TestExportManifestForeignFileSurvivesTwoRuns(t *testing.T) {
+	out := t.TempDir()
+	foreign := map[string]string{"hugo.toml": "title = 'x'", "static/logo.svg": "<svg/>", "notes/mine.md": "mine"}
+	for p, c := range foreign {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(out, p)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(out, p), []byte(c), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	env := setupVault(t, "dev", baseVault(t))
+	for i := range 2 {
+		if got := run(env, "export", out); got.code != 0 {
+			t.Fatalf("run %d: code %d stderr %q, want 0", i+1, got.code, got.stderr)
+		}
+	}
+	tree := readTree(t, out)
+	for p, c := range foreign {
+		if tree[p] != c {
+			t.Errorf("%s = %q, want %q kept", p, tree[p], c)
+		}
+	}
+}
+
+func TestExportManifestSecondRunIsIdentical(t *testing.T) {
+	out := t.TempDir()
+	env := setupVault(t, "dev", backlinkVault(t))
+	if got := run(env, "export", out); got.code != 0 {
+		t.Fatalf("first run: code %d stderr %q, want 0", got.code, got.stderr)
+	}
+	first := readTree(t, out)
+	if _, ok := first[exportManifestName]; !ok {
+		t.Fatalf("tree %v has no %s", slices.Collect(maps.Keys(first)), exportManifestName)
+	}
+	if got := run(env, "export", out); got.code != 0 {
+		t.Fatalf("second run: code %d stderr %q, want 0", got.code, got.stderr)
+	}
+	if second := readTree(t, out); !maps.Equal(first, second) {
+		t.Errorf("runs differ: %v vs %v", first, second)
+	}
+}
+
+func TestExportManifestEntryOutsideOutIsIgnored(t *testing.T) {
+	parent := t.TempDir()
+	out := filepath.Join(parent, "out")
+	victim := filepath.Join(parent, "victim.md")
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{victim, filepath.Join(out, "inside.md")} {
+		if err := os.WriteFile(p, []byte("keep"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manifest := `{"files":["../victim.md","` + filepath.ToSlash(victim) + `","gone/../../victim.md"]}`
+	if err := os.WriteFile(filepath.Join(out, exportManifestName), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := runIn(t, "dev", baseVault(t), "export", out); got.code != 0 {
+		t.Fatalf("code %d stderr %q, want 0", got.code, got.stderr)
+	}
+	if b, err := os.ReadFile(victim); err != nil || string(b) != "keep" {
+		t.Errorf("victim.md = %q, %v, want it kept", b, err)
+	}
+}
+
+func TestExportManifestCorruptStopsWithoutDeleting(t *testing.T) {
+	out := t.TempDir()
+	env := setupVault(t, "dev", baseVault(t))
+	if got := run(env, "export", out); got.code != 0 {
+		t.Fatalf("first run: code %d stderr %q, want 0", got.code, got.stderr)
+	}
+	if err := os.WriteFile(filepath.Join(out, exportManifestName), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before := readTree(t, out)
+	got := run(env, "export", out)
+	if got.code != 2 || got.stderr == "" || !maps.Equal(before, readTree(t, out)) {
+		t.Errorf("code %d stderr %q, want 2 (as for any failed export), an error and OUT unchanged", got.code, got.stderr)
 	}
 }

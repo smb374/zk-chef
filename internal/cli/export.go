@@ -3,7 +3,10 @@ package cli
 import (
 	"bytes"
 	"cmp"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -16,6 +19,9 @@ import (
 
 // exportFolders are the vault folders whose pages go to the export, one level deep.
 var exportFolders = []string{"notes", "hubs", "sources", "projects"}
+
+// exportManifest is the file in OUT that lists, as slash paths relative to OUT, the files the last run wrote.
+const exportManifest = ".zk-chef-export.json"
 
 // exportKeys are the frontmatter fields an export keeps.
 var exportKeys = []string{"title", "kind", "status", "superseded_by", "review", "url", "citation", "authors", "published"}
@@ -181,6 +187,45 @@ func exportPages(files map[string][]byte) (map[string]string, error) {
 	return pages, nil
 }
 
+// exportClean deletes the files that the manifest in out lists and the directories they leave empty, and returns the entries it deleted.
+// An entry that is not a local path or not a regular file is ignored. A missing manifest lists nothing; a corrupt one is an error and deletes nothing.
+func exportClean(out string) ([]string, error) {
+	b, err := os.ReadFile(filepath.Join(out, exportManifest))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var m struct {
+		Files []string `json:"files"`
+	}
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, fmt.Errorf("%s in %s is corrupt (%w); fix or delete it", exportManifest, out, err)
+	}
+	var deleted []string
+	for _, e := range m.Files {
+		rel := filepath.FromSlash(e)
+		if !filepath.IsLocal(rel) || rel == exportManifest {
+			continue
+		}
+		file := filepath.Join(out, rel)
+		if info, err := os.Lstat(file); err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		if err := os.Remove(file); err != nil {
+			return deleted, err
+		}
+		deleted = append(deleted, e)
+		for dir := filepath.Dir(file); dir != out; dir = filepath.Dir(dir) {
+			if os.Remove(dir) != nil { // fails on a non-empty directory, which stays
+				break
+			}
+		}
+	}
+	return deleted, nil
+}
+
 func exportVerb(inv *invocation) int {
 	root, err := filepath.Abs(inv.root)
 	if err != nil {
@@ -240,6 +285,16 @@ func exportVerb(inv *invocation) int {
 		written = append(written, p)
 	}
 	slices.Sort(written)
+	deleted, err := exportClean(out)
+	if err != nil {
+		return fail(inv, "zk-chef export: "+err.Error())
+	}
+	removed := 0
+	for _, p := range deleted {
+		if _, kept := pages[p]; !kept {
+			removed++
+		}
+	}
 	for _, p := range written {
 		dst := filepath.Join(out, filepath.FromSlash(p))
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
@@ -249,14 +304,23 @@ func exportVerb(inv *invocation) int {
 			return fail(inv, "zk-chef export: "+err.Error())
 		}
 	}
+	manifest, err := json.MarshalIndent(struct {
+		Files []string `json:"files"`
+	}{written}, "", "  ")
+	if err != nil {
+		return fail(inv, "zk-chef export: "+err.Error())
+	}
+	if err := os.WriteFile(filepath.Join(out, exportManifest), append(manifest, '\n'), 0o644); err != nil {
+		return fail(inv, "zk-chef export: "+err.Error())
+	}
 	if inv.json {
 		writeJSON(inv.stdout, struct {
 			OK      bool           `json:"ok"`
 			Written []string       `json:"written"`
 			Counts  map[string]int `json:"counts"`
-		}{true, written, map[string]int{"written": len(written)}})
+		}{true, written, map[string]int{"written": len(written), "removed": removed}})
 	} else {
-		fmt.Fprintf(inv.stdout, "wrote %d pages to %s\n", len(written), out)
+		fmt.Fprintf(inv.stdout, "wrote %d pages to %s, removed %d\n", len(written), out, removed)
 	}
 	return 0
 }
