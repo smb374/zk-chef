@@ -564,15 +564,27 @@ func exportHugoOK(t *testing.T, files map[string]string) map[string]string {
 
 func TestExportHugoRootPageIsUnderscoreIndex(t *testing.T) {
 	tree := exportHugoOK(t, baseVault(t))
-	if _, ok := tree["index.md"]; ok {
-		t.Errorf("OUT has index.md, want only _index.md")
+	for _, p := range []string{"index.md", "_index.md", "content/index.md"} {
+		if _, ok := tree[p]; ok {
+			t.Errorf("OUT has %s, want only content/_index.md", p)
+		}
 	}
-	if page, ok := tree["_index.md"]; !ok || !strings.HasPrefix(page, "---\ntitle: ") {
-		t.Errorf("_index.md = %q (present %v), want the root page", page, ok)
+	if page, ok := tree["content/_index.md"]; !ok || !strings.HasPrefix(page, "---\ntitle: ") {
+		t.Errorf("content/_index.md = %q (present %v), want the root page", page, ok)
 	}
 	var m struct{ Files []string }
-	if err := json.Unmarshal([]byte(tree[exportManifestName]), &m); err != nil || !slices.Contains(m.Files, "_index.md") || slices.Contains(m.Files, "index.md") {
-		t.Errorf("manifest %q (%v), want it to list _index.md and not index.md", tree[exportManifestName], err)
+	if err := json.Unmarshal([]byte(tree[exportManifestName]), &m); err != nil || !slices.Contains(m.Files, "content/_index.md") || slices.Contains(m.Files, "index.md") {
+		t.Errorf("manifest %q (%v), want it to list content/_index.md and not index.md", tree[exportManifestName], err)
+	}
+	for p := range tree {
+		if strings.HasPrefix(p, "notes/") || strings.HasPrefix(p, "hubs/") || strings.HasPrefix(p, "sources/") || strings.HasPrefix(p, "projects/") {
+			t.Errorf("OUT has %s, want pages only under content/", p)
+		}
+	}
+	for _, p := range m.Files {
+		if !strings.HasPrefix(p, "content/") {
+			t.Errorf("manifest lists %s, want only content/ pages", p)
+		}
 	}
 }
 
@@ -597,14 +609,14 @@ func TestExportHugoUnknownGeneratorWritesNothing(t *testing.T) {
 
 func TestExportHugoRenamesReservedSourceKeys(t *testing.T) {
 	tree := exportHugoOK(t, exportVault(t))
-	got := tree["sources/s1.md"]
+	got := tree["content/sources/s1.md"]
 	want := "---\ntitle: Source one\nkind: source\nreview: unreviewed\nsource_url: https://example.com/x\ncitation: Doe 2026\nauthors: [Doe, Roe]\nsource_published: 2026-01-02\n"
 	if !strings.HasPrefix(got, want) {
-		t.Errorf("sources/s1.md = %q, want it to start with %q", got, want)
+		t.Errorf("content/sources/s1.md = %q, want it to start with %q", got, want)
 	}
 	for _, k := range []string{"\nurl:", "\npublished:", "\nid:", "\nraw:", "\nsha256:"} {
 		if strings.Contains(got, k) {
-			t.Errorf("sources/s1.md = %q, want no %q key", got, k)
+			t.Errorf("content/sources/s1.md = %q, want no %q key", got, k)
 		}
 	}
 }
@@ -614,8 +626,8 @@ func TestExportHugoDateFromID(t *testing.T) {
 		"notes/202611091044tnn3.md": doc("202611091044tnn3", "Dated note", "note", hubLine+"\n\nBody."),
 	}))
 	want := "---\ntitle: Dated note\nkind: note\ndate: 2026-11-09T10:44:00Z\n---\n"
-	if got := tree["notes/202611091044tnn3.md"]; !strings.HasPrefix(got, want) {
-		t.Errorf("notes/202611091044tnn3.md = %q, want it to start with %q", got, want)
+	if got := tree["content/notes/202611091044tnn3.md"]; !strings.HasPrefix(got, want) {
+		t.Errorf("content/notes/202611091044tnn3.md = %q, want it to start with %q", got, want)
 	}
 }
 
@@ -623,7 +635,7 @@ func TestExportHugoDateOmittedForInvalidID(t *testing.T) {
 	tree := exportHugoOK(t, with_(t, map[string]string{
 		"notes/202613091044tnn3.md": doc("202613091044tnn3", "Bad month", "note", hubLine+"\n\nBody."),
 	}))
-	for _, p := range []string{"_index.md", "hubs/000000000000src0.md", "notes/n1.md", "notes/202613091044tnn3.md"} {
+	for _, p := range []string{"content/_index.md", "content/hubs/000000000000src0.md", "content/notes/n1.md", "content/notes/202613091044tnn3.md"} {
 		if page, ok := tree[p]; !ok || strings.Contains(page, "date:") {
 			t.Errorf("%s = %q (present %v), want a page with no date", p, page, ok)
 		}
@@ -640,20 +652,29 @@ func pageBody(t *testing.T, page string) string {
 	return body
 }
 
+// hugoPages returns the pages of a hugo export tree: the files under content/.
+func hugoPages(tree map[string]string) map[string]string {
+	pages := map[string]string{}
+	for p, page := range tree {
+		if strings.HasPrefix(p, "content/") {
+			pages[p] = page
+		}
+	}
+	return pages
+}
+
 func TestExportHugoBodiesMatchGeneric(t *testing.T) {
 	files := memberVault(t)
 	files["notes/n5.md"] = doc("n5", "Old note", "note", hubLine+"\n\nOld claim.", kv{"status", "superseded"}, kv{"superseded_by", "n2"})
-	generic, hugo := exportOK(t, files), exportHugoOK(t, files)
-	if len(generic) != len(hugo) {
-		t.Fatalf("generic has %d files, hugo %d", len(generic), len(hugo))
+	generic, hugo := withoutManifest(exportOK(t, files)), exportHugoOK(t, files)
+	if n := len(hugoPages(hugo)); len(generic) != n {
+		t.Fatalf("generic has %d pages, hugo %d", len(generic), n)
 	}
 	for p, page := range generic {
-		if p == exportManifestName {
-			continue
-		}
 		if p == "index.md" {
 			p = "_index.md"
 		}
+		p = "content/" + p
 		if got, want := pageBody(t, hugo[p]), pageBody(t, page); got != want {
 			t.Errorf("%s body = %q, want the generic body %q", p, got, want)
 		}
@@ -676,21 +697,25 @@ func TestExportHugoSwitchLeavesNoStaleRootPage(t *testing.T) {
 	env := setupVault(t, "dev", baseVault(t))
 	for i, c := range []struct {
 		args        []string
-		have, stale string
+		have, stale []string
 	}{
-		{[]string{"export", out}, "index.md", "_index.md"},
-		{[]string{"export", "--generator", "hugo", out}, "_index.md", "index.md"},
-		{[]string{"export", out}, "index.md", "_index.md"},
+		{[]string{"export", out}, []string{"index.md", "notes/n1.md"}, []string{"content/_index.md", "content/notes/n1.md"}},
+		{[]string{"export", "--generator", "hugo", out}, []string{"content/_index.md", "content/notes/n1.md"}, []string{"index.md", "notes/n1.md"}},
+		{[]string{"export", out}, []string{"index.md", "notes/n1.md"}, []string{"content/_index.md", "content/notes/n1.md"}},
 	} {
 		if got := run(env, c.args...); got.code != 0 {
 			t.Fatalf("run %d: code %d stderr %q, want 0", i+1, got.code, got.stderr)
 		}
 		tree := readTree(t, out)
-		if _, ok := tree[c.have]; !ok {
-			t.Errorf("run %d: OUT has no %s", i+1, c.have)
+		for _, p := range c.have {
+			if _, ok := tree[p]; !ok {
+				t.Errorf("run %d: OUT has no %s", i+1, p)
+			}
 		}
-		if _, ok := tree[c.stale]; ok {
-			t.Errorf("run %d: OUT still has stale %s", i+1, c.stale)
+		for _, p := range c.stale {
+			if _, ok := tree[p]; ok {
+				t.Errorf("run %d: OUT still has stale %s", i+1, p)
+			}
 		}
 	}
 }
@@ -707,7 +732,7 @@ func shortcodeVault(t *testing.T) map[string]string {
 
 func TestExportHugoEscapesShortcodes(t *testing.T) {
 	tree := exportHugoOK(t, shortcodeVault(t))
-	n1 := pageBody(t, tree["notes/n1.md"])
+	n1 := pageBody(t, tree["content/notes/n1.md"])
 	for _, want := range []string{
 		"Prose {{</* figure src=\"x\" */>}} and {{%/* note */%}} end.",
 		"```\n{{%/* note */%}}\n```",
@@ -715,14 +740,14 @@ func TestExportHugoEscapesShortcodes(t *testing.T) {
 		"- [Zed {{%/* b */%}} note](n2.md)\n",
 	} {
 		if !strings.Contains(n1, want) {
-			t.Errorf("notes/n1.md body = %q, want it to contain %q", n1, want)
+			t.Errorf("content/notes/n1.md body = %q, want it to contain %q", n1, want)
 		}
 	}
 	if strings.Contains(n1, "{{< ") || strings.Contains(n1, "{{% ") {
-		t.Errorf("notes/n1.md body = %q, want no live shortcode", n1)
+		t.Errorf("content/notes/n1.md body = %q, want no live shortcode", n1)
 	}
-	if want := "---\ntitle: Zed {{% b %}} note\nkind: note\n"; !strings.HasPrefix(tree["notes/n2.md"], want) {
-		t.Errorf("notes/n2.md = %q, want the frontmatter title unchanged: %q", tree["notes/n2.md"], want)
+	if want := "---\ntitle: Zed {{% b %}} note\nkind: note\n"; !strings.HasPrefix(tree["content/notes/n2.md"], want) {
+		t.Errorf("content/notes/n2.md = %q, want the frontmatter title unchanged: %q", tree["content/notes/n2.md"], want)
 	}
 }
 

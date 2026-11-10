@@ -13,7 +13,7 @@ import (
 	"github.com/smb374/zk-chef/internal/version"
 )
 
-// Assets holds the embedded "scaffold" and "skills" trees; main sets it.
+// Assets holds the embedded "scaffold", "skills" and "export-scaffold" trees; main sets it.
 var Assets fs.FS
 
 var vaultFolders = []string{"notes", "hubs", "sources", "projects", "raw", "keys"}

@@ -66,7 +66,7 @@ Every verb accepts `--json` and `--help`. Verbs that work on a vault pick it in 
 | `zk-chef fix` | agent | Rewrites stale link aliases to the targets' current titles |
 | `zk-chef review [SRC-ID reviewed\|disputed] [--no-commit]` | human only | Shows the raw file, asks you to confirm, signs the verdict and commits. Without arguments it walks the queue |
 | `zk-chef status` | agent | Lists new and re-review sources, disputed sources still cited, and lint counts |
-| `zk-chef export DIR [--generator hugo]` | agent | Writes the notes, hubs, sources and projects pages to `DIR` as Markdown, with frontmatter cut to a safe set of fields. `--generator hugo` shapes the output for Hugo. Lint errors stop it with exit code 1. It never changes the vault, and `DIR` must be outside it |
+| `zk-chef export DIR [--generator hugo]` | agent | Writes the notes, hubs, sources and projects pages to `DIR` as Markdown, with frontmatter cut to a safe set of fields. `--generator hugo` shapes the output for Hugo. With it, `DIR` is a Hugo site root. The pages go to `DIR/content/`. The export also creates a write-once scaffold. Lint errors stop it with exit code 1. It never changes the vault. `DIR` must be outside the vault |
 
 Lint codes and fixes are in `skills/zk-chef-ops/LINT.md`.
 
@@ -95,31 +95,30 @@ What it leaves out:
 - the `## Extract` section of a source. Its `## Review` section stays;
 - links in code fences and in `## Extract` and `## Review` sections stay as `[[…]]` text, and they make no backlinks.
 
-`DIR` may be a generator's content folder. The export writes `.zk-chef-export.json` in `DIR`, which lists the files it wrote. On the next run, the export deletes only the files in that manifest (and the folders they leave empty), then writes the new pages. A file that you add to `DIR` stays. A corrupt manifest stops the run and deletes nothing. The output line shows the counts: `wrote N pages to DIR, removed M`.
+`DIR` may be a generator's content folder (for Hugo, use `--generator hugo` and the site root instead). The export writes `.zk-chef-export.json` in `DIR`, which lists the files it wrote. On the next run, the export deletes only the files in that manifest (and the folders they leave empty), then writes the new pages. A file that you add to `DIR` stays. A corrupt manifest stops the run and deletes nothing. The output line shows the counts: `wrote N pages to DIR, removed M`.
 
 ### Hugo
 
-`--generator hugo` shapes the output for [Hugo](https://gohugo.io). It differs from the generic export in four ways:
-
-- the root page is `_index.md`, Hugo's home page;
-- `url` and `published` are written as `source_url` and `source_published`, so that `url` does not change the page's URL in Hugo;
-- each page gets a `date` from the first 12 digits of its ID (UTC). A page whose ID is not a date gets no `date`;
-- shortcode calls such as `{{< x >}}` in the text are escaped, so Hugo shows them as text.
-
-Write the export into the `content/` folder of a Hugo site:
+`--generator hugo` shapes the output for [Hugo](https://gohugo.io) 0.146 or newer. `DIR` is the Hugo site root:
 
 ```sh
-zk-chef export site/content --generator hugo --root /path/to/vault
+zk-chef export site --generator hugo --root /path/to/vault
+cd site && hugo
 ```
 
-Hugo needs one setting so that the Markdown links resolve to site URLs. Put it in `hugo.toml`:
+The Hugo export differs from the generic export in these ways:
 
-```toml
-[markup.goldmark.renderHooks.link]
-useEmbedded = 'always'
-```
+- the pages go to `DIR/content/`, and the root page is `content/_index.md`, Hugo's home page. The manifest lists these pages only;
+- `url` and `published` are written as `source_url` and `source_published`, so that `url` does not change the page's URL in Hugo;
+- each page gets a `date` from the first 12 digits of its ID (UTC). A page whose ID is not a date gets no `date`;
+- shortcode calls such as `{{< x >}}` in the text are escaped, so Hugo shows them as text;
+- the export creates a minimal site in `DIR`: `hugo.toml` and the layouts `layouts/baseof.html`, `home.html`, `list.html` and `single.html`.
 
-Hugo needs its own layouts or a theme. The export does not write them. The check in `docs/build-notes.md` used minimal layouts of its own.
+The scaffold is write-once. The export creates a scaffold file only when the file does not exist. It never changes an existing file, so you can edit the files. The export skips `hugo.toml` when `DIR` already has a Hugo config. A Hugo config is one of these: `hugo.{toml,yaml,yml,json}`, `config.{toml,yaml,yml,json}` or a `config/` folder. To get a file again, delete it and run the export again. The summary line lists the scaffold files that the run created. `--json` lists them in `scaffolded`.
+
+`hugo.toml` sets the title to the title of the root page, and sets the setting that makes Markdown links resolve to site URLs (`[markup.goldmark.renderHooks.link] useEmbedded = 'always'`). To change the title or the base URL, edit `hugo.toml`.
+
+The generic export writes no config by design. It writes pages only.
 
 ## Option: publish a vault as a site with Quartz
 

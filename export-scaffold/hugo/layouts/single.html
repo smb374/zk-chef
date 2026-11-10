@@ -1,0 +1,6 @@
+{{ define "main" }}
+<h1>{{ .Title }}</h1>
+{{ with .Date }}<p><time datetime="{{ .Format "2006-01-02" }}">{{ .Format "2006-01-02" }}</time></p>{{ end }}
+{{ with .Params.source_url }}<p><a href="{{ . }}">{{ . }}</a></p>{{ end }}
+{{ .Content }}
+{{ end }}

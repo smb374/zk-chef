@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -37,10 +38,8 @@ func setupVault(t *testing.T, binVersion string, files map[string]string) []stri
 	}
 	t.Setenv("HOME", home)
 	t.Setenv("GNUPGHOME", gnupg)
-	repo, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
+	_, thisFile, _, _ := runtime.Caller(0) // the repo root, even when an earlier setupVault in this test changed the directory
+	repo := filepath.Join(filepath.Dir(thisFile), "..", "..")
 	oldAssets := Assets
 	Assets = os.DirFS(repo)
 	t.Cleanup(func() { Assets = oldAssets })

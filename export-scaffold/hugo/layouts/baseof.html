@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ if .IsHome }}{{ site.Title }}{{ else }}{{ .Title }} | {{ site.Title }}{{ end }}</title>
+<style>
+body { max-width: 46rem; margin: 2rem auto; padding: 0 1rem; font: 1rem/1.6 system-ui, sans-serif; }
+header { margin-bottom: 2rem; padding-bottom: 0.5rem; border-bottom: 1px solid #ccc; }
+pre { overflow-x: auto; }
+</style>
+</head>
+<body>
+<header><a href="{{ "/" | relURL }}">{{ site.Title }}</a></header>
+<main>
+{{ block "main" . }}{{ end }}
+</main>
+</body>
+</html>

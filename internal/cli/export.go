@@ -128,7 +128,7 @@ type exportSourcePage struct {
 	id   string
 }
 
-// exportPages maps each page's path under the export to its exported text. Lint has passed, so every page parses. hugo selects the Hugo output.
+// exportPages maps each page's path under the export to its exported text. Lint has passed, so every page parses. hugo selects the Hugo output: pages go under content/ and the root page is content/_index.md.
 func exportPages(files map[string][]byte, hugo bool) (map[string]string, error) {
 	src := map[string]exportSourcePage{}
 	targets := map[string]exportTarget{} // page id (the file stem) -> target
@@ -228,6 +228,11 @@ func exportPages(files map[string][]byte, hugo bool) (map[string]string, error) 
 	if hugo {
 		pages["_index.md"] = pages[lint.IndexPath]
 		delete(pages, lint.IndexPath)
+		site := make(map[string]string, len(pages))
+		for p, text := range pages {
+			site["content/"+p] = text
+		}
+		pages = site
 	}
 	return pages, nil
 }
@@ -271,6 +276,116 @@ func exportClean(out string) ([]string, error) {
 	return deleted, nil
 }
 
+// exportScaffoldDir is the embedded tree of Hugo site files: hugo.toml.tmpl and layouts/.
+const exportScaffoldDir = "export-scaffold/hugo"
+
+// exportRootTitle returns the title of the root page, or "zk-chef vault" when it has none.
+func exportRootTitle(files map[string][]byte) string {
+	fm, _, _ := lint.SplitFrontmatter(string(files[lint.IndexPath]))
+	var head exportHead
+	if yaml.Unmarshal([]byte(fm), &head) != nil || strings.TrimSpace(head.Title) == "" {
+		return "zk-chef vault"
+	}
+	return head.Title
+}
+
+// tomlString returns s as a TOML string: a literal string when it can be one, else a basic string.
+func tomlString(s string) string {
+	needsEscape := func(r rune) bool { return r == '\'' || (r != '\t' && (r < ' ' || r == 0x7f)) }
+	if !strings.ContainsFunc(s, needsEscape) {
+		return "'" + s + "'"
+	}
+	b, _ := json.Marshal(s) // a JSON string is a valid TOML basic string
+	return string(b)
+}
+
+// hugoConfigNames are the names, in OUT, that Hugo reads its site config from (a file, or the config/ directory).
+var hugoConfigNames = []string{"hugo.toml", "hugo.yaml", "hugo.yml", "hugo.json", "config.toml", "config.yaml", "config.yml", "config.json", "config"}
+
+// exportScaffoldHugo creates the Hugo site files in out that do not exist yet and returns their slash paths, relative to out.
+// It never changes an existing file, and it skips hugo.toml when any Hugo config exists.
+func exportScaffoldHugo(out, title string) ([]string, error) {
+	tree, err := fs.Sub(Assets, exportScaffoldDir)
+	if err != nil {
+		return nil, err
+	}
+	layouts, err := fs.Glob(tree, "layouts/*.html")
+	if err != nil {
+		return nil, err
+	}
+	configured := false
+	for _, name := range hugoConfigNames {
+		if _, err := os.Lstat(filepath.Join(out, name)); err == nil {
+			configured = true
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return nil, err
+		}
+	}
+	var rels []string
+	if !configured {
+		rels = append(rels, "hugo.toml")
+	}
+	created := []string{}
+	for _, rel := range append(rels, layouts...) {
+		src := rel
+		if rel == "hugo.toml" {
+			src = "hugo.toml.tmpl"
+		}
+		b, err := fs.ReadFile(tree, src)
+		if err != nil {
+			return created, err
+		}
+		if rel == "hugo.toml" {
+			b = []byte(strings.Replace(string(b), "@TITLE@", tomlString(title), 1))
+		}
+		dst := filepath.Join(out, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return created, err
+		}
+		f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644) // O_EXCL: never overwrite
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return created, err
+		}
+		_, err = f.Write(b)
+		if err := errors.Join(err, f.Close()); err != nil {
+			return created, err
+		}
+		created = append(created, rel)
+	}
+	return created, nil
+}
+
+// resolveExisting returns the absolute path p with the symlinks in its longest existing part resolved. A dangling symlink is followed to its missing target.
+func resolveExisting(p string) (string, error) {
+	rest := ""
+	for {
+		resolved, err := filepath.EvalSymlinks(p)
+		if err == nil {
+			return filepath.Join(resolved, rest), nil
+		}
+		if fi, lerr := os.Lstat(p); errors.Is(err, fs.ErrNotExist) && lerr == nil && fi.Mode()&fs.ModeSymlink != 0 {
+			target, err := os.Readlink(p)
+			if err != nil {
+				return "", err
+			}
+			if !filepath.IsAbs(target) {
+				target = filepath.Join(filepath.Dir(p), target)
+			}
+			p = target
+			continue
+		}
+		parent := filepath.Dir(p)
+		if !errors.Is(err, fs.ErrNotExist) || parent == p {
+			return "", err
+		}
+		rest = filepath.Join(filepath.Base(p), rest)
+		p = parent
+	}
+}
+
 func exportVerb(inv *invocation) int {
 	root, err := filepath.Abs(inv.root)
 	if err != nil {
@@ -287,17 +402,37 @@ func exportVerb(inv *invocation) int {
 	if err != nil {
 		return fail(inv, "zk-chef export: "+err.Error())
 	}
-	// ponytail: compares cleaned absolute paths only; a symlink into the vault gets through. Upgrade: filepath.EvalSymlinks on the nearest existing parent.
-	inVault := func(p string) bool {
-		rel, err := filepath.Rel(root, p)
-		return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	realRoot, err := resolveExisting(root)
+	if err != nil {
+		return fail(inv, "zk-chef export: "+err.Error())
 	}
-	if inVault(out) {
-		return fail(inv, "zk-chef export: "+out+" is the vault or inside it; pick a directory outside "+root)
+	// inVault reports whether p is the vault or inside it, after resolving the symlinks in the part of p that exists.
+	inVault := func(p string) (bool, error) {
+		resolved, err := resolveExisting(p)
+		if err != nil {
+			return false, err
+		}
+		rel, err := filepath.Rel(realRoot, resolved)
+		return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)), nil
 	}
-	for _, dest := range append([]string{"index.md", "_index.md"}, exportFolders...) {
-		if inVault(filepath.Join(out, dest)) {
-			return fail(inv, "zk-chef export: "+filepath.Join(out, dest)+" is inside the vault "+root+"; pick a directory outside it")
+	dests := []string{""} // the paths in OUT that an export writes to or through
+	if hugo {
+		dests = append(dests, "content", "content/_index.md", "hugo.toml", "layouts")
+		for _, folder := range exportFolders {
+			dests = append(dests, "content/"+folder)
+		}
+	} else {
+		dests = append(dests, "index.md", "_index.md")
+		dests = append(dests, exportFolders...)
+	}
+	for _, dest := range dests {
+		dst := filepath.Join(out, filepath.FromSlash(dest))
+		inside, err := inVault(dst)
+		if err != nil {
+			return fail(inv, "zk-chef export: "+err.Error())
+		}
+		if inside {
+			return fail(inv, "zk-chef export: "+dst+" is the vault or inside it ("+realRoot+"); pick a directory outside it")
 		}
 	}
 	files, err := lint.LoadWorktree(root)
@@ -364,14 +499,24 @@ func exportVerb(inv *invocation) int {
 	if err := os.WriteFile(filepath.Join(out, exportManifest), append(manifest, '\n'), 0o644); err != nil {
 		return fail(inv, "zk-chef export: "+err.Error())
 	}
+	scaffolded := []string{}
+	if hugo {
+		if scaffolded, err = exportScaffoldHugo(out, exportRootTitle(files)); err != nil {
+			return fail(inv, "zk-chef export: "+err.Error())
+		}
+	}
 	if inv.json {
 		writeJSON(inv.stdout, struct {
-			OK      bool           `json:"ok"`
-			Written []string       `json:"written"`
-			Counts  map[string]int `json:"counts"`
-		}{true, written, map[string]int{"written": len(written), "removed": removed}})
+			OK         bool           `json:"ok"`
+			Written    []string       `json:"written"`
+			Scaffolded []string       `json:"scaffolded"`
+			Counts     map[string]int `json:"counts"`
+		}{true, written, scaffolded, map[string]int{"written": len(written), "removed": removed}})
 	} else {
 		fmt.Fprintf(inv.stdout, "wrote %d pages to %s, removed %d\n", len(written), out, removed)
+		if len(scaffolded) > 0 {
+			fmt.Fprintf(inv.stdout, "created %s\n", strings.Join(scaffolded, ", "))
+		}
 	}
 	return 0
 }

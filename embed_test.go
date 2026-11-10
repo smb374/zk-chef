@@ -16,6 +16,11 @@ func TestEmbedHasScaffoldAndSkills(t *testing.T) {
 		"scaffold/.zk/config.toml",
 		"skills/zk-chef-ops/SKILL.md",
 		"skills/zettel-writing/SKILL.md",
+		"export-scaffold/hugo/hugo.toml.tmpl",
+		"export-scaffold/hugo/layouts/baseof.html",
+		"export-scaffold/hugo/layouts/home.html",
+		"export-scaffold/hugo/layouts/list.html",
+		"export-scaffold/hugo/layouts/single.html",
 	} {
 		if _, err := fs.Stat(assets, p); err != nil {
 			t.Errorf("embed FS lacks %s: %v", p, err)
