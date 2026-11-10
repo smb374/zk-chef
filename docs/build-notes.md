@@ -19,3 +19,21 @@ Checked 2026-11-08 with zk 0.15.7, git, gpg. Items 1 to 5 were checked during th
 
 - **go install.** Partly checked. `TestGoInstallCarriesEmbeddedFiles` builds the module zip with `golang.org/x/mod/zip` and asserts that `scaffold/` (config, hook, zk config) and `skills/` are in it. This stands in for `go install github.com/smb374/zk-chef@latest`. Unchecked: a real `go install` after the first tag is pushed, because the repo is not pushed yet.
 - **Release assets.** `TestBuildScript` builds the four binaries and `checksums.txt` and checks the host binary prints the ldflags version. `TestInstallScript` runs `install.sh` against a local HTTP server. Unchecked: `release.yml` on GitHub, and `install.sh` against a real release in a clean container.
+
+
+## Export check with Hugo
+
+Checked once, by hand, with Hugo v0.169.0-1da10fc44701c566b1669cdb2d12638f155138bd+extended+withdeploy linux/amd64. No test runs this check.
+
+- **Vault.** A small throwaway vault, not a real one. It came from `zk-chef init -y` plus three hand-written pages: a source (with `url`, `citation`, an `## Extract`, a `## Review` and a raw file), a note, and a superseded note. `zk-chef lint` gave 0 errors and 2 warnings (`W_SUPERSEDED_LINK`, `W_STALE_ALIAS`; the second came from a deliberate bracket alias). No real vault was available.
+- **Export.** `zk-chef export site/content --generator hugo --root vault` printed `wrote 6 pages to site/content, removed 0`.
+- **Hugo config.** `hugo.toml` had `baseURL`, `title`, `refLinksErrorLevel = 'ERROR'` and `[markup.goldmark.renderHooks.link]` with `useEmbedded = 'always'`. The site had minimal layouts of its own: `layouts/single.html`, `list.html` and `home.html` (Hugo 0.169 uses these flat names). Hugo needs a theme or layouts; the export does not write them.
+- **Build.** Pass: 18 pages, no errors. With `refLinksErrorLevel = 'ERROR'`, Hugo reported no broken link.
+- **Link resolution.** Every relative `.md` link became a site URL, for example `../sources/<id>.md` became `/sources/<id>/`. Links to the root page resolved to `/`.
+- **Backlinks.** The source page listed the notes that cite it. The superseded note listed its replacement under Backlinks.
+- **Members.** The Sources hub listed the source note. The home page (`_index.md`) listed every page whose `Hubs:` line names `index`. The link from the index to the Sources hub showed under the Sources hub's Backlinks, not under Members.
+- **Home page.** `_index.md` became the home page (`public/index.html`) with its Members. Hugo gave the home page the date of the newest page; the export writes no date for it.
+- **`source_url` and `date`.** `source_url` was available as `.Params.source_url` and was rendered. `url` was not set, so page URLs did not change. `date` from the ID rendered, for example `2026-11-09T10:44Z`.
+- **Shortcodes.** `{{< figure src="x" >}}` in source text showed as literal text, not as a figure.
+- **Extract.** The Extract text was absent from the source page. The Review heading stayed.
+- **Observation (not an export bug).** In `[[ID|Raft [paper]]]` the link alias ends at the first `]]`. Lint warns about it, and the exported text matches that parse.

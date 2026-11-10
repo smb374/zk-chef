@@ -9,11 +9,11 @@ A separate git repo of Markdown notes, hubs, sources and project logs that `zk-c
 _Avoid_: Wiki, notebook
 
 **Export**:
-A derived copy of the vault, written to another directory as standard Markdown. By default any static site generator can read it. With a **Generator** named, it is tailored to that generator. The vault itself is never changed.
+A derived copy of the vault, written to another directory as standard Markdown by `zk-chef export DIR`. The generic Export can be read by any static site generator. With a **Generator** selected by `--generator`, the Export is tailored to that generator (today: `hugo`). Either way, an Export keeps a manifest of the files it wrote, and the vault itself is never changed.
 _Avoid_: Build, publish, render
 
 **Generator**:
-The static site generator (for example Hugo) that an Export is tailored to. With no Generator named, the Export is generic.
+The static site generator that an Export is tailored to, selected with `--generator`. Only `hugo` is supported. With no Generator named, the Export is generic.
 _Avoid_: SSG, target, theme
 
 **Backlinks**:
