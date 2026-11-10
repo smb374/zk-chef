@@ -84,7 +84,7 @@ What it writes:
 
 - the pages in `notes/`, `hubs/`, `sources/` and `projects/` (one level deep), and the root `index.md`, with the same paths;
 - `[[ID|Title]]` links as relative Markdown links, such as `[Title](../sources/ID.md)`;
-- only these frontmatter fields: `title`, `kind`, `status`, `superseded_by`, `review`, `url`, `citation`, `authors`, `published`;
+- only these frontmatter fields: `title`, `kind`, `status`, `superseded_by`, and for sources `review`, `url`, `citation`, `authors`, `published`;
 - a `Superseded by` line at the top of a superseded note;
 - a `## Backlinks` section on a page that other pages link to, and a `## Members` section on a hub that other pages name in their `Hubs:` line. Both are sorted by title. A parent hub is a backlink, not a member.
 

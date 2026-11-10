@@ -108,6 +108,25 @@ func TestExportRefusesBadOut(t *testing.T) {
 	}
 }
 
+// TestExportRefusesOutThatHoldsVaultFolders: a vault named like an export folder, with its parent as OUT, would get the pages written into the vault.
+func TestExportRefusesOutThatHoldsVaultFolders(t *testing.T) {
+	env := setupVault(t, "dev", baseVault(t))
+	tmp, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent := t.TempDir()
+	vault := filepath.Join(parent, "notes")
+	if err := os.Rename(tmp, vault); err != nil {
+		t.Fatal(err)
+	}
+	before := readTree(t, parent)
+	got := run(env, "export", "--root", vault, parent)
+	if got.code != 2 || got.stdout != "" || got.stderr == "" || !maps.Equal(before, readTree(t, parent)) {
+		t.Errorf("got code %d stdout %q stderr %q, want 2, no stdout, an error and the vault unchanged", got.code, got.stdout, got.stderr)
+	}
+}
+
 func TestExportLeavesVaultUnchanged(t *testing.T) {
 	out := t.TempDir()
 	env := setupVault(t, "dev", exportVault(t))
@@ -638,6 +657,17 @@ func TestExportHugoBodiesMatchGeneric(t *testing.T) {
 		if got, want := pageBody(t, hugo[p]), pageBody(t, page); got != want {
 			t.Errorf("%s body = %q, want the generic body %q", p, got, want)
 		}
+	}
+}
+
+func TestExportDropsSourceOnlyKeysFromNonSources(t *testing.T) {
+	tree := exportOK(t, with_(t, map[string]string{
+		"notes/n1.md": doc("n1", "Leaders are unique", "note", hubLine+"\n\nBody.",
+			kv{"url", "https://example.com/x"}, kv{"review", "unreviewed"}, kv{"citation", "Doe 2026"}, kv{"authors", "[Doe]"}, kv{"published", "2026-01-02"}),
+	}))
+	want := "---\ntitle: Leaders are unique\nkind: note\n---\n"
+	if got := tree["notes/n1.md"]; !strings.HasPrefix(got, want) {
+		t.Errorf("notes/n1.md = %q, want it to start with %q", got, want)
 	}
 }
 

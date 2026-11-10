@@ -42,22 +42,25 @@ var exportFolders = []string{"notes", "hubs", "sources", "projects"}
 // exportManifest is the file in OUT that lists, as slash paths relative to OUT, the files the last run wrote.
 const exportManifest = ".zk-chef-export.json"
 
-// exportKeys are the frontmatter fields an export keeps.
-var exportKeys = []string{"title", "kind", "status", "superseded_by", "review", "url", "citation", "authors", "published"}
+// exportKeys are the frontmatter fields an export keeps on every page; exportSourceKeys are the ones it keeps on sources only.
+var (
+	exportKeys       = []string{"title", "kind", "status", "superseded_by"}
+	exportSourceKeys = []string{"review", "url", "citation", "authors", "published"}
+)
 
-// exportHugoKeys maps the exportKeys that Hugo reserves to the names a Hugo export writes instead.
+// exportHugoKeys maps the exportSourceKeys that Hugo reserves to the names a Hugo export writes instead.
 var exportHugoKeys = map[string]string{"url": "source_url", "published": "source_published"}
 
-// exportFrontmatter keeps only the exportKeys of the YAML mapping fm, in file order. For generator "hugo" it renames the keys in exportHugoKeys.
-func exportFrontmatter(fm, generator string) (string, error) {
+// exportFrontmatter keeps only the exportKeys of the YAML mapping fm, and the exportSourceKeys too when source is set, in file order. When hugo is set it renames the keys in exportHugoKeys.
+func exportFrontmatter(fm string, source, hugo bool) (string, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal([]byte(fm), &doc); err != nil {
 		return "", err
 	}
 	kept := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	for i := 0; i+1 < len(doc.Content[0].Content); i += 2 {
-		if k := doc.Content[0].Content[i]; slices.Contains(exportKeys, k.Value) {
-			if to, ok := exportHugoKeys[k.Value]; ok && generator == "hugo" {
+		if k := doc.Content[0].Content[i]; slices.Contains(exportKeys, k.Value) || source && slices.Contains(exportSourceKeys, k.Value) {
+			if to, ok := exportHugoKeys[k.Value]; ok && hugo {
 				k.Value = to
 			}
 			kept.Content = append(kept.Content, k, doc.Content[0].Content[i+1])
@@ -118,10 +121,16 @@ func exportSection(name, from string, set map[string]bool, targets map[string]ex
 	return "\n## " + name + "\n\n" + sb.String(), nil
 }
 
-// exportPages maps each page's path under the export to its exported text. Lint has passed, so every page parses.
-func exportPages(files map[string][]byte, generator string) (map[string]string, error) {
-	texts := map[string]string{}
-	heads := map[string]exportHead{}
+// exportSourcePage is a vault page that goes to the export: its text, the frontmatter fields the export reads, and its id (the file stem).
+type exportSourcePage struct {
+	text string
+	head exportHead
+	id   string
+}
+
+// exportPages maps each page's path under the export to its exported text. Lint has passed, so every page parses. hugo selects the Hugo output.
+func exportPages(files map[string][]byte, hugo bool) (map[string]string, error) {
+	src := map[string]exportSourcePage{}
 	targets := map[string]exportTarget{} // page id (the file stem) -> target
 	for p, b := range files {
 		folder, name, _ := strings.Cut(p, "/")
@@ -136,32 +145,30 @@ func exportPages(files map[string][]byte, generator string) (map[string]string, 
 		if err := yaml.Unmarshal([]byte(fm), &head); err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
 		}
-		texts[p] = string(b)
-		heads[p] = head
-		targets[strings.TrimSuffix(path.Base(p), ".md")] = exportTarget{p, head.Title}
+		id := strings.TrimSuffix(path.Base(p), ".md")
+		src[p] = exportSourcePage{string(b), head, id}
+		targets[id] = exportTarget{p, head.Title}
 	}
 	// members[id] and linkedBy[id] hold the ids of the pages that name id in their Hubs line or link it elsewhere.
 	members, linkedBy := map[string]map[string]bool{}, map[string]map[string]bool{}
-	note := func(into map[string]map[string]bool, to, from string) {
+	addEdge := func(into map[string]map[string]bool, to, from string) {
 		if into[to] == nil {
 			into[to] = map[string]bool{}
 		}
 		into[to][from] = true
 	}
-	for p, text := range texts {
-		self := strings.TrimSuffix(path.Base(p), ".md")
-		hubs, others := lint.BodyLinks(text)
+	for _, s := range src {
+		hubs, others := lint.BodyLinks(s.text)
 		for _, id := range hubs {
-			note(members, id, self)
+			addEdge(members, id, s.id)
 		}
 		for _, id := range others {
-			note(linkedBy, id, self)
+			addEdge(linkedBy, id, s.id)
 		}
 	}
 	pages := map[string]string{}
-	for p, text := range texts {
-		self := strings.TrimSuffix(path.Base(p), ".md")
-		text, err := lint.RewriteLinks(text, func(id, alias string, aliased bool) (string, error) {
+	for p, s := range src {
+		text, err := lint.RewriteLinks(s.text, func(id, alias string, aliased bool) (string, error) {
 			t, ok := targets[id]
 			if !ok {
 				return "", fmt.Errorf("%s: link to unknown id %s", p, id)
@@ -174,22 +181,22 @@ func exportPages(files map[string][]byte, generator string) (map[string]string, 
 		if err != nil {
 			return nil, err
 		}
-		if heads[p].Kind == "source" {
+		if s.head.Kind == "source" {
 			text = lint.StripExtract(text)
 		}
 		fm, body, _ := lint.SplitFrontmatter(text)
-		kept, err := exportFrontmatter(fm, generator)
+		kept, err := exportFrontmatter(fm, s.head.Kind == "source", hugo)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
 		}
-		if generator == "hugo" && len(self) >= 12 {
+		if hugo && len(s.id) >= 12 {
 			// The first 12 digits of an ID are its UTC minute; a stem that is not a valid date has no date.
-			if d, err := time.Parse("200601021504", self[:12]); err == nil {
+			if d, err := time.Parse("200601021504", s.id[:12]); err == nil {
 				kept += "date: " + d.Format("2006-01-02T15:04:00Z") + "\n"
 			}
 		}
-		if heads[p].Status == "superseded" {
-			t := targets[heads[p].SupersededBy]
+		if s.head.Status == "superseded" {
+			t := targets[s.head.SupersededBy]
 			link, err := exportLink(p, t, t.title)
 			if err != nil {
 				return nil, fmt.Errorf("%s: %w", p, err)
@@ -197,12 +204,12 @@ func exportPages(files map[string][]byte, generator string) (map[string]string, 
 			body = "Superseded by " + link + ".\n\n" + body
 		}
 		backlinks := map[string]bool{}
-		for id := range linkedBy[self] {
-			if id != self && !members[self][id] {
+		for id := range linkedBy[s.id] {
+			if id != s.id && !members[s.id][id] {
 				backlinks[id] = true
 			}
 		}
-		membersText, err := exportSection("Members", p, members[self], targets)
+		membersText, err := exportSection("Members", p, members[s.id], targets)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
 		}
@@ -213,12 +220,12 @@ func exportPages(files map[string][]byte, generator string) (map[string]string, 
 		if tail := membersText + backlinksText; tail != "" {
 			body = strings.TrimRight(body, "\n") + "\n" + tail
 		}
-		if generator == "hugo" {
+		if hugo {
 			body = escapeHugoShortcodes(body)
 		}
 		pages[p] = "---\n" + kept + "---\n" + body
 	}
-	if generator == "hugo" {
+	if hugo {
 		pages["_index.md"] = pages[lint.IndexPath]
 		delete(pages, lint.IndexPath)
 	}
@@ -275,13 +282,23 @@ func exportVerb(inv *invocation) int {
 	if inv.generator != "" && inv.generator != "hugo" {
 		return fail(inv, "zk-chef export: unknown generator "+inv.generator+"; use hugo or omit --generator")
 	}
+	hugo := inv.generator == "hugo"
 	out, err := filepath.Abs(inv.args[0])
 	if err != nil {
 		return fail(inv, "zk-chef export: "+err.Error())
 	}
 	// ponytail: compares cleaned absolute paths only; a symlink into the vault gets through. Upgrade: filepath.EvalSymlinks on the nearest existing parent.
-	if rel, err := filepath.Rel(root, out); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	inVault := func(p string) bool {
+		rel, err := filepath.Rel(root, p)
+		return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	}
+	if inVault(out) {
 		return fail(inv, "zk-chef export: "+out+" is the vault or inside it; pick a directory outside "+root)
+	}
+	for _, dest := range append([]string{"index.md", "_index.md"}, exportFolders...) {
+		if inVault(filepath.Join(out, dest)) {
+			return fail(inv, "zk-chef export: "+filepath.Join(out, dest)+" is inside the vault "+root+"; pick a directory outside it")
+		}
 	}
 	files, err := lint.LoadWorktree(root)
 	if err != nil {
@@ -294,22 +311,15 @@ func exportVerb(inv *invocation) int {
 	if err != nil {
 		return fail(inv, "zk-chef export: "+err.Error())
 	}
-	errors, warnings := 0, 0
-	for _, f := range found {
-		if strings.HasPrefix(f.Code, "E_") {
-			errors++
-		} else {
-			warnings++
-		}
-	}
-	if errors > 0 {
+	errCount, warnings := lint.Counts(found)
+	if errCount > 0 {
 		if inv.json {
 			writeJSON(inv.stdout, struct {
 				OK       bool           `json:"ok"`
 				Errors   int            `json:"errors"`
 				Warnings int            `json:"warnings"`
 				Findings []lint.Finding `json:"findings"`
-			}{false, errors, warnings, found})
+			}{false, errCount, warnings, found})
 		} else {
 			for _, f := range found {
 				fmt.Fprintf(inv.stdout, "%s:%d: %s %s\n", f.Path, f.Line, f.Code, f.Msg)
@@ -317,7 +327,7 @@ func exportVerb(inv *invocation) int {
 		}
 		return 1
 	}
-	pages, err := exportPages(files, inv.generator)
+	pages, err := exportPages(files, hugo)
 	if err != nil {
 		return fail(inv, "zk-chef export: "+err.Error())
 	}
