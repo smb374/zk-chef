@@ -10,12 +10,31 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/smb374/zk-chef/internal/lint"
 	"gopkg.in/yaml.v3"
 )
+
+// hugoShortcodes match a Hugo shortcode call, {{< ... >}} or {{% ... %}}, across lines.
+var hugoShortcodes = []struct {
+	re   *regexp.Regexp
+	repl string
+}{
+	{regexp.MustCompile(`(?s)\{\{<(.*?)>\}\}`), "{{</*${1}*/>}}"},
+	{regexp.MustCompile(`(?s)\{\{%(.*?)%\}\}`), "{{%/*${1}*/%}}"},
+}
+
+// escapeHugoShortcodes rewrites every shortcode call in body so that Hugo shows it as text.
+func escapeHugoShortcodes(body string) string {
+	for _, s := range hugoShortcodes {
+		body = s.re.ReplaceAllString(body, s.repl)
+	}
+	return body
+}
 
 // exportFolders are the vault folders whose pages go to the export, one level deep.
 var exportFolders = []string{"notes", "hubs", "sources", "projects"}
@@ -26,8 +45,11 @@ const exportManifest = ".zk-chef-export.json"
 // exportKeys are the frontmatter fields an export keeps.
 var exportKeys = []string{"title", "kind", "status", "superseded_by", "review", "url", "citation", "authors", "published"}
 
-// exportFrontmatter keeps only the exportKeys of the YAML mapping fm, in file order.
-func exportFrontmatter(fm string) (string, error) {
+// exportHugoKeys maps the exportKeys that Hugo reserves to the names a Hugo export writes instead.
+var exportHugoKeys = map[string]string{"url": "source_url", "published": "source_published"}
+
+// exportFrontmatter keeps only the exportKeys of the YAML mapping fm, in file order. For generator "hugo" it renames the keys in exportHugoKeys.
+func exportFrontmatter(fm, generator string) (string, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal([]byte(fm), &doc); err != nil {
 		return "", err
@@ -35,6 +57,9 @@ func exportFrontmatter(fm string) (string, error) {
 	kept := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	for i := 0; i+1 < len(doc.Content[0].Content); i += 2 {
 		if k := doc.Content[0].Content[i]; slices.Contains(exportKeys, k.Value) {
+			if to, ok := exportHugoKeys[k.Value]; ok && generator == "hugo" {
+				k.Value = to
+			}
 			kept.Content = append(kept.Content, k, doc.Content[0].Content[i+1])
 		}
 	}
@@ -94,7 +119,7 @@ func exportSection(name, from string, set map[string]bool, targets map[string]ex
 }
 
 // exportPages maps each page's path under the export to its exported text. Lint has passed, so every page parses.
-func exportPages(files map[string][]byte) (map[string]string, error) {
+func exportPages(files map[string][]byte, generator string) (map[string]string, error) {
 	texts := map[string]string{}
 	heads := map[string]exportHead{}
 	targets := map[string]exportTarget{} // page id (the file stem) -> target
@@ -153,9 +178,15 @@ func exportPages(files map[string][]byte) (map[string]string, error) {
 			text = lint.StripExtract(text)
 		}
 		fm, body, _ := lint.SplitFrontmatter(text)
-		kept, err := exportFrontmatter(fm)
+		kept, err := exportFrontmatter(fm, generator)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
+		}
+		if generator == "hugo" && len(self) >= 12 {
+			// The first 12 digits of an ID are its UTC minute; a stem that is not a valid date has no date.
+			if d, err := time.Parse("200601021504", self[:12]); err == nil {
+				kept += "date: " + d.Format("2006-01-02T15:04:00Z") + "\n"
+			}
 		}
 		if heads[p].Status == "superseded" {
 			t := targets[heads[p].SupersededBy]
@@ -182,7 +213,14 @@ func exportPages(files map[string][]byte) (map[string]string, error) {
 		if tail := membersText + backlinksText; tail != "" {
 			body = strings.TrimRight(body, "\n") + "\n" + tail
 		}
+		if generator == "hugo" {
+			body = escapeHugoShortcodes(body)
+		}
 		pages[p] = "---\n" + kept + "---\n" + body
+	}
+	if generator == "hugo" {
+		pages["_index.md"] = pages[lint.IndexPath]
+		delete(pages, lint.IndexPath)
 	}
 	return pages, nil
 }
@@ -234,6 +272,9 @@ func exportVerb(inv *invocation) int {
 	if len(inv.args) != 1 {
 		return fail(inv, "zk-chef export: need one argument, the output directory")
 	}
+	if inv.generator != "" && inv.generator != "hugo" {
+		return fail(inv, "zk-chef export: unknown generator "+inv.generator+"; use hugo or omit --generator")
+	}
 	out, err := filepath.Abs(inv.args[0])
 	if err != nil {
 		return fail(inv, "zk-chef export: "+err.Error())
@@ -276,7 +317,7 @@ func exportVerb(inv *invocation) int {
 		}
 		return 1
 	}
-	pages, err := exportPages(files)
+	pages, err := exportPages(files, inv.generator)
 	if err != nil {
 		return fail(inv, "zk-chef export: "+err.Error())
 	}
