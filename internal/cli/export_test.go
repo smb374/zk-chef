@@ -610,7 +610,7 @@ func TestExportHugoUnknownGeneratorWritesNothing(t *testing.T) {
 func TestExportHugoRenamesReservedSourceKeys(t *testing.T) {
 	tree := exportHugoOK(t, exportVault(t))
 	got := tree["content/sources/s1.md"]
-	want := "---\ntitle: Source one\nkind: source\nreview: unreviewed\nsource_url: https://example.com/x\ncitation: Doe 2026\nauthors: [Doe, Roe]\nsource_published: 2026-01-02\n"
+	want := "---\ntitle: Source one\nzk_kind: source\nreview: unreviewed\nsource_url: https://example.com/x\ncitation: Doe 2026\nauthors: [Doe, Roe]\nsource_published: 2026-01-02\n"
 	if !strings.HasPrefix(got, want) {
 		t.Errorf("content/sources/s1.md = %q, want it to start with %q", got, want)
 	}
@@ -621,11 +621,47 @@ func TestExportHugoRenamesReservedSourceKeys(t *testing.T) {
 	}
 }
 
+// frontmatterKeys returns the top-level keys of a page's frontmatter, in file order.
+func frontmatterKeys(t *testing.T, page string) []string {
+	t.Helper()
+	fm, _, ok := strings.Cut(strings.TrimPrefix(page, "---\n"), "\n---\n")
+	if !ok {
+		t.Fatalf("page %q has no frontmatter", page)
+	}
+	var keys []string
+	for _, line := range strings.Split(fm, "\n") {
+		if k, _, ok := strings.Cut(line, ":"); ok && !strings.HasPrefix(line, " ") {
+			keys = append(keys, k)
+		}
+	}
+	return keys
+}
+
+func TestExportHugoRenamesKindToZkKind(t *testing.T) {
+	tree := exportHugoOK(t, exportVault(t))
+	for _, p := range []string{"content/_index.md", "content/hubs/000000000000src0.md", "content/notes/n1.md", "content/sources/s1.md"} {
+		keys := frontmatterKeys(t, tree[p])
+		if !slices.Contains(keys, "zk_kind") || slices.Contains(keys, "kind") {
+			t.Errorf("%s frontmatter keys = %v, want zk_kind and no kind", p, keys)
+		}
+	}
+}
+
+func TestExportGenericKeepsKind(t *testing.T) {
+	tree := exportOK(t, exportVault(t))
+	for _, p := range []string{"index.md", "hubs/000000000000src0.md", "notes/n1.md", "sources/s1.md"} {
+		keys := frontmatterKeys(t, tree[p])
+		if !slices.Contains(keys, "kind") || slices.Contains(keys, "zk_kind") {
+			t.Errorf("%s frontmatter keys = %v, want kind and no zk_kind", p, keys)
+		}
+	}
+}
+
 func TestExportHugoDateFromID(t *testing.T) {
 	tree := exportHugoOK(t, with_(t, map[string]string{
 		"notes/202611091044tnn3.md": doc("202611091044tnn3", "Dated note", "note", hubLine+"\n\nBody."),
 	}))
-	want := "---\ntitle: Dated note\nkind: note\ndate: 2026-11-09T10:44:00Z\n---\n"
+	want := "---\ntitle: Dated note\nzk_kind: note\ndate: 2026-11-09T10:44:00Z\n---\n"
 	if got := tree["content/notes/202611091044tnn3.md"]; !strings.HasPrefix(got, want) {
 		t.Errorf("content/notes/202611091044tnn3.md = %q, want it to start with %q", got, want)
 	}
@@ -746,7 +782,7 @@ func TestExportHugoEscapesShortcodes(t *testing.T) {
 	if strings.Contains(n1, "{{< ") || strings.Contains(n1, "{{% ") {
 		t.Errorf("content/notes/n1.md body = %q, want no live shortcode", n1)
 	}
-	if want := "---\ntitle: Zed {{% b %}} note\nkind: note\n"; !strings.HasPrefix(tree["content/notes/n2.md"], want) {
+	if want := "---\ntitle: Zed {{% b %}} note\nzk_kind: note\n"; !strings.HasPrefix(tree["content/notes/n2.md"], want) {
 		t.Errorf("content/notes/n2.md = %q, want the frontmatter title unchanged: %q", tree["content/notes/n2.md"], want)
 	}
 }

@@ -48,8 +48,8 @@ var (
 	exportSourceKeys = []string{"review", "url", "citation", "authors", "published"}
 )
 
-// exportHugoKeys maps the exportSourceKeys that Hugo reserves to the names a Hugo export writes instead.
-var exportHugoKeys = map[string]string{"url": "source_url", "published": "source_published"}
+// exportHugoKeys maps the exported keys that Hugo reserves to the names a Hugo export writes instead.
+var exportHugoKeys = map[string]string{"kind": "zk_kind", "url": "source_url", "published": "source_published"}
 
 // exportFrontmatter keeps only the exportKeys of the YAML mapping fm, and the exportSourceKeys too when source is set, in file order. When hugo is set it renames the keys in exportHugoKeys.
 func exportFrontmatter(fm string, source, hugo bool) (string, error) {
