@@ -103,3 +103,35 @@ func (d *doc) scanned() []line {
 	}
 	return out
 }
+
+// RewriteLinks replaces each [[ID]] or [[ID|alias]] in the lines lint scans, so links in code fences,
+// Extract and Review stay as written. It calls repl with the trimmed ID, the alias, and whether an alias is present.
+func RewriteLinks(text string, repl func(id, alias string, aliased bool) (string, error)) (string, error) {
+	_, body, ok := SplitFrontmatter(text)
+	if !ok {
+		return "", fmt.Errorf("missing frontmatter")
+	}
+	lines := strings.Split(body, "\n")
+	for i, l := range parseDoc("", text).lines {
+		if !l.scan {
+			continue
+		}
+		var out strings.Builder
+		last := 0
+		for _, m := range linkRe.FindAllStringSubmatchIndex(l.text, -1) {
+			alias := ""
+			if m[4] >= 0 {
+				alias = l.text[m[4]:m[5]]
+			}
+			link, err := repl(strings.TrimSpace(l.text[m[2]:m[3]]), alias, m[4] >= 0)
+			if err != nil {
+				return "", err
+			}
+			out.WriteString(l.text[last:m[0]] + link)
+			last = m[1]
+		}
+		out.WriteString(l.text[last:])
+		lines[i] = out.String()
+	}
+	return text[:len(text)-len(body)] + strings.Join(lines, "\n"), nil
+}

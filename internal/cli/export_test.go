@@ -66,9 +66,9 @@ func TestExportCleanVaultLayout(t *testing.T) {
 	}
 	tree := readTree(t, out)
 	want := map[string]string{
-		"notes/n1.md":    "---\ntitle: Leaders are unique\nkind: note\n---\n" + hubLine + "\n\nOne leader per term [1, p. 4].\n\n## References\n\n1. [[s1|Source one]]\n",
-		"sources/s1.md":  "---\ntitle: Source one\nkind: source\nreview: unreviewed\nurl: https://example.com/x\ncitation: Doe 2026\nauthors: [Doe, Roe]\npublished: 2026-01-02\n---\nHubs: [[000000000000src0|Sources]]\n\nWhy.\n\n## Review\n",
-		"projects/p1.md": "---\ntitle: Project one\nkind: log\n---\n" + hubLine + "\n\nDecision.\n",
+		"notes/n1.md":    "---\ntitle: Leaders are unique\nkind: note\n---\nHubs: [Index](../index.md)\n\nOne leader per term [1, p. 4].\n\n## References\n\n1. [Source one](../sources/s1.md)\n",
+		"sources/s1.md":  "---\ntitle: Source one\nkind: source\nreview: unreviewed\nurl: https://example.com/x\ncitation: Doe 2026\nauthors: [Doe, Roe]\npublished: 2026-01-02\n---\nHubs: [Sources](../hubs/000000000000src0.md)\n\nWhy.\n\n## Review\n",
+		"projects/p1.md": "---\ntitle: Project one\nkind: log\n---\nHubs: [Index](../index.md)\n\nDecision.\n",
 	}
 	for p, w := range want {
 		if tree[p] != w {
@@ -153,5 +153,84 @@ func TestExportHelpListsVerb(t *testing.T) {
 		if got.code != 0 || !strings.Contains(got.stdout, "export") {
 			t.Errorf("%v: got code %d stdout %q, want 0 and export listed", args, got.code, got.stdout)
 		}
+	}
+}
+
+// exportOK exports files to a fresh OUT and returns the exported tree.
+func exportOK(t *testing.T, files map[string]string) map[string]string {
+	t.Helper()
+	out := t.TempDir()
+	got := runIn(t, "dev", files, "export", out)
+	if got.code != 0 {
+		t.Fatalf("got code %d stdout %q stderr %q, want 0", got.code, got.stdout, got.stderr)
+	}
+	return readTree(t, out)
+}
+
+func TestExportLinksFromRootPage(t *testing.T) {
+	tree := exportOK(t, with_(t, map[string]string{
+		"index.md": doc("index", "Index", "hub", "- [[000000000000src0|Sources]]\n- [[n1]]\n- [[s1|Reading]]"),
+	}))
+	want := "---\ntitle: Index\nkind: hub\n---\n- [Sources](hubs/000000000000src0.md)\n- [Leaders are unique](notes/n1.md)\n- [Reading](sources/s1.md)\n"
+	if tree["index.md"] != want {
+		t.Errorf("index.md = %q, want %q", tree["index.md"], want)
+	}
+}
+
+func TestExportLinksFromFolderPage(t *testing.T) {
+	tree := exportOK(t, with_(t, map[string]string{
+		"notes/n1.md": doc("n1", "Leaders are unique", "note", hubLine+"\n\nSee [[n2]], [[n2|Two]], [[s1]] and [[s1|Reading]]. Claim [1, p. 4].\n\n## References\n\n1. [[s1|Source one]]"),
+		"notes/n2.md": doc("n2", "Note two", "note", hubLine+"\n\nBack to [[n1]]."),
+	}))
+	want := "---\ntitle: Leaders are unique\nkind: note\n---\nHubs: [Index](../index.md)\n\nSee [Note two](n2.md), [Two](n2.md), [Source one](../sources/s1.md) and [Reading](../sources/s1.md). Claim [1, p. 4].\n\n## References\n\n1. [Source one](../sources/s1.md)\n"
+	if tree["notes/n1.md"] != want {
+		t.Errorf("notes/n1.md = %q, want %q", tree["notes/n1.md"], want)
+	}
+}
+
+func TestExportLinksAcrossFolders(t *testing.T) {
+	tree := exportOK(t, with_(t, map[string]string{
+		"hubs/000000000000src0.md": doc("000000000000src0", "Sources", "hub", "Hubs: [[index|Index]]\n\n- [[n1]]\n- [[s1|Reading]]\n- [[000000000000prj0]]"),
+	}))
+	want := "---\ntitle: Sources\nkind: hub\n---\nHubs: [Index](../index.md)\n\n- [Leaders are unique](../notes/n1.md)\n- [Reading](../sources/s1.md)\n- [Projects](000000000000prj0.md)\n"
+	if tree["hubs/000000000000src0.md"] != want {
+		t.Errorf("hubs/000000000000src0.md = %q, want %q", tree["hubs/000000000000src0.md"], want)
+	}
+}
+
+func TestExportLinksEscapeBrackets(t *testing.T) {
+	tree := exportOK(t, with_(t, map[string]string{
+		"notes/n2.md": doc("n2", "Array [a] of x", "note", hubLine+"\n\nBack to [[n1]]."),
+		"notes/n1.md": doc("n1", "Leaders are unique", "note", hubLine+"\n\nSee [[n2]] and [[s1|Source [one]]."),
+	}))
+	want := "---\ntitle: Leaders are unique\nkind: note\n---\nHubs: [Index](../index.md)\n\nSee [Array \\[a\\] of x](n2.md) and [Source \\[one](../sources/s1.md).\n"
+	if tree["notes/n1.md"] != want {
+		t.Errorf("notes/n1.md = %q, want %q", tree["notes/n1.md"], want)
+	}
+}
+
+func TestExportLinksLeaveExcludedPlaces(t *testing.T) {
+	tree := exportOK(t, with_(t, map[string]string{
+		"notes/n1.md": doc("n1", "Leaders are unique", "note",
+			hubLine+"\n\nLive [[s1|Reading]]. Claim [1, p. 4].\n\n```\nfenced [[s1]]\n```\n\n## Extract\n\nquoted [[s1]]\n\n## References\n\n1. [[s1|Source one]]"),
+		"sources/s1.md": doc("s1", "Source one", "source",
+			"Hubs: [[000000000000src0|Sources]]\n\nWhy.\n\n## Review\n\nreviewed [[n1]]",
+			kv{"raw", "raw/s1-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"}),
+	}))
+	var left []string
+	for p, page := range tree {
+		for l := range strings.SplitSeq(page, "\n") {
+			if strings.Contains(l, "[[") {
+				left = append(left, p+": "+l)
+			}
+		}
+	}
+	slices.Sort(left)
+	want := []string{"notes/n1.md: fenced [[s1]]", "notes/n1.md: quoted [[s1]]", "sources/s1.md: reviewed [[n1]]"}
+	if !slices.Equal(left, want) {
+		t.Errorf("lines with [[ = %q, want %q", left, want)
+	}
+	if !strings.Contains(tree["notes/n1.md"], "Live [Reading](../sources/s1.md).") {
+		t.Errorf("notes/n1.md = %q, want the live link converted", tree["notes/n1.md"])
 	}
 }

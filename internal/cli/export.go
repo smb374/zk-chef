@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -39,24 +40,58 @@ func exportFrontmatter(fm string) (string, error) {
 	return buf.String(), enc.Close()
 }
 
+// exportTarget is where a page goes in the export and the title its links show.
+type exportTarget struct{ path, title string }
+
+// exportLinkText escapes the characters that end or start Markdown link text.
+var exportLinkText = strings.NewReplacer(`\`, `\\`, "[", `\[`, "]", `\]`)
+
 // exportPages maps each page's path under the export to its exported text. Lint has passed, so every page parses.
 func exportPages(files map[string][]byte) (map[string]string, error) {
-	pages := map[string]string{}
+	texts := map[string]string{}
+	targets := map[string]exportTarget{} // page id (the file stem) -> target
 	for p, b := range files {
-		out := p
 		folder, name, _ := strings.Cut(p, "/")
 		if p != lint.IndexPath && !(slices.Contains(exportFolders, folder) && strings.HasSuffix(name, ".md") && !strings.Contains(name, "/")) {
 			continue
 		}
-		fm, body, ok := lint.SplitFrontmatter(string(b))
+		fm, _, ok := lint.SplitFrontmatter(string(b))
 		if !ok {
 			return nil, fmt.Errorf("%s: missing frontmatter", p)
 		}
+		var head struct{ Title string }
+		if err := yaml.Unmarshal([]byte(fm), &head); err != nil {
+			return nil, fmt.Errorf("%s: %w", p, err)
+		}
+		texts[p] = string(b)
+		targets[strings.TrimSuffix(path.Base(p), ".md")] = exportTarget{p, head.Title}
+	}
+	pages := map[string]string{}
+	for p, text := range texts {
+		from := path.Dir(p)
+		text, err := lint.RewriteLinks(text, func(id, alias string, aliased bool) (string, error) {
+			t, ok := targets[id]
+			if !ok {
+				return "", fmt.Errorf("%s: link to unknown id %s", p, id)
+			}
+			if !aliased {
+				alias = t.title
+			}
+			rel, err := filepath.Rel(filepath.FromSlash(from), filepath.FromSlash(t.path))
+			if err != nil {
+				return "", err
+			}
+			return "[" + exportLinkText.Replace(alias) + "](" + filepath.ToSlash(rel) + ")", nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		fm, body, _ := lint.SplitFrontmatter(text)
 		kept, err := exportFrontmatter(fm)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
 		}
-		pages[out] = "---\n" + kept + "---\n" + body
+		pages[p] = "---\n" + kept + "---\n" + body
 	}
 	return pages, nil
 }
