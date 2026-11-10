@@ -30,7 +30,7 @@ Cite a web URL directly in `## References` (`zettel-writing`, "Citations"). Inge
 
 1. For each approved URL, run `zk-chef ingest --title "<short title of the work>" PATH|URL`. It creates the source note, copies the file to `raw/<ID>-<original name>`, and sets `raw:`, `sha256:` and `review: unreviewed`; for a URL it also sets `url:` and downloads the raw bytes (HTML stays HTML). It prints the note path (`--json` adds `raw` and `sha256`). It does not fill `## Extract`, `citation:`, `authors`, `published` or the body: add them by hand. A URL source needs `citation:` in IEEE form: `citation: A. Author, "Title," Site, Oct. 30, 2026. [Online]. Available: https://example.org/x`.
 2. Write the body as `zettel-writing` describes under "Source notes".
-3. In each note that cites the URL directly, keep its References entry and append `, Archive: [[ID|Title]]`. Find the notes with `ffgrep` on the URL. Done when every direct entry for the URL ends with the Archive link.
+3. In each note that cites the URL directly, keep its References entry and append `, Archive: [[ID|Title]]`. Find the notes by searching the vault for the URL as literal text. Done when every direct entry for the URL ends with the Archive link.
 4. Run lint, then commit with `ingest: <title>`. Done when lint reports 0 errors.
 
 An unreviewed source is citable at once.
