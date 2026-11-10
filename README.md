@@ -66,6 +66,7 @@ Every verb accepts `--json` and `--help`. Verbs that work on a vault pick it in 
 | `zk-chef fix` | agent | Rewrites stale link aliases to the targets' current titles |
 | `zk-chef review [SRC-ID reviewed\|disputed] [--no-commit]` | human only | Shows the raw file, asks you to confirm, signs the verdict and commits. Without arguments it walks the queue |
 | `zk-chef status` | agent | Lists new and re-review sources, disputed sources still cited, and lint counts |
+| `zk-chef export DIR` | agent | Writes the notes, hubs, sources and projects pages to `DIR` as Markdown, with frontmatter cut to a safe set of fields. Lint errors stop it with exit code 1. It never changes the vault, and `DIR` must be outside it |
 
 Lint codes and fixes are in `skills/zk-chef-ops/LINT.md`.
 

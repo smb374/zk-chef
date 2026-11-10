@@ -79,6 +79,16 @@ func parseDoc(path, text string) *doc {
 	return d
 }
 
+// SplitFrontmatter returns the YAML between the opening and closing --- lines and the body after them.
+// ok is false when text has no frontmatter.
+func SplitFrontmatter(text string) (fm, body string, ok bool) {
+	m := frontmatterRe.FindStringSubmatchIndex(text)
+	if m == nil {
+		return "", "", false
+	}
+	return text[m[2]:m[3]], text[m[1]:], true
+}
+
 func contains(list []string, s string) bool {
 	return slices.Contains(list, s)
 }

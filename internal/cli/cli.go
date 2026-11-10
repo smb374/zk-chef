@@ -72,6 +72,7 @@ var verbs = []verb{
 	{name: "review", usage: "sign a source's review, or list the review queue", argsUsage: "[SRC-ID reviewed|disputed]", root: true, run: reviewVerb,
 		flags: func() []cli.Flag { return []cli.Flag{boolFlag("no-commit", "sign the note but do not commit")} }},
 	{name: "status", usage: "summarize the vault", root: true, run: statusVerb},
+	{name: "export", usage: "write a copy of the vault for a static site generator", argsUsage: "DIR", root: true, run: exportVerb},
 }
 
 // verbNames lists the verb names in usage order.
