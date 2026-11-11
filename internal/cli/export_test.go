@@ -796,6 +796,7 @@ func TestExportGenericKeepsShortcodes(t *testing.T) {
 		}
 	}
 }
+
 func TestExportShortGenerator(t *testing.T) {
 	short, long := t.TempDir(), t.TempDir()
 	env := setupVault(t, "dev", baseVault(t))

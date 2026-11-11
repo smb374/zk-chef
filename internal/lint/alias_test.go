@@ -26,9 +26,14 @@ func TestAliasScope(t *testing.T) {
 		{"root index", "hub", "index.md", "index", aliasLines, true},
 		{"source", "source", "sources/x1.md", "x1", aliasLines, false},
 		{"odd kind", "essay", "notes/x1.md", "x1", aliasLines, false},
+		{"no kind", "", "notes/x1.md", "x1", []int{5, 7, 11, 15}, false}, // Lint drops a doc with no kind; lines sit one above aliasLines
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			subject := "---\nid: " + tc.id + "\ntitle: X\nkind: " + tc.kind + "\n---\n" + aliasBody + "\n"
+			kindLine := "kind: " + tc.kind + "\n"
+			if tc.kind == "" {
+				kindLine = ""
+			}
+			subject := "---\nid: " + tc.id + "\ntitle: X\n" + kindLine + "---\n" + aliasBody + "\n"
 			files := map[string]string{
 				".zk-chef/config.toml": "index_id = \"index\"\n",
 				"index.md":             "---\nid: index\ntitle: Index\nkind: hub\n---\nIndex.\n",
