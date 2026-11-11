@@ -366,6 +366,7 @@ func TestDoctorGPG(t *testing.T) {
 			breakIt: func(t *testing.T, env []string, bin string) { remove(filepath.Join(bin, "gpg"))(t, env, bin) }},
 	})
 }
+
 func TestDoctorHugo(t *testing.T) {
 	withHugo := func(out string) func(*testing.T, []string, string) {
 		return func(t *testing.T, _ []string, bin string) {
