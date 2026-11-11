@@ -276,7 +276,7 @@ func exportClean(out string) ([]string, error) {
 	return deleted, nil
 }
 
-// exportScaffoldDir is the embedded tree of Hugo site files: hugo.toml.tmpl and layouts/.
+// exportScaffoldDir is the embedded tree of Hugo site files: hugo.toml.tmpl, layouts/ and static/.
 const exportScaffoldDir = "export-scaffold/hugo"
 
 // exportRootTitle returns the title of the root page, or "zk-chef vault" when it has none.
@@ -297,65 +297,6 @@ func tomlString(s string) string {
 	}
 	b, _ := json.Marshal(s) // a JSON string is a valid TOML basic string
 	return string(b)
-}
-
-// hugoConfigNames are the names, in OUT, that Hugo reads its site config from (a file, or the config/ directory).
-var hugoConfigNames = []string{"hugo.toml", "hugo.yaml", "hugo.yml", "hugo.json", "config.toml", "config.yaml", "config.yml", "config.json", "config"}
-
-// exportScaffoldHugo creates the Hugo site files in out that do not exist yet and returns their slash paths, relative to out.
-// It never changes an existing file, and it skips hugo.toml when any Hugo config exists.
-func exportScaffoldHugo(out, title string) ([]string, error) {
-	tree, err := fs.Sub(Assets, exportScaffoldDir)
-	if err != nil {
-		return nil, err
-	}
-	layouts, err := fs.Glob(tree, "layouts/*.html")
-	if err != nil {
-		return nil, err
-	}
-	configured := false
-	for _, name := range hugoConfigNames {
-		if _, err := os.Lstat(filepath.Join(out, name)); err == nil {
-			configured = true
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			return nil, err
-		}
-	}
-	var rels []string
-	if !configured {
-		rels = append(rels, "hugo.toml")
-	}
-	created := []string{}
-	for _, rel := range append(rels, layouts...) {
-		src := rel
-		if rel == "hugo.toml" {
-			src = "hugo.toml.tmpl"
-		}
-		b, err := fs.ReadFile(tree, src)
-		if err != nil {
-			return created, err
-		}
-		if rel == "hugo.toml" {
-			b = []byte(strings.Replace(string(b), "@TITLE@", tomlString(title), 1))
-		}
-		dst := filepath.Join(out, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			return created, err
-		}
-		f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644) // O_EXCL: never overwrite
-		if errors.Is(err, fs.ErrExist) {
-			continue
-		}
-		if err != nil {
-			return created, err
-		}
-		_, err = f.Write(b)
-		if err := errors.Join(err, f.Close()); err != nil {
-			return created, err
-		}
-		created = append(created, rel)
-	}
-	return created, nil
 }
 
 // resolveExisting returns the absolute path p with the symlinks in its longest existing part resolved. A dangling symlink is followed to its missing target.
@@ -417,7 +358,7 @@ func exportVerb(inv *invocation) int {
 	}
 	dests := []string{""} // the paths in OUT that an export writes to or through
 	if hugo {
-		dests = append(dests, "content", "content/_index.md", "hugo.toml", "layouts")
+		dests = append(dests, "content", "content/_index.md", "hugo.toml", "layouts", "static")
 		for _, folder := range exportFolders {
 			dests = append(dests, "content/"+folder)
 		}
@@ -499,9 +440,9 @@ func exportVerb(inv *invocation) int {
 	if err := os.WriteFile(filepath.Join(out, exportManifest), append(manifest, '\n'), 0o644); err != nil {
 		return fail(inv, "zk-chef export: "+err.Error())
 	}
-	scaffolded := []string{}
+	scaffold := scaffoldReport{[]string{}, []string{}, []string{}, nil}
 	if hugo {
-		if scaffolded, err = exportScaffoldHugo(out, exportRootTitle(files)); err != nil {
+		if scaffold, err = exportScaffoldHugo(out, exportRootTitle(files)); err != nil {
 			return fail(inv, "zk-chef export: "+err.Error())
 		}
 	}
@@ -510,12 +451,20 @@ func exportVerb(inv *invocation) int {
 			OK         bool           `json:"ok"`
 			Written    []string       `json:"written"`
 			Scaffolded []string       `json:"scaffolded"`
+			Updated    []string       `json:"updated"`
+			Kept       []string       `json:"kept"`
 			Counts     map[string]int `json:"counts"`
-		}{true, written, scaffolded, map[string]int{"written": len(written), "removed": removed}})
+		}{true, written, scaffold.created, scaffold.updated, scaffold.kept, map[string]int{"written": len(written), "removed": removed}})
 	} else {
 		fmt.Fprintf(inv.stdout, "wrote %d pages to %s, removed %d\n", len(written), out, removed)
-		if len(scaffolded) > 0 {
-			fmt.Fprintf(inv.stdout, "created %s\n", strings.Join(scaffolded, ", "))
+		for _, p := range scaffold.created {
+			fmt.Fprintf(inv.stdout, "created %s\n", p)
+		}
+		for _, p := range scaffold.updated {
+			fmt.Fprintf(inv.stdout, "updated %s\n", p)
+		}
+		for _, p := range scaffold.kept {
+			fmt.Fprintf(inv.stdout, "kept your %s\n%s", p, scaffold.diffs[p])
 		}
 	}
 	return 0

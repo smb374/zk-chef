@@ -66,7 +66,7 @@ Every verb accepts `--json` and `--help`. Verbs that work on a vault pick it in 
 | `zk-chef fix` | agent | Rewrites stale link aliases to the targets' current titles; leaves aliases in note prose alone |
 | `zk-chef review [SRC-ID reviewed\|disputed] [--no-commit]` | human only | Shows the raw file, asks you to confirm, signs the verdict and commits. Without arguments it walks the queue |
 | `zk-chef status` | agent | Lists new and re-review sources, disputed sources still cited, and lint counts |
-| `zk-chef export DIR [--generator hugo]` | agent | Writes the notes, hubs, sources and projects pages to `DIR` as Markdown, with frontmatter cut to a safe set of fields. `--generator hugo` (`-g hugo`) shapes the output for Hugo. With it, `DIR` is a Hugo site root. The pages go to `DIR/content/`. The export also creates a write-once scaffold. Lint errors stop it with exit code 1. It never changes the vault. `DIR` must be outside the vault |
+| `zk-chef export DIR [--generator hugo]` | agent | Writes the notes, hubs, sources and projects pages to `DIR` as Markdown, with frontmatter cut to a safe set of fields. `--generator hugo` (`-g hugo`) shapes the output for Hugo. With it, `DIR` is a Hugo site root. The pages go to `DIR/content/`. The export also creates and updates a scaffold (see Hugo below). Lint errors stop it with exit code 1. It never changes the vault. `DIR` must be outside the vault |
 
 Lint codes and fixes are in `skills/zk-chef-ops/LINT.md`.
 
@@ -114,7 +114,15 @@ The Hugo export differs from the generic export in these ways:
 - shortcode calls such as `{{< x >}}` in the text are escaped, so Hugo shows them as text;
 - the export creates a minimal site in `DIR`: `hugo.toml` and the layouts `layouts/baseof.html`, `home.html`, `list.html` and `single.html`.
 
-The scaffold is write-once. The export creates a scaffold file only when the file does not exist. It never changes an existing file, so you can edit the files. The export skips `hugo.toml` when `DIR` already has a Hugo config. A Hugo config is one of these: `hugo.{toml,yaml,yml,json}`, `config.{toml,yaml,yml,json}` or a `config/` folder. To get a file again, delete it and run the export again. The summary line lists the scaffold files that the run created. `--json` lists them in `scaffolded`.
+The export updates the scaffold by this rule. It looks at each scaffold file in `DIR`:
+
+- A missing file is created. To get a file back, delete it and run the export again.
+- A file that is byte for byte a version that zk-chef shipped is replaced with the current version.
+- Any other file counts as your edit and is kept. The export prints `kept your <path>` and a unified diff of your file against the current version, so you can merge changes by hand.
+- `static/vendor/` belongs to zk-chef. The export creates its files and overwrites them when they differ. Your edits there are lost. Use your own stylesheet.
+- `hugo.toml` is not created when `DIR` already has a Hugo config. A Hugo config is one of these: `hugo.{toml,yaml,yml,json}`, `config.{toml,yaml,yml,json}` or a `config/` folder. An existing `hugo.toml` is replaced only when it equals a shipped template rendered with the title of the root page now. If you change that title or edit the file, it counts as your edit.
+
+The summary lists the files as `created <path>`, `updated <path>` and `kept your <path>`. `--json` lists the paths in `scaffolded`, `updated` and `kept` (no diff).
 
 `hugo.toml` sets the title to the title of the root page, and sets the setting that makes Markdown links resolve to site URLs (`[markup.goldmark.renderHooks.link] useEmbedded = 'always'`). To change the title or the base URL, edit `hugo.toml`.
 

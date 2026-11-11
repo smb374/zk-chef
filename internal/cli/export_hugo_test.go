@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"io/fs"
 	"maps"
 	"os"
 	"os/exec"
@@ -9,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 func TestExportHugoScaffoldFreshOut(t *testing.T) {
@@ -60,7 +64,7 @@ func TestExportHugoReportsScaffoldedFiles(t *testing.T) {
 		t.Errorf("code %d stdout %q (%v), want scaffolded %v", got.code, got.stdout, err, want)
 	}
 	text := run(env, "export", "--generator", "hugo", t.TempDir())
-	if !strings.Contains(text.stdout, "created hugo.toml, layouts/baseof.html, layouts/home.html, layouts/list.html, layouts/single.html") {
+	if !strings.Contains(text.stdout, "created hugo.toml\ncreated layouts/baseof.html\ncreated layouts/home.html\ncreated layouts/list.html\ncreated layouts/single.html\n") {
 		t.Errorf("stdout %q, want it to name the created scaffold files", text.stdout)
 	}
 }
@@ -122,29 +126,184 @@ func TestExportHugoScaffoldKeepsExistingConfig(t *testing.T) {
 	}
 }
 
-func TestExportHugoScaffoldIsWriteOnce(t *testing.T) {
-	out := t.TempDir()
-	writeFiles(t, out, map[string]string{"layouts/single.html": "my single"})
+// hugoReport is the --json report of a hugo export.
+type hugoReport struct {
+	Scaffolded []string `json:"scaffolded"`
+	Updated    []string `json:"updated"`
+	Kept       []string `json:"kept"`
+}
+
+// exportHugoReport runs a hugo export to out and returns its --json report.
+func exportHugoReport(t *testing.T, env []string, out string) hugoReport {
+	t.Helper()
+	got := run(env, "export", "--json", "--generator", "hugo", out)
+	var r hugoReport
+	if err := json.Unmarshal([]byte(got.stdout), &r); err != nil || got.code != 0 || r.Scaffolded == nil || r.Updated == nil || r.Kept == nil {
+		t.Fatalf("code %d stdout %q stderr %q (%v), want 0 and a report with scaffolded, updated and kept", got.code, got.stdout, got.stderr, err)
+	}
+	return r
+}
+
+// shipOld records old as a released version of the scaffold file rel until the test ends; for hugo.toml, old is a template with @TITLE@.
+func shipOld(t *testing.T, rel, old string) {
+	t.Helper()
+	oldHashes, oldTemplates := scaffoldHashes, hugoTomlTemplates
+	t.Cleanup(func() { scaffoldHashes, hugoTomlTemplates = oldHashes, oldTemplates })
+	if rel == "hugo.toml" {
+		hugoTomlTemplates = append(slices.Clone(oldTemplates), old)
+		return
+	}
+	sum := sha256.Sum256([]byte(old))
+	scaffoldHashes = maps.Clone(oldHashes)
+	scaffoldHashes[rel] = append(slices.Clone(oldHashes[rel]), hex.EncodeToString(sum[:]))
+}
+
+// withScaffold replaces the embedded export scaffold with a copy of the repo's, plus files (slash path under export-scaffold/hugo -> content), until the test ends. Call it after setupVault.
+func withScaffold(t *testing.T, files map[string]string) {
+	t.Helper()
+	tree := fstest.MapFS{}
+	repo := Assets
+	err := fs.WalkDir(repo, exportScaffoldDir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, err := fs.ReadFile(repo, p)
+		tree[p] = &fstest.MapFile{Data: b}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for p, c := range files {
+		tree[exportScaffoldDir+"/"+p] = &fstest.MapFile{Data: []byte(c)}
+	}
+	Assets = tree // setupVault's cleanup restores the original
+}
+
+func TestExportHugoScaffoldUpdatesShippedFile(t *testing.T) {
 	env := setupVault(t, "dev", baseVault(t))
-	if scaffolded := exportHugoScaffolded(t, env, out); slices.Contains(scaffolded, "layouts/single.html") || len(scaffolded) != 4 {
-		t.Errorf("first run scaffolded %v, want 4 files and not layouts/single.html", scaffolded)
+	shipOld(t, "layouts/single.html", "old single\n")
+	out := t.TempDir()
+	writeFiles(t, out, map[string]string{"layouts/single.html": "old single\n"})
+	r := exportHugoReport(t, env, out)
+	if !slices.Equal(r.Updated, []string{"layouts/single.html"}) || len(r.Kept) != 0 || slices.Contains(r.Scaffolded, "layouts/single.html") {
+		t.Errorf("report %+v, want updated [layouts/single.html], none kept, and it not scaffolded", r)
 	}
-	writeFiles(t, out, map[string]string{"hugo.toml": "edited", "layouts/baseof.html": "edited base"})
-	before := readTree(t, out)
-	if scaffolded := exportHugoScaffolded(t, env, out); len(scaffolded) != 0 {
-		t.Errorf("second run scaffolded %v, want none", scaffolded)
+	if got := readTree(t, out)["layouts/single.html"]; got == "old single\n" || !strings.Contains(got, "{{ .Content }}") {
+		t.Errorf("layouts/single.html = %q, want the current layout", got)
 	}
-	after := readTree(t, out)
-	for _, p := range []string{"hugo.toml", "layouts/baseof.html", "layouts/single.html", "layouts/home.html", "layouts/list.html"} {
-		if after[p] != before[p] {
-			t.Errorf("%s = %q after the second run, want %q", p, after[p], before[p])
+	if again := exportHugoReport(t, env, out); len(again.Updated)+len(again.Kept)+len(again.Scaffolded) != 0 {
+		t.Errorf("second run report %+v, want nothing to do", again)
+	}
+	writeFiles(t, out, map[string]string{"layouts/single.html": "old single\n"})
+	if text := run(env, "export", "--generator", "hugo", out); !strings.Contains(text.stdout, "updated layouts/single.html\n") {
+		t.Errorf("stdout %q, want the line \"updated layouts/single.html\"", text.stdout)
+	}
+}
+
+func TestExportHugoScaffoldKeepsEditedFile(t *testing.T) {
+	env := setupVault(t, "dev", baseVault(t))
+	out := t.TempDir()
+	writeFiles(t, out, map[string]string{"layouts/single.html": "my single\n"})
+	got := run(env, "export", "--generator", "hugo", out)
+	for _, want := range []string{"kept your layouts/single.html\n", "--- a/layouts/single.html\n", "-my single\n"} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("stdout %q, want it to contain %q", got.stdout, want)
 		}
 	}
-	if after["layouts/single.html"] != "my single" {
-		t.Errorf("layouts/single.html = %q, want the existing file kept", after["layouts/single.html"])
+	if tree := readTree(t, out); tree["layouts/single.html"] != "my single\n" {
+		t.Errorf("layouts/single.html = %q, want the edited file kept", tree["layouts/single.html"])
 	}
-	if text := run(env, "export", "--generator", "hugo", out); strings.Contains(text.stdout, "created") {
-		t.Errorf("stdout %q, want no scaffold mention when nothing was created", text.stdout)
+	jsonOut := t.TempDir()
+	writeFiles(t, jsonOut, map[string]string{"layouts/single.html": "my single\n"})
+	asJSON := run(env, "export", "--json", "--generator", "hugo", jsonOut)
+	if strings.Contains(asJSON.stdout, "my single") || strings.Contains(asJSON.stdout, "---") {
+		t.Errorf("--json stdout %q, want the path only, no diff", asJSON.stdout)
+	}
+	if r := exportHugoReport(t, env, jsonOut); !slices.Equal(r.Kept, []string{"layouts/single.html"}) || len(r.Updated) != 0 {
+		t.Errorf("report %+v, want kept [layouts/single.html]", r)
+	}
+}
+
+func TestExportHugoScaffoldRecreatesMissingFile(t *testing.T) {
+	env := setupVault(t, "dev", baseVault(t))
+	out := t.TempDir()
+	exportHugoScaffolded(t, env, out)
+	if err := os.Remove(filepath.Join(out, "layouts", "list.html")); err != nil {
+		t.Fatal(err)
+	}
+	if r := exportHugoReport(t, env, out); !slices.Equal(r.Scaffolded, []string{"layouts/list.html"}) || len(r.Updated)+len(r.Kept) != 0 {
+		t.Errorf("report %+v, want scaffolded [layouts/list.html] only", r)
+	}
+	if _, err := os.Stat(filepath.Join(out, "layouts", "list.html")); err != nil {
+		t.Errorf("layouts/list.html: %v, want it created", err)
+	}
+}
+
+func TestExportHugoScaffoldUpdatesPastHugoToml(t *testing.T) {
+	env := setupVault(t, "dev", baseVault(t))
+	shipOld(t, "hugo.toml", "title = @TITLE@\nold = true\n")
+	out := t.TempDir()
+	writeFiles(t, out, map[string]string{"hugo.toml": "title = 'Index'\nold = true\n"}) // the old template with the root title of baseVault
+	if r := exportHugoReport(t, env, out); !slices.Equal(r.Updated, []string{"hugo.toml"}) {
+		t.Errorf("report %+v, want updated [hugo.toml]", r)
+	}
+	if got := readTree(t, out)["hugo.toml"]; !strings.Contains(got, "title = 'Index'\nrefLinksErrorLevel") {
+		t.Errorf("hugo.toml = %q, want the current template", got)
+	}
+	// An edit, or another title than the root title, is not a shipped version.
+	for _, mine := range []string{"title = 'Index'\nold = true\n# mine\n", "title = 'Other'\nold = true\n"} {
+		writeFiles(t, out, map[string]string{"hugo.toml": mine})
+		if r := exportHugoReport(t, env, out); !slices.Equal(r.Kept, []string{"hugo.toml"}) || len(r.Updated) != 0 {
+			t.Errorf("hugo.toml %q: report %+v, want kept [hugo.toml]", mine, r)
+		}
+		if got := readTree(t, out)["hugo.toml"]; got != mine {
+			t.Errorf("hugo.toml = %q, want %q kept", got, mine)
+		}
+	}
+}
+
+func TestExportHugoScaffoldOwnsVendorFiles(t *testing.T) {
+	env := setupVault(t, "dev", baseVault(t))
+	withScaffold(t, map[string]string{"static/vendor/tufte.css": "new css\n"})
+	out := t.TempDir()
+	if r := exportHugoReport(t, env, out); !slices.Contains(r.Scaffolded, "static/vendor/tufte.css") {
+		t.Errorf("report %+v, want static/vendor/tufte.css scaffolded", r)
+	}
+	writeFiles(t, out, map[string]string{"static/vendor/tufte.css": "my css\n"})
+	if r := exportHugoReport(t, env, out); !slices.Equal(r.Updated, []string{"static/vendor/tufte.css"}) || len(r.Kept) != 0 {
+		t.Errorf("report %+v, want updated [static/vendor/tufte.css] and none kept", r)
+	}
+	if got := readTree(t, out)["static/vendor/tufte.css"]; got != "new css\n" {
+		t.Errorf("static/vendor/tufte.css = %q, want it overwritten", got)
+	}
+	if r := exportHugoReport(t, env, out); len(r.Scaffolded)+len(r.Updated)+len(r.Kept) != 0 {
+		t.Errorf("report %+v, want nothing to do when the vendor file is current", r)
+	}
+}
+
+func TestExportHugoScaffoldReportsEmptyUpdatedAndKept(t *testing.T) {
+	env := setupVault(t, "dev", baseVault(t))
+	exportHugoReport(t, env, t.TempDir()) // fails unless updated and kept are arrays
+}
+
+func TestExportRefusesHugoStaticLinkIntoVault(t *testing.T) {
+	env := setupVault(t, "dev", baseVault(t))
+	root, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	if err := os.Symlink(filepath.Join(root, "notes"), filepath.Join(out, "static")); err != nil {
+		t.Fatal(err)
+	}
+	before := readTree(t, root)
+	got := run(env, "export", "--generator", "hugo", out)
+	if got.code != 2 || got.stdout != "" || !strings.Contains(got.stderr, "the vault or inside it") {
+		t.Errorf("got code %d stdout %q stderr %q, want 2, no stdout and the vault guard error", got.code, got.stdout, got.stderr)
+	}
+	if after := readTree(t, root); !maps.Equal(before, after) {
+		t.Errorf("vault changed by a refused export: %v vs %v", before, after)
 	}
 }
 
