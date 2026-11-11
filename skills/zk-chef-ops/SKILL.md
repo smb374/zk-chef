@@ -20,7 +20,7 @@ Run every command from the vault root, or give `zk-chef` the vault with `--root 
   - `--orphan`: notes nothing links.
   - a folder, e.g. `hubs`, with `--format "[[{{metadata.id}}|{{title}}]]"`: ready-made links.
 - **Check:** `zk-chef lint`. Findings read `path:line: CODE message`. Errors block the commit; warnings never do. Read `LINT.md` in this folder for any code you do not know.
-- **Refresh aliases:** `zk-chef fix` rewrites every stale link alias to the target's current title.
+- **Refresh aliases:** `zk-chef fix` rewrites stale link aliases to the target's current title: on the Hubs line and in `## References` of a note, and on every scanned line of a hub, source, log or the Index. It leaves an alias in note prose as it is.
 
 ## Ingest a raw file
 
@@ -28,7 +28,7 @@ Cite a web URL directly in `## References` (`zettel-writing`, "Citations"). Inge
 
 **Propose.** After a task that cites URLs, list the load-bearing ones, numbered, each with a reason in one line. A URL is load-bearing when a claim fails without it. Skip a URL that only gives context. Done when each listed URL has a number and a reason. Ingest nothing until the human answers with numbers.
 
-1. For each approved URL, run `zk-chef ingest --title "<short title of the work>" PATH|URL`. It creates the source note, copies the file to `raw/<ID>-<original name>`, and sets `raw:`, `sha256:` and `review: unreviewed`; for a URL it also sets `url:` and downloads the raw bytes (HTML stays HTML). It prints the note path (`--json` adds `raw` and `sha256`). It does not fill `## Extract`, `citation:`, `authors`, `published` or the body: add them by hand. A URL source needs `citation:` in IEEE form: `citation: A. Author, "Title," Site, Oct. 30, 2026. [Online]. Available: https://example.org/x`.
+1. For each approved URL, run `zk-chef ingest -t "<short title of the work>" PATH|URL`. Add `--hub ID` for each topic hub the source joins (repeatable). The source joins the Sources hub first, then the hubs you give. It creates the source note, copies the file to `raw/<ID>-<original name>`, and sets `raw:`, `sha256:` and `review: unreviewed`; for a URL it also sets `url:` and downloads the raw bytes (HTML stays HTML). It prints the note path (`--json` adds `raw` and `sha256`). It does not fill `## Extract`, `citation:`, `authors`, `published` or the body: add them by hand, as `zettel-writing` describes under "Source notes" (a URL source needs `citation:` in IEEE form).
 2. Write the body as `zettel-writing` describes under "Source notes".
 3. In each note that cites the URL directly, keep its References entry and append `, Archive: [[ID|Title]]`. Find the notes by searching the vault for the URL as literal text. Done when every direct entry for the URL ends with the Archive link.
 4. Run lint, then commit with `ingest: <title>`. Done when lint reports 0 errors.
@@ -64,7 +64,21 @@ Supersede when the claim itself changed. Wording, link and citation fixes are ed
 
 ## Retitle
 
-A retitle keeps the claim and changes the wording. Edit `title:`, run `zk-chef fix`, and commit with `edit: retitle <ID>`. A title that would assert something different is a supersede.
+A retitle keeps the claim and changes the wording. A title that would assert something different is a supersede.
+
+1. Edit `title:`.
+2. Run `zk-chef fix`. It refreshes link aliases on Hubs lines and in References, in every note.
+3. List the linking notes with `zk list --link-to ID`. Reread each link to the retitled note inside its sentences: `fix` leaves an alias in note prose as the writer's wording. Edit a sentence that no longer reads right. Done when every linking sentence fits the new title.
+4. Commit with `edit: retitle <ID>`.
+
+## Export
+
+Run `zk-chef export [-g hugo] DIR` when the human wants a copy of the vault for a static site generator. The vault does not change.
+
+- Exit 1: lint found errors. Nothing is written. Fix the errors (`LINT.md`) and run it again.
+- Exit 2: a usage problem, for example a missing `DIR`, an unknown generator, or a `DIR` inside the vault. `DIR` must be outside the vault.
+- `-g hugo` makes `DIR` a Hugo site root: the pages go to `DIR/content/`, with a scaffold (`hugo.toml` and layouts) beside them.
+- The scaffold is write-once: an export creates a scaffold file only when it does not exist, and never overwrites one. Edit the scaffold in `DIR` as you like. A later release amends this.
 
 ## Commit
 

@@ -120,6 +120,13 @@ func (d *doc) scanned() []line {
 	return out
 }
 
+// aliasChecked reports whether l, a scanned line, is one where a stale Alias is fixed and warned about.
+// In a note the Hubs line (first body line) and the References section qualify; the rest is Prose,
+// where the writer's wording stays. Every other kind is checked on all scanned lines.
+func (d *doc) aliasChecked(l line) bool {
+	return d.str("kind") != "note" || l.n == d.lines[0].n || l.section == "References"
+}
+
 // RewriteLinks replaces each [[ID]] or [[ID|alias]] in the lines lint scans, so links in code fences,
 // Extract and Review stay as written. It calls repl with the trimmed ID, the alias, and whether an alias is present.
 func RewriteLinks(text string, repl func(id, alias string, aliased bool) (string, error)) (string, error) {
@@ -167,4 +174,18 @@ func BodyLinks(text string) (hubs, others []string) {
 		}
 	}
 	return hubs, others
+}
+
+// Head is the kind and title of one note.
+type Head struct{ Kind, Title string }
+
+// Heads maps the id of each parsable note in files to its kind and title.
+func Heads(files map[string][]byte) map[string]Head {
+	out := map[string]Head{}
+	for _, d := range parseDocs(files) {
+		if d.err == "" {
+			out[d.str("id")] = Head{d.str("kind"), d.str("title")}
+		}
+	}
+	return out
 }

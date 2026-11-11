@@ -13,9 +13,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/smb374/zk-chef/internal/lint"
 )
 
 // HTTPClient downloads ingest URLs. Tests replace it with a fake Transport.
@@ -26,7 +29,7 @@ var unsafeNameRe = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 // ingestVerb makes a source note for a local file or URL and keeps the raw bytes in raw/.
 func ingestVerb(inv *invocation) int {
 	if inv.title == "" || len(inv.args) != 1 {
-		return fail(inv, "usage: zk-chef ingest PATH|URL --title T [--root DIR] [--json]")
+		return fail(inv, "usage: zk-chef ingest PATH|URL --title|-t T [--hub ID]... [--root DIR] [--json]")
 	}
 	root, err := filepath.Abs(inv.root)
 	if err != nil {
@@ -45,6 +48,19 @@ func ingestVerb(inv *invocation) int {
 			return fail(inv, src+": not a regular file")
 		}
 		name = unsafeNameRe.ReplaceAllString(filepath.Base(src), "-")
+	}
+	var heads map[string]lint.Head
+	if len(inv.hubs) > 0 { // loading the vault reads raw/ too, so skip it without --hub
+		files, err := lint.LoadWorktree(root)
+		if err != nil {
+			return failCode(inv, 1, "zk-chef ingest: "+err.Error())
+		}
+		heads = lint.Heads(files)
+	}
+	for _, id := range inv.hubs {
+		if h, ok := heads[id]; !ok || h.Kind != "hub" {
+			return fail(inv, "zk-chef ingest: --hub "+id+": no hub with that ID")
+		}
 	}
 	zk, err := exec.LookPath("zk")
 	if err != nil {
@@ -93,6 +109,10 @@ func ingestVerb(inv *invocation) int {
 	}
 	edited, err := setFrontmatter(string(text), fm, order)
 	if err != nil {
+		os.Remove(notePath)
+		return failCode(inv, 1, "zk-chef ingest: "+err.Error())
+	}
+	if edited, err = addHubs(edited, inv.hubs, heads); err != nil {
 		os.Remove(notePath)
 		return failCode(inv, 1, "zk-chef ingest: "+err.Error())
 	}
@@ -183,6 +203,28 @@ func stage(in io.Reader, dir string) (path, sum string, err error) {
 		return "", "", err
 	}
 	return out.Name(), hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// addHubs appends a link to each hub in ids, in order, to the Hubs line of text. A hub the line already links is skipped.
+func addHubs(text string, ids []string, heads map[string]lint.Head) (string, error) {
+	_, body, ok := lint.SplitFrontmatter(text)
+	if !ok || !strings.HasPrefix(body, "Hubs: ") {
+		return "", errors.New("note has no Hubs line")
+	}
+	named, _ := lint.BodyLinks(text)
+	end := strings.IndexByte(body, '\n')
+	if end < 0 {
+		end = len(body)
+	}
+	var add strings.Builder
+	for _, id := range ids {
+		if !slices.Contains(named, id) {
+			named = append(named, id)
+			add.WriteString(" · [[" + id + "|" + heads[id].Title + "]]")
+		}
+	}
+	at := len(text) - len(body) + end
+	return text[:at] + add.String() + text[at:], nil
 }
 
 // setFrontmatter replaces the line of each key in order that the frontmatter already has,

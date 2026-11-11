@@ -280,7 +280,11 @@ func TestLintWarnings(t *testing.T) {
 	}
 	oldN3 := doc("n3", "Old", "note", hubLine+"\n\n[[n1|Leaders are unique]]", kv{"status", "superseded"}, kv{"superseded_by", "n1"})
 	runCodeCases(t, []codeCase{
-		{name: "W_STALE_ALIAS", want: "W_STALE_ALIAS", changes: n2("See [[n1|Old title]].")},
+		{name: "W_STALE_ALIAS in a note's References", want: "W_STALE_ALIAS", changes: n2("A claim [1].\n\n## References\n\n1. [[s1|Old title]]")},
+		{name: "W_STALE_ALIAS on a note's Hubs line", want: "W_STALE_ALIAS", changes: map[string]string{"notes/n2.md": doc("n2", "Two", "note", "Hubs: [[index|Old hub]]\n\n[[n1|Leaders are unique]]")}},
+		{name: "W_STALE_ALIAS on a hub's prose", want: "W_STALE_ALIAS", changes: hubMap("See [[a1|Old title]].")},
+		{name: "a stale alias in note Prose is the writer's wording", absent: "W_STALE_ALIAS", changes: n2("See [[n1|Old title]].")},
+		{name: "a stale alias under a note H2 before References is Prose", absent: "W_STALE_ALIAS", changes: n2("## See also\n\n[[n1|Old title]]")},
 		{name: "W_DEAD_END", want: "W_DEAD_END", changes: n2("Nothing linked.")},
 		{name: "W_MARKER", want: "W_MARKER", changes: n2("TODO: later. [[n1|Leaders are unique]]")},
 		{name: "W_WORD_COUNT", want: "W_WORD_COUNT", changes: n2(strings.Repeat("word ", 500) + "[[n1|Leaders are unique]]")},
@@ -337,10 +341,11 @@ func TestLintStagedOutsideGitRepo(t *testing.T) {
 
 // TestFix ports tests/test_vault.py test_fix.
 func TestFix(t *testing.T) {
-	body := hubLine + "\n\nSee [[n1|%s]] and [[n1]] and [[nope|X]].\n\n```\n[[n1|Old title]]\n```\n\n## Extract\n\n[[n1|Old title]]"
-	files := with_(t, map[string]string{"notes/n2.md": doc("n2", "Two", "note", fmt.Sprintf(body, "Old title"))})
+	body := "Hubs: [[index|%s]]\n\nSee [[n1|Old title]] and [[n1]] and [[nope|X]].\n\n## See also\n\n[[n1|Old title]]\n\n```\n[[n1|Old title]]\n```\n\n## Extract\n\n[[n1|Old title]]\n\n## References\n\n1. [[n1|%s]]"
+	files := with_(t, map[string]string{"notes/n2.md": doc("n2", "Two", "note", fmt.Sprintf(body, "Old hub", "Old title"))})
 	env := setupVault(t, "dev", files)
-	want := doc("n2", "Two", "note", fmt.Sprintf(body, "Leaders are unique"))
+	// Only the Hubs line and References change; Prose, the H2 before References, code and Extract stay.
+	want := doc("n2", "Two", "note", fmt.Sprintf(body, "Index", "Leaders are unique"))
 
 	got := run(env, "fix")
 	if got.code != 0 || got.stdout != "fixed notes/n2.md\n" {
@@ -355,8 +360,31 @@ func TestFix(t *testing.T) {
 	}
 }
 
+// TestFixProseOfOtherKinds checks that hub, source and log docs refresh Aliases on every scanned line.
+func TestFixProseOfOtherKinds(t *testing.T) {
+	prose := func(old string) string { return "Hubs: [[index|Index]]\n\nSee [[n1|" + old + "]]." }
+	files := with_(t, map[string]string{
+		"hubs/h1.md":     doc("h1", "H1", "hub", prose("Old title")),
+		"projects/p1.md": doc("p1", "P1", "log", prose("Old title")),
+		"sources/s1.md": doc("s1", "Source one", "source", prose("Old title")+"\n\n## Review",
+			kv{"raw", "raw/s1-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"}),
+	})
+	got := runIn(t, "dev", files, "fix")
+	if got.code != 0 || got.stdout != "fixed hubs/h1.md\nfixed projects/p1.md\nfixed sources/s1.md\n" {
+		t.Errorf("code %d stdout %q stderr %q, want 0 and the three docs fixed", got.code, got.stdout, got.stderr)
+	}
+	for p, want := range map[string]string{
+		"hubs/h1.md":     doc("h1", "H1", "hub", prose("Leaders are unique")),
+		"projects/p1.md": doc("p1", "P1", "log", prose("Leaders are unique")),
+	} {
+		if b, err := os.ReadFile(p); err != nil || string(b) != want {
+			t.Errorf("%s = %q (%v), want %q", p, b, err, want)
+		}
+	}
+}
+
 func TestFixJSON(t *testing.T) {
-	files := with_(t, map[string]string{"notes/n2.md": doc("n2", "Two", "note", hubLine+"\n\nSee [[n1|Old title]].")})
+	files := with_(t, map[string]string{"notes/n2.md": doc("n2", "Two", "note", "Hubs: [[index|Old hub]]\n\n[[n1|Leaders are unique]].")})
 	env := setupVault(t, "dev", files)
 	for _, want := range []string{
 		`{"ok":true,"fixed":["notes/n2.md"]}` + "\n",

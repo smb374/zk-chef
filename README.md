@@ -61,12 +61,12 @@ Every verb accepts `--json` and `--help`. Verbs that work on a vault pick it in 
 | `zk-chef upgrade [-y]` | human | Shows and applies scaffold changes (zk config, templates, hook, `AGENTS.md` block, new config keys) after a binary update |
 | `zk-chef doctor` | human | Checks zk, git, gpg, hooks, pinned key, skills, PATH and `min_version` |
 | `zk-chef key add [FPR] \| list \| rm FPR` | human | Manages pinned signing keys |
-| `zk-chef ingest PATH\|URL --title T` | agent | Copies a file or URL into `raw/` and creates its `unreviewed` source note |
+| `zk-chef ingest PATH\|URL --title T [--hub ID]...` | agent | Copies a file or URL into `raw/` and creates its `unreviewed` source note. `-t` is short for `--title`. Each `--hub ID` (repeatable) adds that hub to the note's Hubs line after Sources; an unknown ID or a non-hub ID exits with code 2 and writes nothing |
 | `zk-chef lint [--staged]` | agent, hook | Runs every check; errors give exit code 1 |
-| `zk-chef fix` | agent | Rewrites stale link aliases to the targets' current titles |
+| `zk-chef fix` | agent | Rewrites stale link aliases to the targets' current titles; leaves aliases in note prose alone |
 | `zk-chef review [SRC-ID reviewed\|disputed] [--no-commit]` | human only | Shows the raw file, asks you to confirm, signs the verdict and commits. Without arguments it walks the queue |
 | `zk-chef status` | agent | Lists new and re-review sources, disputed sources still cited, and lint counts |
-| `zk-chef export DIR [--generator hugo]` | agent | Writes the notes, hubs, sources and projects pages to `DIR` as Markdown, with frontmatter cut to a safe set of fields. `--generator hugo` shapes the output for Hugo. With it, `DIR` is a Hugo site root. The pages go to `DIR/content/`. The export also creates a write-once scaffold. Lint errors stop it with exit code 1. It never changes the vault. `DIR` must be outside the vault |
+| `zk-chef export DIR [--generator hugo]` | agent | Writes the notes, hubs, sources and projects pages to `DIR` as Markdown, with frontmatter cut to a safe set of fields. `--generator hugo` (`-g hugo`) shapes the output for Hugo. With it, `DIR` is a Hugo site root. The pages go to `DIR/content/`. The export also creates a write-once scaffold. Lint errors stop it with exit code 1. It never changes the vault. `DIR` must be outside the vault |
 
 Lint codes and fixes are in `skills/zk-chef-ops/LINT.md`.
 

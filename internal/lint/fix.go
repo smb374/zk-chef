@@ -7,7 +7,7 @@ import (
 )
 
 // Fix rewrites stale [[ID|alias]] aliases in the worktree to the target's current title.
-// It touches only scanned lines, and leaves links without an alias and unknown IDs alone.
+// It touches only scanned lines where aliasChecked holds, and leaves links without an alias and unknown IDs alone.
 // It returns the changed paths, sorted.
 func Fix(root string) ([]string, error) {
 	files, err := LoadWorktree(root)
@@ -40,7 +40,9 @@ func Fix(root string) ([]string, error) {
 		text := string(files[d.path])
 		lines := strings.Split(text, "\n")
 		for _, l := range d.scanned() {
-			lines[l.n-1] = linkRe.ReplaceAllStringFunc(lines[l.n-1], current)
+			if d.aliasChecked(l) {
+				lines[l.n-1] = linkRe.ReplaceAllStringFunc(lines[l.n-1], current)
+			}
 		}
 		if next := strings.Join(lines, "\n"); next != text {
 			if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(d.path)), []byte(next), 0o644); err != nil {

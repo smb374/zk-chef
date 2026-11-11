@@ -796,3 +796,17 @@ func TestExportGenericKeepsShortcodes(t *testing.T) {
 		}
 	}
 }
+
+func TestExportShortGenerator(t *testing.T) {
+	short, long := t.TempDir(), t.TempDir()
+	env := setupVault(t, "dev", baseVault(t))
+	for _, c := range []struct{ out, flag string }{{short, "-g"}, {long, "--generator"}} {
+		if got := run(env, "export", c.flag, "hugo", c.out); got.code != 0 {
+			t.Fatalf("export %s hugo: code %d stderr %q, want 0", c.flag, got.code, got.stderr)
+		}
+	}
+	got, want := readTree(t, short), readTree(t, long)
+	if _, ok := got["content/_index.md"]; !ok || !maps.Equal(got, want) {
+		t.Errorf("-g hugo wrote %v, want the same tree as --generator hugo (%v), with content/_index.md", slices.Sorted(maps.Keys(got)), slices.Sorted(maps.Keys(want)))
+	}
+}

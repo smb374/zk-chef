@@ -269,3 +269,82 @@ func TestIngestedSourcePassesLint(t *testing.T) {
 		})
 	}
 }
+
+const (
+	sourcesHub  = "[[000000000000src0|Sources]]"
+	projectsHub = "[[000000000000prj0|Projects]]"
+	indexHub    = "[[index|Index]]"
+)
+
+// ingestHubLine ingests a file with args and returns the Hubs line of the new note.
+func ingestHubLine(t *testing.T, env []string, args ...string) string {
+	t.Helper()
+	got := run(env, append([]string{"ingest", writeTemp(t, "a.txt", "x"), "--title", "T"}, args...)...)
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	_, body, _ := strings.Cut(readFile(t, strings.TrimSpace(got.stdout)), "\n---\n")
+	line, _, _ := strings.Cut(body, "\n")
+	return line
+}
+
+func TestIngestHub(t *testing.T) {
+	env := ingestVault(t)
+	for _, tt := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"one hub", []string{"--hub", "000000000000prj0"}, "Hubs: " + sourcesHub + " · " + projectsHub},
+		{"two hubs in flag order", []string{"--hub", "000000000000prj0", "--hub", "index"}, "Hubs: " + sourcesHub + " · " + projectsHub + " · " + indexHub},
+		{"reversed", []string{"--hub", "index", "--hub", "000000000000prj0"}, "Hubs: " + sourcesHub + " · " + indexHub + " · " + projectsHub},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ingestHubLine(t, env, tt.args...); got != tt.want {
+				t.Errorf("Hubs line %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIngestHubDuplicateAndSources(t *testing.T) {
+	env := ingestVault(t)
+	got := ingestHubLine(t, env, "--hub", "000000000000prj0", "--hub", "000000000000src0", "--hub", "000000000000prj0")
+	if want := "Hubs: " + sourcesHub + " · " + projectsHub; got != want {
+		t.Errorf("Hubs line %q, want %q", got, want)
+	}
+}
+
+func TestIngestHubRejected(t *testing.T) {
+	env := ingestVault(t)
+	if err := os.WriteFile("notes/n1.md", []byte("---\nid: n1\ntitle: N\nkind: note\n---\nHubs: "+indexHub+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct{ name, id, want string }{
+		{"unknown ID", "nope", "nope"},
+		{"not a hub", "n1", "n1"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := run(env, "ingest", writeTemp(t, "a.txt", "x"), "--title", "T", "--hub", "index", "--hub", tt.id)
+			if got.code != 2 || got.stdout != "" || !strings.Contains(got.stderr, tt.want) || !strings.Contains(got.stderr, "hub") {
+				t.Errorf("got code %d stdout %q stderr %q, want 2, empty stdout, a hub error naming %q", got.code, got.stdout, got.stderr, tt.want)
+			}
+			for _, dir := range []string{"sources", "raw"} {
+				if names := listDir(t, dir); len(names) != 0 {
+					t.Errorf("%s/ holds %q, want nothing", dir, names)
+				}
+			}
+		})
+	}
+}
+
+func TestIngestShortTitle(t *testing.T) {
+	env := ingestVault(t)
+	got := run(env, "ingest", writeTemp(t, "a.txt", "x"), "-t", "Short Title")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	if note := readFile(t, strings.TrimSpace(got.stdout)); !strings.Contains(note, "title: \"Short Title\"\n") {
+		t.Errorf("note lacks the -t title:\n%s", note)
+	}
+}
