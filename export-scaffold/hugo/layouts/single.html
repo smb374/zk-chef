@@ -1,6 +1,21 @@
 {{ define "main" }}
+<article{{ with .Params.status }} class="status-{{ . }}"{{ end }}>
 <h1>{{ .Title }}</h1>
 {{ with .Date }}<p><time datetime="{{ .Format "2006-01-02" }}">{{ .Format "2006-01-02" }}</time></p>{{ end }}
-{{ with .Params.source_url }}<p><a href="{{ . }}">{{ . }}</a></p>{{ end }}
+{{ $source := eq .Params.zk_kind "source" }}
+{{ if not (and $source .Params.citation) }}{{ with .Params.source_url }}<p><a href="{{ . }}">{{ . }}</a></p>{{ end }}{{ end }}
+{{ if $source }}
+<p class="source-meta">
+{{ with .Params.review }}<span class="review review-{{ . }}">{{ . }}</span>{{ end }}
+{{ if not .Params.citation }}
+{{ with .Params.authors }}<span class="authors">{{ if reflect.IsSlice . }}{{ delimit . ", " }}{{ else }}{{ . }}{{ end }}</span>{{ end }}
+{{ with .Params.source_published }}<span class="published">{{ if eq (printf "%T" .) "time.Time" }}{{ .Format "2006-01-02" }}{{ else }}{{ . }}{{ end }}</span>{{ end }}
+{{ end }}
+</p>
+{{ with .Params.citation }}<p class="citation">{{ . | string | transform.HTMLEscape | replaceRE `https?://(?:[^\s<&]|&amp;)*(?:[^\s<&.,)]|&amp;)` `<a href="$0">$0</a>` | safeHTML }}</p>{{ end }}
+{{ end }}
+<section>
 {{ .Content }}
+</section>
+</article>
 {{ end }}

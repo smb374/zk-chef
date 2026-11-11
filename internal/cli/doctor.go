@@ -45,6 +45,7 @@ func doctorVerb(inv *invocation) int {
 		checkSkills(home, homeErr),
 		checkPath(home, homeErr),
 		checkMinVersion(vault),
+		checkHugo(),
 	}
 	failed := 0
 	for _, c := range checks {
@@ -276,4 +277,21 @@ func checkMinVersion(vault vaultConfig) doctorCheck {
 		return failing(name, fmt.Sprintf("%s is older than min_version %s", bin, minVersion), "run zk-chef self-update")
 	}
 	return pass(name, fmt.Sprintf("%s satisfies min_version %s", bin, minVersion))
+}
+
+// checkHugo reports the hugo on PATH. Hugo is optional (only export -g hugo needs it), so no outcome fails the check.
+func checkHugo() doctorCheck {
+	const name = "hugo"
+	p, err := exec.LookPath("hugo")
+	if err != nil {
+		return pass(name, "not installed (only needed for export -g hugo)")
+	}
+	v, ok := installedHugo()
+	switch {
+	case !ok:
+		return pass(name, p+" (version not recognized)")
+	case hugoBelowFloor(v):
+		return pass(name, fmt.Sprintf("WARNING: %s is %s; export -g hugo needs Hugo %s or newer", p, v, hugoFloor))
+	}
+	return pass(name, fmt.Sprintf("%s is %s", p, v))
 }

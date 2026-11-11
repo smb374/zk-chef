@@ -1,9 +1,13 @@
 {{ define "main" }}
+<article{{ with .Params.status }} class="status-{{ . }}"{{ end }}>
 <h1>{{ .Title }}</h1>
+<section>
 {{ .Content }}
 <ul>
 {{ range .Pages }}
 <li><a href="{{ .RelPermalink }}">{{ .Title }}</a></li>
 {{ end }}
 </ul>
+</section>
+</article>
 {{ end }}

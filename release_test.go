@@ -104,6 +104,20 @@ func TestBuildScript(t *testing.T) {
 		t.Errorf("--version = %q, want %q", ver, "v9.9.9\n")
 	}
 }
+
+// TestWorkflowsPinHugo checks that CI and release install the Hugo floor, not latest (docs/build-notes.md, "Floor guard check").
+func TestWorkflowsPinHugo(t *testing.T) {
+	for _, p := range []string{".github/workflows/ci.yml", ".github/workflows/release.yml"} {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(b), `hugo-version: "0.169.0"`) || strings.Contains(string(b), `hugo-version: "latest"`) {
+			t.Errorf("%s: want hugo-version: \"0.169.0\" and not latest", p)
+		}
+	}
+}
+
 func TestReleaseWorkflowParses(t *testing.T) {
 	b, err := os.ReadFile(".github/workflows/release.yml")
 	if err != nil {
@@ -330,6 +344,14 @@ func TestGoInstallCarriesEmbeddedFiles(t *testing.T) {
 		"scaffold/.zk/config.toml",
 		"skills/zk-chef-ops/SKILL.md",
 		"skills/zettel-writing/SKILL.md",
+		"export-scaffold/hugo/static/vendored/tufte/tufte.css",
+		"export-scaffold/hugo/static/vendored/tufte/LICENSE-tufte-css",
+		"export-scaffold/hugo/static/vendored/tufte/LICENSE-et-book",
+		"export-scaffold/hugo/static/vendored/tufte/et-book/et-book-bold-line-figures/et-book-bold-line-figures.woff",
+		"export-scaffold/hugo/static/vendored/tufte/et-book/et-book-display-italic-old-style-figures/et-book-display-italic-old-style-figures.woff",
+		"export-scaffold/hugo/static/vendored/tufte/et-book/et-book-roman-line-figures/et-book-roman-line-figures.woff",
+		"export-scaffold/hugo/static/vendored/tufte/et-book/et-book-roman-old-style-figures/et-book-roman-old-style-figures.woff",
+		"export-scaffold/hugo/static/vendored/tufte/et-book/et-book-semi-bold-old-style-figures/et-book-semi-bold-old-style-figures.woff",
 	} {
 		if !have[mv.Path+"@"+mv.Version+"/"+p] {
 			t.Errorf("module zip lacks %s", p)

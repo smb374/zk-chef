@@ -59,14 +59,14 @@ Every verb accepts `--json` and `--help`. Verbs that work on a vault pick it in 
 | `zk-chef install [-y] [--skills-only]` | human | Installs the skills and, if needed, zk |
 | `zk-chef self-update` | human | Replaces the binary with the latest release |
 | `zk-chef upgrade [-y]` | human | Shows and applies scaffold changes (zk config, templates, hook, `AGENTS.md` block, new config keys) after a binary update |
-| `zk-chef doctor` | human | Checks zk, git, gpg, hooks, pinned key, skills, PATH and `min_version` |
+| `zk-chef doctor` | human | Checks zk, git, gpg, hooks, pinned key, skills, PATH, `min_version` and hugo. The hugo check never fails: it warns when hugo is older than 0.169.0 and passes when hugo is not installed |
 | `zk-chef key add [FPR] \| list \| rm FPR` | human | Manages pinned signing keys |
 | `zk-chef ingest PATH\|URL --title T [--hub ID]...` | agent | Copies a file or URL into `raw/` and creates its `unreviewed` source note. `-t` is short for `--title`. Each `--hub ID` (repeatable) adds that hub to the note's Hubs line after Sources; an unknown ID or a non-hub ID exits with code 2 and writes nothing |
 | `zk-chef lint [--staged]` | agent, hook | Runs every check; errors give exit code 1 |
 | `zk-chef fix` | agent | Rewrites stale link aliases to the targets' current titles; leaves aliases in note prose alone |
 | `zk-chef review [SRC-ID reviewed\|disputed] [--no-commit]` | human only | Shows the raw file, asks you to confirm, signs the verdict and commits. Without arguments it walks the queue |
 | `zk-chef status` | agent | Lists new and re-review sources, disputed sources still cited, and lint counts |
-| `zk-chef export DIR [--generator hugo]` | agent | Writes the notes, hubs, sources and projects pages to `DIR` as Markdown, with frontmatter cut to a safe set of fields. `--generator hugo` (`-g hugo`) shapes the output for Hugo. With it, `DIR` is a Hugo site root. The pages go to `DIR/content/`. The export also creates a write-once scaffold. Lint errors stop it with exit code 1. It never changes the vault. `DIR` must be outside the vault |
+| `zk-chef export DIR [--generator hugo]` | agent | Writes the notes, hubs, sources and projects pages to `DIR` as Markdown, with frontmatter cut to a safe set of fields. `--generator hugo` (`-g hugo`) shapes the output for Hugo. With it, `DIR` is a Hugo site root. The pages go to `DIR/content/`. The export also creates and updates a scaffold (see Hugo below). Lint errors stop it with exit code 1. It never changes the vault. `DIR` must be outside the vault |
 
 Lint codes and fixes are in `skills/zk-chef-ops/LINT.md`.
 
@@ -99,7 +99,7 @@ What it leaves out:
 
 ### Hugo
 
-`--generator hugo` shapes the output for [Hugo](https://gohugo.io) 0.146 or newer. `DIR` is the Hugo site root:
+`--generator hugo` shapes the output for [Hugo](https://gohugo.io) 0.169.0 or newer. The export warns on stderr when the `hugo` on PATH is older. The scaffold stops an older Hugo build with an error. `DIR` is the Hugo site root:
 
 ```sh
 zk-chef export site --generator hugo --root /path/to/vault
@@ -112,9 +112,17 @@ The Hugo export differs from the generic export in these ways:
 - `kind`, `url` and `published` are written as `zk_kind`, `source_url` and `source_published`. Hugo reserves `kind` (it accepts only page kinds, so a value such as `hub` fails the build in Hugo 0.123 and newer), and `url` would change the page's URL;
 - each page gets a `date` from the first 12 digits of its ID (UTC). A page whose ID is not a date gets no `date`;
 - shortcode calls such as `{{< x >}}` in the text are escaped, so Hugo shows them as text;
-- the export creates a minimal site in `DIR`: `hugo.toml` and the layouts `layouts/baseof.html`, `home.html`, `list.html` and `single.html`.
+- the export creates a minimal site in `DIR`: `hugo.toml` and the layouts `layouts/baseof.html`, `home.html`, `list.html` and `single.html`. The layouts use the Tufte style ([Tufte CSS](https://github.com/edwardtufte/tufte-css) and the ET Book fonts), vendored in `static/vendored/tufte/`. Source pages show their review state and citation (URLs in the citation are links). A source without a citation shows its URL, authors and published date. A superseded page shows a banner.
 
-The scaffold is write-once. The export creates a scaffold file only when the file does not exist. It never changes an existing file, so you can edit the files. The export skips `hugo.toml` when `DIR` already has a Hugo config. A Hugo config is one of these: `hugo.{toml,yaml,yml,json}`, `config.{toml,yaml,yml,json}` or a `config/` folder. To get a file again, delete it and run the export again. The summary line lists the scaffold files that the run created. `--json` lists them in `scaffolded`.
+The export updates the scaffold by this rule. It looks at each scaffold file in `DIR`:
+
+- A missing file is created. To get a file back, delete it and run the export again.
+- A file that is byte for byte a version that zk-chef shipped is replaced with the current version.
+- Any other file counts as your edit and is kept. The export prints `kept your <path>` and a unified diff of your file against the current version, so you can merge changes by hand.
+- `static/vendored/` belongs to zk-chef. The export creates its files and overwrites them when they differ. Your edits there are lost. Use your own stylesheet.
+- `hugo.toml` is not created when `DIR` already has a Hugo config. A Hugo config is one of these: `hugo.{toml,yaml,yml,json}`, `config.{toml,yaml,yml,json}` or a `config/` folder. An existing `hugo.toml` is replaced only when it equals a shipped template rendered with the title of the root page now. If you change that title or edit the file, it counts as your edit.
+
+The summary lists the files as `created <path>`, `updated <path>` and `kept your <path>`. `--json` lists the paths in `scaffolded`, `updated` and `kept` (no diff).
 
 `hugo.toml` sets the title to the title of the root page, and sets the setting that makes Markdown links resolve to site URLs (`[markup.goldmark.renderHooks.link] useEmbedded = 'always'`). To change the title or the base URL, edit `hugo.toml`.
 

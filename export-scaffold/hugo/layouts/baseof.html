@@ -1,13 +1,21 @@
+{{- if lt hugo.Version "0.169.0" }}{{ errorf "this site needs Hugo 0.169.0 or newer, found %s" hugo.Version }}{{ end -}}
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ if .IsHome }}{{ site.Title }}{{ else }}{{ .Title }} | {{ site.Title }}{{ end }}</title>
+<link rel="stylesheet" href="{{ "vendored/tufte/tufte.css" | relURL }}">
 <style>
-body { max-width: 46rem; margin: 2rem auto; padding: 0 1rem; font: 1rem/1.6 system-ui, sans-serif; }
-header { margin-bottom: 2rem; padding-bottom: 0.5rem; border-bottom: 1px solid #ccc; }
-pre { overflow-x: auto; }
+.status-superseded > section > p:first-of-type { padding: 0.5rem 1rem; background: #fff3cd; border-left: 4px solid #b58900; }
+.review { font-size: 1rem; padding: 0 0.4em; border: 1px solid currentColor; }
+.review-unreviewed { color: #8a6d00; }
+.review-reviewed { color: #2a6a2a; }
+.review-disputed { color: #a02020; }
+#members, #backlinks { font-size: 1.6rem; }
+#members + ul, #backlinks + ul { font-size: 1.1rem; }
+article > p { width: 55%; overflow-wrap: anywhere; }
+@media (max-width: 760px) { article > p { width: 100%; } }
 </style>
 </head>
 <body>
