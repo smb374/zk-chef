@@ -23,7 +23,7 @@
 
 | Code | Cause | Fix |
 | --- | --- | --- |
-| `W_STALE_ALIAS` | A link's alias differs from the target's title | `zk-chef fix` |
+| `W_STALE_ALIAS` | A link's alias differs from the target's title, on the Hubs line or in `## References` of a note, or on any line of a hub, source, log or the Index. An alias in note prose is not checked | `zk-chef fix` |
 | `W_DEAD_END` | A claim note links nothing besides its Hubs line | Add link context to related notes, or accept it |
 | `W_SUPERSEDED_LINK` | A live note links a superseded note | Point the link at `superseded_by` |
 | `W_MARKER` | `TODO:`, `GAP:` or `CONTRADICTION:` is present | Resolve it, or keep it as a deliberate marker |

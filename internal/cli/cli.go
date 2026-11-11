@@ -69,7 +69,7 @@ var verbs = []verb{
 		flags: func() []cli.Flag {
 			return []cli.Flag{boolFlag("staged", "check the git index instead of the worktree")}
 		}},
-	{name: "fix", usage: "rewrite stale link aliases to current titles", root: true, run: fixVerb},
+	{name: "fix", usage: "rewrite stale link aliases on a note's Hubs line and in its References, and on every line of other kinds", root: true, run: fixVerb},
 	{name: "review", usage: "sign a source's review, or list the review queue", argsUsage: "[SRC-ID reviewed|disputed]", root: true, run: reviewVerb,
 		flags: func() []cli.Flag { return []cli.Flag{boolFlag("no-commit", "sign the note but do not commit")} }},
 	{name: "status", usage: "summarize the vault", root: true, run: statusVerb},

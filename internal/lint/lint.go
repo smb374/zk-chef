@@ -125,7 +125,7 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 					continue
 				}
 				// A link's ID cannot contain |, so | marks an alias, even an empty one.
-				if title := target.str("title"); strings.Contains(m[0], "|") && m[2] != title {
+				if title := target.str("title"); d.aliasChecked(l) && strings.Contains(m[0], "|") && m[2] != title {
 					add("W_STALE_ALIAS", d.path, l.n, fmt.Sprintf("alias %s differs from title %s", pyRepr(m[2]), pyRepr(title)))
 				}
 				if live && target.fm["status"] == "superseded" {
