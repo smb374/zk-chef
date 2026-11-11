@@ -112,7 +112,7 @@ The Hugo export differs from the generic export in these ways:
 - `kind`, `url` and `published` are written as `zk_kind`, `source_url` and `source_published`. Hugo reserves `kind` (it accepts only page kinds, so a value such as `hub` fails the build in Hugo 0.123 and newer), and `url` would change the page's URL;
 - each page gets a `date` from the first 12 digits of its ID (UTC). A page whose ID is not a date gets no `date`;
 - shortcode calls such as `{{< x >}}` in the text are escaped, so Hugo shows them as text;
-- the export creates a minimal site in `DIR`: `hugo.toml` and the layouts `layouts/baseof.html`, `home.html`, `list.html` and `single.html`. The layouts use the Tufte style ([Tufte CSS](https://github.com/edwardtufte/tufte-css) and the ET Book fonts), vendored in `static/vendored/tufte/`. Source pages show their review state, citation, authors and published date, and a superseded page shows a banner.
+- the export creates a minimal site in `DIR`: `hugo.toml` and the layouts `layouts/baseof.html`, `home.html`, `list.html` and `single.html`. The layouts use the Tufte style ([Tufte CSS](https://github.com/edwardtufte/tufte-css) and the ET Book fonts), vendored in `static/vendored/tufte/`. Source pages show their review state and citation (URLs in the citation are links). A source without a citation shows its URL, authors and published date. A superseded page shows a banner.
 
 The export updates the scaffold by this rule. It looks at each scaffold file in `DIR`:
 

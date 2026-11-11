@@ -409,9 +409,18 @@ func TestExportHugoSiteBuilds(t *testing.T) {
 	files := exportVault(t)
 	files["notes/202611091044tnn3.md"] = doc("202611091044tnn3", "Dated note", "note", hubLine+"\n\nSee [[n1]] and [[s1|Reading]].\n\n{{< figure src=\"x\" >}}")
 	files["notes/n9.md"] = doc("n9", "Old claim", "note", hubLine+"\n\nOld.", kv{"status", "superseded"}, kv{"superseded_by", "n1"})
+	files["sources/s1.md"] = doc("s1", "Source one", "source",
+		"Hubs: [[000000000000src0|Sources]]\n\nWhy.\n\n## Review",
+		kv{"raw", "raw/s1-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"},
+		kv{"url", "https://example.com/x"}, kv{"citation", "Doe 2026, https://example.com/paper (see https://example.org/b?x=1&y=2)."}, kv{"authors", "[Doe, Roe]"}, kv{"published", "2026-01-02"})
 	out := t.TempDir()
 	if got := runIn(t, "dev", files, "export", "--generator", "hugo", out); got.code != 0 {
 		t.Fatalf("export: code %d stderr %q, want 0", got.code, got.stderr)
+	}
+	// Lint rejects a URL source without a citation, so write the page by hand.
+	noCitation := "---\ntitle: No citation\nzk_kind: source\nreview: unreviewed\nsource_url: https://example.com/z\nauthors: [Doe, Roe]\nsource_published: 2026-01-02\n---\nBody.\n"
+	if err := os.WriteFile(filepath.Join(out, "content", "sources", "s3.md"), []byte(noCitation), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	public := t.TempDir()
 	cmd := exec.Command(hugoBin, "--source", out, "--destination", public)
@@ -437,7 +446,8 @@ func TestExportHugoSiteBuilds(t *testing.T) {
 		"index.html":                       {`href="/vendored/tufte/tufte.css"`, "<article>", "<section>"},
 		"notes/n1/index.html":              {`href="/vendored/tufte/tufte.css"`, "<article", "<section>"},
 		"hubs/000000000000src0/index.html": {`id="members"`, `id="backlinks"`},
-		"sources/s1/index.html":            {`<span class="review review-unreviewed">unreviewed</span>`, "Doe 2026", "Doe, Roe", "2026-01-02", `href="https://example.com/x"`},
+		"sources/s1/index.html":            {`<p class="source-meta">`, `<span class="review review-unreviewed">unreviewed</span>`, `<p class="citation">Doe 2026, <a href="https://example.com/paper">https://example.com/paper</a> (see <a href="https://example.org/b?x=1&amp;y=2">https://example.org/b?x=1&amp;y=2</a>).</p>`},
+		"sources/s3/index.html":            {`<p><a href="https://example.com/z">https://example.com/z</a></p>`, `<span class="authors">Doe, Roe</span>`, `<span class="published">2026-01-02</span>`},
 		"notes/n9/index.html":              {`<article class="status-superseded">`, "<p>Superseded by "},
 	} {
 		page, err := os.ReadFile(filepath.Join(public, filepath.FromSlash(p)))
@@ -448,6 +458,21 @@ func TestExportHugoSiteBuilds(t *testing.T) {
 		for _, want := range wants {
 			if !strings.Contains(string(page), want) {
 				t.Errorf("%s = %q, want it to contain %q", p, page, want)
+			}
+		}
+	}
+	for p, denies := range map[string][]string{
+		"sources/s1/index.html": {`<p><a href="https://example.com/x">`, `href="https://example.com/x"`, `class="authors"`, `class="published"`},
+		"sources/s3/index.html": {`class="citation"`},
+	} {
+		page, err := os.ReadFile(filepath.Join(public, filepath.FromSlash(p)))
+		if err != nil {
+			t.Errorf("hugo output lacks %s: %v", p, err)
+			continue
+		}
+		for _, deny := range denies {
+			if strings.Contains(string(page), deny) {
+				t.Errorf("%s = %q, want it not to contain %q", p, page, deny)
 			}
 		}
 	}
