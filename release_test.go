@@ -104,6 +104,20 @@ func TestBuildScript(t *testing.T) {
 		t.Errorf("--version = %q, want %q", ver, "v9.9.9\n")
 	}
 }
+
+// TestWorkflowsPinHugo checks that CI and release install the Hugo floor, not latest (docs/build-notes.md, "Floor guard check").
+func TestWorkflowsPinHugo(t *testing.T) {
+	for _, p := range []string{".github/workflows/ci.yml", ".github/workflows/release.yml"} {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(b), `hugo-version: "0.169.0"`) || strings.Contains(string(b), `hugo-version: "latest"`) {
+			t.Errorf("%s: want hugo-version: \"0.169.0\" and not latest", p)
+		}
+	}
+}
+
 func TestReleaseWorkflowParses(t *testing.T) {
 	b, err := os.ReadFile(".github/workflows/release.yml")
 	if err != nil {

@@ -59,7 +59,7 @@ Every verb accepts `--json` and `--help`. Verbs that work on a vault pick it in 
 | `zk-chef install [-y] [--skills-only]` | human | Installs the skills and, if needed, zk |
 | `zk-chef self-update` | human | Replaces the binary with the latest release |
 | `zk-chef upgrade [-y]` | human | Shows and applies scaffold changes (zk config, templates, hook, `AGENTS.md` block, new config keys) after a binary update |
-| `zk-chef doctor` | human | Checks zk, git, gpg, hooks, pinned key, skills, PATH and `min_version` |
+| `zk-chef doctor` | human | Checks zk, git, gpg, hooks, pinned key, skills, PATH, `min_version` and hugo. The hugo check never fails: it warns when hugo is older than 0.169.0 and passes when hugo is not installed |
 | `zk-chef key add [FPR] \| list \| rm FPR` | human | Manages pinned signing keys |
 | `zk-chef ingest PATH\|URL --title T [--hub ID]...` | agent | Copies a file or URL into `raw/` and creates its `unreviewed` source note. `-t` is short for `--title`. Each `--hub ID` (repeatable) adds that hub to the note's Hubs line after Sources; an unknown ID or a non-hub ID exits with code 2 and writes nothing |
 | `zk-chef lint [--staged]` | agent, hook | Runs every check; errors give exit code 1 |
@@ -99,7 +99,7 @@ What it leaves out:
 
 ### Hugo
 
-`--generator hugo` shapes the output for [Hugo](https://gohugo.io) 0.146 or newer. `DIR` is the Hugo site root:
+`--generator hugo` shapes the output for [Hugo](https://gohugo.io) 0.169.0 or newer. The export warns on stderr when the `hugo` on PATH is older. The scaffold stops an older Hugo build with an error. `DIR` is the Hugo site root:
 
 ```sh
 zk-chef export site --generator hugo --root /path/to/vault

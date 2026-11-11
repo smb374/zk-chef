@@ -442,6 +442,9 @@ func exportVerb(inv *invocation) int {
 	}
 	scaffold := scaffoldReport{[]string{}, []string{}, []string{}, nil}
 	if hugo {
+		if v, ok := installedHugo(); ok && hugoBelowFloor(v) {
+			fmt.Fprintf(inv.stderr, "zk-chef export: warning: the hugo on PATH is %s; the site needs Hugo %s or newer\n", v, hugoFloor)
+		}
 		if scaffold, err = exportScaffoldHugo(out, exportRootTitle(files)); err != nil {
 			return fail(inv, "zk-chef export: "+err.Error())
 		}

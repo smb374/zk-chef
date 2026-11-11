@@ -202,9 +202,9 @@ func TestDoctorMissingConfigKeepsOtherChecks(t *testing.T) {
 	for _, c := range rep.Checks {
 		failed[c.Name] = !c.OK
 	}
-	want := map[string]bool{"zk": false, "git": false, "gpg": false, "hooks-path": false, "pinned-key": true, "skills": false, "path": false, "min_version": true}
+	want := map[string]bool{"zk": false, "git": false, "gpg": false, "hooks-path": false, "pinned-key": true, "skills": false, "path": false, "min_version": true, "hugo": false}
 	if code != 1 || rep.OK || len(failed) != len(want) {
-		t.Fatalf("code %d ok %v checks %v, want 1 false and 8 checks", code, rep.OK, rep.Checks)
+		t.Fatalf("code %d ok %v checks %v, want 1 false and 9 checks", code, rep.OK, rep.Checks)
 	}
 	for name, w := range want {
 		if failed[name] != w {
@@ -331,7 +331,7 @@ func TestDoctorAllPass(t *testing.T) {
 			t.Errorf("check %+v, want ok with null fix", c)
 		}
 	}
-	want := "zk git gpg hooks-path pinned-key skills path min_version"
+	want := "zk git gpg hooks-path pinned-key skills path min_version hugo"
 	if code != 0 || !rep.OK || strings.Join(names, " ") != want {
 		t.Errorf("code %d ok %v checks %v, want 0 true [%s]", code, rep.OK, names, want)
 	}
@@ -364,5 +364,21 @@ func TestDoctorGPG(t *testing.T) {
 		{name: "on PATH", wantOK: true},
 		{name: "missing", wantOK: false, wantFix: "install gnupg", wantDetail: "not found",
 			breakIt: func(t *testing.T, env []string, bin string) { remove(filepath.Join(bin, "gpg"))(t, env, bin) }},
+	})
+}
+func TestDoctorHugo(t *testing.T) {
+	withHugo := func(out string) func(*testing.T, []string, string) {
+		return func(t *testing.T, _ []string, bin string) {
+			t.Helper()
+			if err := os.WriteFile(filepath.Join(bin, "hugo"), []byte("#!/bin/sh\necho '"+out+"'\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	runDoctorCases(t, "hugo", []doctorCase{
+		{name: "at the floor", wantOK: true, wantDetail: "0.169.0", breakIt: withHugo("hugo v0.169.0+extended linux/amd64")},
+		{name: "below the floor", wantOK: true, wantDetail: "WARNING", breakIt: withHugo("hugo v0.146.0+extended linux/amd64")},
+		{name: "unparsable", wantOK: true, wantDetail: "version not recognized", breakIt: withHugo("hugo banana")},
+		{name: "not installed", wantOK: true, wantDetail: "not installed (only needed for export -g hugo)"},
 	})
 }

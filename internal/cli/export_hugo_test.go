@@ -23,14 +23,14 @@ func TestExportHugoScaffoldFreshOut(t *testing.T) {
 		"refLinksErrorLevel = 'ERROR'\n",
 		"disableKinds = ['taxonomy', 'term', 'RSS', 'sitemap']\n",
 		"[markup.goldmark.renderHooks.link]\n  useEmbedded = 'always'\n",
-		"[module.hugoVersion]\n  min = '0.146.0'\n",
+		"[module.hugoVersion]\n  min = '0.169.0'\n",
 	} {
 		if !strings.Contains(tree["hugo.toml"], want) {
 			t.Errorf("hugo.toml = %q, want it to contain %q", tree["hugo.toml"], want)
 		}
 	}
 	for p, wants := range map[string][]string{
-		"layouts/baseof.html": {"<style>", `href="{{ "/" | relURL }}"`, "{{ block \"main\" . }}"},
+		"layouts/baseof.html": {`this site needs Hugo 0.169.0 or newer, found`, "<style>", `href="{{ "/" | relURL }}"`, "{{ block \"main\" . }}"},
 		"layouts/home.html":   {"{{ .Title }}", "{{ .Content }}", "range .Pages"},
 		"layouts/list.html":   {"{{ .Title }}", "{{ .Content }}", "range .Pages"},
 		"layouts/single.html": {"{{ .Title }}", "{{ with .Date }}", "{{ with .Params.source_url }}", "{{ .Content }}"},
@@ -408,6 +408,43 @@ func TestExportHugoSiteBuilds(t *testing.T) {
 	for _, p := range []string{"index.html", "notes/n1/index.html", "sources/s1/index.html", "notes/202611091044tnn3/index.html"} {
 		if _, err := os.Stat(filepath.Join(public, filepath.FromSlash(p))); err != nil {
 			t.Errorf("hugo output lacks %s: %v", p, err)
+		}
+	}
+}
+
+// fakeHugo puts a hugo script that prints out on a PATH of its own until the test ends. An empty out puts no hugo on PATH.
+func fakeHugo(t *testing.T, out string) {
+	t.Helper()
+	bin := t.TempDir()
+	if out != "" {
+		if err := os.WriteFile(filepath.Join(bin, "hugo"), []byte("#!/bin/sh\necho '"+out+"'\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin)
+}
+
+func TestExportWarnsOldHugo(t *testing.T) {
+	const warning = "needs Hugo 0.169.0 or newer"
+	files := baseVault(t) // before setupVault changes the directory
+	for name, args := range map[string][]string{"text": {"export", "-g", "hugo"}, "json": {"export", "--json", "-g", "hugo"}} {
+		env := setupVault(t, "dev", files)
+		fakeHugo(t, "hugo v0.146.0+extended linux/amd64")
+		got := run(env, append(args, t.TempDir())...)
+		if got.code != 0 || !strings.Contains(got.stderr, warning) || strings.Contains(got.stdout, warning) {
+			t.Errorf("%s: code %d stdout %q stderr %q, want 0 and the warning on stderr only", name, got.code, got.stdout, got.stderr)
+		}
+	}
+}
+
+func TestExportNoWarnCurrentMissingOrUnparsableHugo(t *testing.T) {
+	files := baseVault(t) // before setupVault changes the directory
+	for name, out := range map[string]string{"current": "hugo v0.169.0+extended linux/amd64", "newer": "hugo v1.0.0 linux/amd64", "unparsable": "hugo banana", "missing": ""} {
+		env := setupVault(t, "dev", files)
+		fakeHugo(t, out)
+		got := run(env, "export", "-g", "hugo", t.TempDir())
+		if got.code != 0 || got.stderr != "" {
+			t.Errorf("%s: code %d stderr %q, want 0 and no warning", name, got.code, got.stderr)
 		}
 	}
 }

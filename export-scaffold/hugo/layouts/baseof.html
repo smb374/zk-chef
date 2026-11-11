@@ -1,3 +1,4 @@
+{{- if lt hugo.Version "0.169.0" }}{{ errorf "this site needs Hugo 0.169.0 or newer, found %s" hugo.Version }}{{ end -}}
 <!DOCTYPE html>
 <html lang="en">
 <head>

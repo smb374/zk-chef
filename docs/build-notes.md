@@ -25,7 +25,7 @@ Checked 2026-11-08 with zk 0.15.7, git, gpg. Items 1 to 5 were checked during th
 
 Checked once, by hand, with Hugo v0.169.0-1da10fc44701c566b1669cdb2d12638f155138bd+extended+withdeploy linux/amd64. The notes below describe that manual check, which used the old layout (pages written to `site/content`, hugo config and layouts written by hand).
 
-Layout change: `export --generator hugo DIR` now makes `DIR` the site root. It writes the pages to `DIR/content/`. It also writes a write-once scaffold: `hugo.toml` and four layouts. A Go test covers the build: `TestExportHugoSiteBuilds` in `internal/cli/export_hugo_test.go`. The test runs `hugo` in a fresh export. It skips when `hugo` is not on PATH. CI installs the latest Hugo (`hugo-version: "latest"` in `.github/workflows/ci.yml`) before `go test`. This note does not record a new manual run.
+Layout change: `export --generator hugo DIR` now makes `DIR` the site root. It writes the pages to `DIR/content/`. It also writes a write-once scaffold: `hugo.toml` and four layouts. A Go test covers the build: `TestExportHugoSiteBuilds` in `internal/cli/export_hugo_test.go`. The test runs `hugo` in a fresh export. It skips when `hugo` is not on PATH. CI installs Hugo 0.169.0 (`hugo-version: "0.169.0"` in `.github/workflows/ci.yml` and `release.yml`) before `go test`. This note does not record a new manual run.
 
 - **Vault.** A small throwaway vault, not a real one. It came from `zk-chef init -y` plus three hand-written pages: a source (with `url`, `citation`, an `## Extract`, a `## Review` and a raw file), a note, and a superseded note. `zk-chef lint` gave 0 errors and 2 warnings (`W_SUPERSEDED_LINK`, `W_STALE_ALIAS`; the second came from a deliberate bracket alias). No real vault was available.
 - **Export.** `zk-chef export site/content --generator hugo --root vault` printed `wrote 6 pages to site/content, removed 0`.
@@ -49,4 +49,18 @@ Layout change: `export --generator hugo DIR` now makes `DIR` the site root. It w
 3. Do not list `static/vendor/` files. zk-chef overwrites them.
 
 `TestScaffoldHashesCoverEmbeddedFiles` fails when the current version of an embedded file is not in the list.
+
+## Floor guard check
+
+The Hugo floor is 0.169.0, the newest Hugo at the time of v0.2.2. It is set in three places that must agree: `min` in `export-scaffold/hugo/hugo.toml.tmpl`, the `errorf` guard at the top of `export-scaffold/hugo/layouts/baseof.html`, and `hugoFloor` in `internal/cli/hugo.go`.
+
+**CI pin.** CI and release install Hugo `0.169.0` only (`hugo-version` in `.github/workflows/ci.yml` and `release.yml`), not `latest`. `TestWorkflowsPinHugo` checks it. When a newer Hugo ships, add a second pin (a matrix of the floor and the newest) so CI builds on both.
+
+**Manual check on an old Hugo: PENDING.** The author had only Hugo 0.169.0, so the guard is not yet seen to stop an old Hugo. The maintainer runs this check:
+
+1. Install a Hugo from 0.146 to 0.168.
+2. Run `zk-chef export -g hugo SITE` on a vault. Expect a warning on stderr that the hugo on PATH is below 0.169.0 (exit code 0).
+3. Run `hugo --source SITE`. Expect the build to stop with `this site needs Hugo 0.169.0 or newer, found <version>`.
+4. Repeat step 3 with Hugo 0.169.0. Expect no such message and a finished build (`TestExportHugoSiteBuilds` covers this one).
+
 
