@@ -42,7 +42,7 @@ func TestExportHugoScaffoldFreshOut(t *testing.T) {
 		}
 	}
 	for p, wants := range map[string][]string{
-		"layouts/baseof.html": {`this site needs Hugo 0.169.0 or newer, found`, "<style>", `href="{{ "/" | relURL }}"`, `{{ "vendored/tufte/tufte.css" | relURL }}`, "#members", "#backlinks", ".status-superseded", "{{ block \"main\" . }}"},
+		"layouts/baseof.html": {`this site needs Hugo 0.169.0 or newer, found`, "<style>", `href="{{ "/" | relURL }}"`, `{{ "vendored/tufte/tufte.css" | relURL }}`, "#members", "#backlinks", ".status-superseded", "article > p { width: 55%", "{{ block \"main\" . }}"},
 		"layouts/home.html":   {"{{ .Title }}", "{{ .Content }}", "range .Pages", "<article", "<section>"},
 		"layouts/list.html":   {"{{ .Title }}", "{{ .Content }}", "range .Pages", "<article", "<section>"},
 		"layouts/single.html": {"{{ .Title }}", "{{ with .Date }}", "{{ with .Params.source_url }}", "{{ .Content }}", "<article", "<section>", ".Params.review", ".Params.citation", ".Params.authors", ".Params.source_published", "status-"},
