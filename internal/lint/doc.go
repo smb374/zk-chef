@@ -175,3 +175,17 @@ func BodyLinks(text string) (hubs, others []string) {
 	}
 	return hubs, others
 }
+
+// Head is the kind and title of one note.
+type Head struct{ Kind, Title string }
+
+// Heads maps the id of each parsable note in files to its kind and title.
+func Heads(files map[string][]byte) map[string]Head {
+	out := map[string]Head{}
+	for _, d := range parseDocs(files) {
+		if d.err == "" {
+			out[d.str("id")] = Head{d.str("kind"), d.str("title")}
+		}
+	}
+	return out
+}

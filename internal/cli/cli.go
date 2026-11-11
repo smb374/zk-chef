@@ -23,13 +23,14 @@ type invocation struct {
 	stdin          io.Reader
 	stdout, stderr io.Writer
 	env            []string
-	root           string // --root, for verbs that take it
-	staged         bool   // --staged, for lint
-	yes            bool   // -y, for init, install and upgrade
-	skillsOnly     bool   // --skills-only, for install
-	noCommit       bool   // --no-commit, for review
-	title          string // --title, for ingest
-	generator      string // --generator, for export
+	root           string   // --root, for verbs that take it
+	staged         bool     // --staged, for lint
+	yes            bool     // -y, for init, install and upgrade
+	skillsOnly     bool     // --skills-only, for install
+	noCommit       bool     // --no-commit, for review
+	title          string   // --title, for ingest
+	hubs           []string // --hub, for ingest
+	generator      string   // --generator, for export
 }
 
 // verb describes one verb: its help text, its flags and its code.
@@ -64,7 +65,12 @@ var verbs = []verb{
 	{name: "doctor", usage: "check the vault and its tools", root: true, run: doctorVerb},
 	{name: "key", usage: "manage pinned reviewer keys", argsUsage: "add [FPR] | list | rm FPR", root: true, run: keyVerb},
 	{name: "ingest", usage: "ingest a raw file or URL as a source note", argsUsage: "PATH|URL", root: true, run: ingestVerb,
-		flags: func() []cli.Flag { return []cli.Flag{&cli.StringFlag{Name: "title", Usage: "note title (required)"}} }},
+		flags: func() []cli.Flag {
+			return []cli.Flag{
+				&cli.StringFlag{Name: "title", Aliases: []string{"t"}, Usage: "note title (required)"},
+				&cli.StringSliceFlag{Name: "hub", Usage: "ID of a hub the source joins besides Sources (repeatable)"},
+			}
+		}},
 	{name: "lint", usage: "check the vault against the rules", root: true, run: lintVerb,
 		flags: func() []cli.Flag {
 			return []cli.Flag{boolFlag("staged", "check the git index instead of the worktree")}
@@ -75,7 +81,7 @@ var verbs = []verb{
 	{name: "status", usage: "summarize the vault", root: true, run: statusVerb},
 	{name: "export", usage: "write a copy of the vault for a static site generator", argsUsage: "DIR", root: true, run: exportVerb,
 		flags: func() []cli.Flag {
-			return []cli.Flag{&cli.StringFlag{Name: "generator", Usage: "shape the output for a site generator: hugo (default: generic)"}}
+			return []cli.Flag{&cli.StringFlag{Name: "generator", Aliases: []string{"g"}, Usage: "shape the output for a site generator: hugo (default: generic)"}}
 		}},
 }
 
@@ -126,6 +132,7 @@ func (v verb) command(base invocation, code *int) *cli.Command {
 			inv.noCommit = cmd.Bool("no-commit")
 			inv.title = cmd.String("title")
 			inv.generator = cmd.String("generator")
+			inv.hubs = cmd.StringSlice("hub")
 			if v.root {
 				inv.root = cmd.String("root")
 				if inv.root == "" {
