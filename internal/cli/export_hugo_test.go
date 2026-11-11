@@ -15,6 +15,18 @@ import (
 	"testing/fstest"
 )
 
+// hugoVendoredFiles are the files the Export scaffold writes under static/, in the order a walk of the embedded tree visits them.
+var hugoVendoredFiles = []string{
+	"static/vendored/tufte/LICENSE-et-book",
+	"static/vendored/tufte/LICENSE-tufte-css",
+	"static/vendored/tufte/et-book/et-book-bold-line-figures/et-book-bold-line-figures.woff",
+	"static/vendored/tufte/et-book/et-book-display-italic-old-style-figures/et-book-display-italic-old-style-figures.woff",
+	"static/vendored/tufte/et-book/et-book-roman-line-figures/et-book-roman-line-figures.woff",
+	"static/vendored/tufte/et-book/et-book-roman-old-style-figures/et-book-roman-old-style-figures.woff",
+	"static/vendored/tufte/et-book/et-book-semi-bold-old-style-figures/et-book-semi-bold-old-style-figures.woff",
+	"static/vendored/tufte/tufte.css",
+}
+
 func TestExportHugoScaffoldFreshOut(t *testing.T) {
 	tree := exportHugoOK(t, baseVault(t))
 	for _, want := range []string{
@@ -30,10 +42,10 @@ func TestExportHugoScaffoldFreshOut(t *testing.T) {
 		}
 	}
 	for p, wants := range map[string][]string{
-		"layouts/baseof.html": {`this site needs Hugo 0.169.0 or newer, found`, "<style>", `href="{{ "/" | relURL }}"`, "{{ block \"main\" . }}"},
-		"layouts/home.html":   {"{{ .Title }}", "{{ .Content }}", "range .Pages"},
-		"layouts/list.html":   {"{{ .Title }}", "{{ .Content }}", "range .Pages"},
-		"layouts/single.html": {"{{ .Title }}", "{{ with .Date }}", "{{ with .Params.source_url }}", "{{ .Content }}"},
+		"layouts/baseof.html": {`this site needs Hugo 0.169.0 or newer, found`, "<style>", `href="{{ "/" | relURL }}"`, `{{ "vendored/tufte/tufte.css" | relURL }}`, "#members", "#backlinks", ".status-superseded", "{{ block \"main\" . }}"},
+		"layouts/home.html":   {"{{ .Title }}", "{{ .Content }}", "range .Pages", "<article", "<section>"},
+		"layouts/list.html":   {"{{ .Title }}", "{{ .Content }}", "range .Pages", "<article", "<section>"},
+		"layouts/single.html": {"{{ .Title }}", "{{ with .Date }}", "{{ with .Params.source_url }}", "{{ .Content }}", "<article", "<section>", ".Params.review", ".Params.citation", ".Params.authors", ".Params.source_published", "status-"},
 	} {
 		for _, want := range wants {
 			if !strings.Contains(tree[p], want) {
@@ -55,7 +67,7 @@ func TestExportHugoScaffoldTitleIsQuotedForToml(t *testing.T) {
 func TestExportHugoReportsScaffoldedFiles(t *testing.T) {
 	out := t.TempDir()
 	env := setupVault(t, "dev", baseVault(t))
-	want := []string{"hugo.toml", "layouts/baseof.html", "layouts/home.html", "layouts/list.html", "layouts/single.html"}
+	want := append([]string{"hugo.toml", "layouts/baseof.html", "layouts/home.html", "layouts/list.html", "layouts/single.html"}, hugoVendoredFiles...)
 	got := run(env, "export", "--json", "--generator", "hugo", out)
 	var r struct {
 		Scaffolded []string `json:"scaffolded"`
@@ -64,7 +76,7 @@ func TestExportHugoReportsScaffoldedFiles(t *testing.T) {
 		t.Errorf("code %d stdout %q (%v), want scaffolded %v", got.code, got.stdout, err, want)
 	}
 	text := run(env, "export", "--generator", "hugo", t.TempDir())
-	if !strings.Contains(text.stdout, "created hugo.toml\ncreated layouts/baseof.html\ncreated layouts/home.html\ncreated layouts/list.html\ncreated layouts/single.html\n") {
+	if !strings.Contains(text.stdout, "created "+strings.Join(want, "\ncreated ")+"\n") {
 		t.Errorf("stdout %q, want it to name the created scaffold files", text.stdout)
 	}
 }
@@ -263,22 +275,22 @@ func TestExportHugoScaffoldUpdatesPastHugoToml(t *testing.T) {
 	}
 }
 
-func TestExportHugoScaffoldOwnsVendorFiles(t *testing.T) {
+func TestExportHugoScaffoldOwnsVendoredFiles(t *testing.T) {
 	env := setupVault(t, "dev", baseVault(t))
-	withScaffold(t, map[string]string{"static/vendor/tufte.css": "new css\n"})
+	withScaffold(t, map[string]string{"static/vendored/tufte.css": "new css\n"})
 	out := t.TempDir()
-	if r := exportHugoReport(t, env, out); !slices.Contains(r.Scaffolded, "static/vendor/tufte.css") {
-		t.Errorf("report %+v, want static/vendor/tufte.css scaffolded", r)
+	if r := exportHugoReport(t, env, out); !slices.Contains(r.Scaffolded, "static/vendored/tufte.css") {
+		t.Errorf("report %+v, want static/vendored/tufte.css scaffolded", r)
 	}
-	writeFiles(t, out, map[string]string{"static/vendor/tufte.css": "my css\n"})
-	if r := exportHugoReport(t, env, out); !slices.Equal(r.Updated, []string{"static/vendor/tufte.css"}) || len(r.Kept) != 0 {
-		t.Errorf("report %+v, want updated [static/vendor/tufte.css] and none kept", r)
+	writeFiles(t, out, map[string]string{"static/vendored/tufte.css": "my css\n"})
+	if r := exportHugoReport(t, env, out); !slices.Equal(r.Updated, []string{"static/vendored/tufte.css"}) || len(r.Kept) != 0 {
+		t.Errorf("report %+v, want updated [static/vendored/tufte.css] and none kept", r)
 	}
-	if got := readTree(t, out)["static/vendor/tufte.css"]; got != "new css\n" {
-		t.Errorf("static/vendor/tufte.css = %q, want it overwritten", got)
+	if got := readTree(t, out)["static/vendored/tufte.css"]; got != "new css\n" {
+		t.Errorf("static/vendored/tufte.css = %q, want it overwritten", got)
 	}
 	if r := exportHugoReport(t, env, out); len(r.Scaffolded)+len(r.Updated)+len(r.Kept) != 0 {
-		t.Errorf("report %+v, want nothing to do when the vendor file is current", r)
+		t.Errorf("report %+v, want nothing to do when the vendored file is current", r)
 	}
 }
 
@@ -322,7 +334,7 @@ func TestExportHugoSwitchKeepsScaffold(t *testing.T) {
 		}
 		for p := range tree {
 			hugoPage := strings.HasPrefix(p, "content/")
-			scaffold := p == "hugo.toml" || strings.HasPrefix(p, "layouts/") || p == exportManifestName
+			scaffold := p == "hugo.toml" || strings.HasPrefix(p, "layouts/") || strings.HasPrefix(p, "static/") || p == exportManifestName
 			if hugo := i%2 == 0; hugo && !hugoPage && !scaffold {
 				t.Errorf("run %d (hugo): OUT has %s, want no page outside content/", i+1, p)
 			} else if !hugo && hugoPage {
@@ -396,6 +408,7 @@ func TestExportHugoSiteBuilds(t *testing.T) {
 	}
 	files := exportVault(t)
 	files["notes/202611091044tnn3.md"] = doc("202611091044tnn3", "Dated note", "note", hubLine+"\n\nSee [[n1]] and [[s1|Reading]].\n\n{{< figure src=\"x\" >}}")
+	files["notes/n9.md"] = doc("n9", "Old claim", "note", hubLine+"\n\nOld.", kv{"status", "superseded"}, kv{"superseded_by", "n1"})
 	out := t.TempDir()
 	if got := runIn(t, "dev", files, "export", "--generator", "hugo", out); got.code != 0 {
 		t.Fatalf("export: code %d stderr %q, want 0", got.code, got.stderr)
@@ -404,6 +417,39 @@ func TestExportHugoSiteBuilds(t *testing.T) {
 	cmd := exec.Command(hugoBin, "--source", out, "--destination", public)
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("hugo: %v\n%s", err, b)
+	}
+	for _, p := range hugoVendoredFiles {
+		rel := strings.TrimPrefix(p, "static/")
+		if _, err := os.Stat(filepath.Join(public, filepath.FromSlash(rel))); err != nil {
+			t.Errorf("hugo output lacks %s: %v", rel, err)
+		}
+	}
+	css, err := os.ReadFile(filepath.Join(public, "vendored", "tufte", "tufte.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, gone := range []string{".eot", ".ttf", ".svg"} {
+		if strings.Contains(string(css), gone) {
+			t.Errorf("public/vendored/tufte/tufte.css names %s, a font file the scaffold does not ship", gone)
+		}
+	}
+	for p, wants := range map[string][]string{
+		"index.html":                       {`href="/vendored/tufte/tufte.css"`, "<article>", "<section>"},
+		"notes/n1/index.html":              {`href="/vendored/tufte/tufte.css"`, "<article", "<section>"},
+		"hubs/000000000000src0/index.html": {`id="members"`, `id="backlinks"`},
+		"sources/s1/index.html":            {`<span class="review review-unreviewed">unreviewed</span>`, "Doe 2026", "Doe, Roe", "2026-01-02", `href="https://example.com/x"`},
+		"notes/n9/index.html":              {`<article class="status-superseded">`, "<p>Superseded by "},
+	} {
+		page, err := os.ReadFile(filepath.Join(public, filepath.FromSlash(p)))
+		if err != nil {
+			t.Errorf("hugo output lacks %s: %v", p, err)
+			continue
+		}
+		for _, want := range wants {
+			if !strings.Contains(string(page), want) {
+				t.Errorf("%s = %q, want it to contain %q", p, page, want)
+			}
+		}
 	}
 	for _, p := range []string{"index.html", "notes/n1/index.html", "sources/s1/index.html", "notes/202611091044tnn3/index.html"} {
 		if _, err := os.Stat(filepath.Join(public, filepath.FromSlash(p))); err != nil {

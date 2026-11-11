@@ -17,7 +17,7 @@ func TestScaffoldHashesCoverEmbeddedFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = fs.WalkDir(tree, ".", func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || strings.HasPrefix(p, scaffoldVendorDir) {
+		if err != nil || d.IsDir() || strings.HasPrefix(p, scaffoldVendoredDir) {
 			return err
 		}
 		b, err := fs.ReadFile(tree, p)

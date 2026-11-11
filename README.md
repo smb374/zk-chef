@@ -112,14 +112,14 @@ The Hugo export differs from the generic export in these ways:
 - `kind`, `url` and `published` are written as `zk_kind`, `source_url` and `source_published`. Hugo reserves `kind` (it accepts only page kinds, so a value such as `hub` fails the build in Hugo 0.123 and newer), and `url` would change the page's URL;
 - each page gets a `date` from the first 12 digits of its ID (UTC). A page whose ID is not a date gets no `date`;
 - shortcode calls such as `{{< x >}}` in the text are escaped, so Hugo shows them as text;
-- the export creates a minimal site in `DIR`: `hugo.toml` and the layouts `layouts/baseof.html`, `home.html`, `list.html` and `single.html`.
+- the export creates a minimal site in `DIR`: `hugo.toml` and the layouts `layouts/baseof.html`, `home.html`, `list.html` and `single.html`. The layouts use the Tufte style ([Tufte CSS](https://github.com/edwardtufte/tufte-css) and the ET Book fonts), vendored in `static/vendored/tufte/`. Source pages show their review state, citation, authors and published date, and a superseded page shows a banner.
 
 The export updates the scaffold by this rule. It looks at each scaffold file in `DIR`:
 
 - A missing file is created. To get a file back, delete it and run the export again.
 - A file that is byte for byte a version that zk-chef shipped is replaced with the current version.
 - Any other file counts as your edit and is kept. The export prints `kept your <path>` and a unified diff of your file against the current version, so you can merge changes by hand.
-- `static/vendor/` belongs to zk-chef. The export creates its files and overwrites them when they differ. Your edits there are lost. Use your own stylesheet.
+- `static/vendored/` belongs to zk-chef. The export creates its files and overwrites them when they differ. Your edits there are lost. Use your own stylesheet.
 - `hugo.toml` is not created when `DIR` already has a Hugo config. A Hugo config is one of these: `hugo.{toml,yaml,yml,json}`, `config.{toml,yaml,yml,json}` or a `config/` folder. An existing `hugo.toml` is replaced only when it equals a shipped template rendered with the title of the root page now. If you change that title or edit the file, it counts as your edit.
 
 The summary lists the files as `created <path>`, `updated <path>` and `kept your <path>`. `--json` lists the paths in `scaffolded`, `updated` and `kept` (no diff).

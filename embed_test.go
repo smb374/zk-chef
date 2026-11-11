@@ -21,6 +21,14 @@ func TestEmbedHasScaffoldAndSkills(t *testing.T) {
 		"export-scaffold/hugo/layouts/home.html",
 		"export-scaffold/hugo/layouts/list.html",
 		"export-scaffold/hugo/layouts/single.html",
+		"export-scaffold/hugo/static/vendored/tufte/tufte.css",
+		"export-scaffold/hugo/static/vendored/tufte/LICENSE-tufte-css",
+		"export-scaffold/hugo/static/vendored/tufte/LICENSE-et-book",
+		"export-scaffold/hugo/static/vendored/tufte/et-book/et-book-bold-line-figures/et-book-bold-line-figures.woff",
+		"export-scaffold/hugo/static/vendored/tufte/et-book/et-book-display-italic-old-style-figures/et-book-display-italic-old-style-figures.woff",
+		"export-scaffold/hugo/static/vendored/tufte/et-book/et-book-roman-line-figures/et-book-roman-line-figures.woff",
+		"export-scaffold/hugo/static/vendored/tufte/et-book/et-book-roman-old-style-figures/et-book-roman-old-style-figures.woff",
+		"export-scaffold/hugo/static/vendored/tufte/et-book/et-book-semi-bold-old-style-figures/et-book-semi-bold-old-style-figures.woff",
 	} {
 		if _, err := fs.Stat(assets, p); err != nil {
 			t.Errorf("embed FS lacks %s: %v", p, err)

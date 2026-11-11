@@ -78,7 +78,7 @@ Run `zk-chef export [-g hugo] DIR` when the human wants a copy of the vault for 
 - Exit 1: lint found errors. Nothing is written. Fix the errors (`LINT.md`) and run it again.
 - Exit 2: a usage problem, for example a missing `DIR`, an unknown generator, or a `DIR` inside the vault. `DIR` must be outside the vault.
 - `-g hugo` makes `DIR` a Hugo site root: the pages go to `DIR/content/`, with a scaffold (`hugo.toml` and layouts) beside them.
-- The export updates the scaffold by files: it creates a missing file, replaces a file that equals a version zk-chef shipped, and keeps any other file as your edit (text mode prints `kept your <path>` and a diff; `--json` lists `scaffolded`, `updated` and `kept`). Files under `static/vendor/` belong to zk-chef and are overwritten when they differ. `hugo.toml` is not created when another Hugo config exists. To restore a file, delete it and export again.
+- The export updates the scaffold by files: it creates a missing file, replaces a file that equals a version zk-chef shipped, and keeps any other file as your edit (text mode prints `kept your <path>` and a diff; `--json` lists `scaffolded`, `updated` and `kept`). Files under `static/vendored/` belong to zk-chef and are overwritten when they differ. `hugo.toml` is not created when another Hugo config exists. To restore a file, delete it and export again.
 
 ## Commit
 

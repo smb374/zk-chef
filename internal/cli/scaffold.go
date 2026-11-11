@@ -17,8 +17,8 @@ import (
 // hugoConfigNames are the names, in OUT, that Hugo reads its site config from (a file, or the config/ directory).
 var hugoConfigNames = []string{"hugo.toml", "hugo.yaml", "hugo.yml", "hugo.json", "config.toml", "config.yaml", "config.yml", "config.json", "config"}
 
-// scaffoldVendorDir is the folder, under the scaffold tree, of files that zk-chef owns.
-const scaffoldVendorDir = "static/vendor/"
+// scaffoldVendoredDir is the folder, under the scaffold tree, of files that zk-chef owns.
+const scaffoldVendoredDir = "static/vendored/"
 
 // scaffoldReport lists the slash paths, relative to OUT, that an export created, replaced with the current version, and kept as the user's edit. diffs maps each kept path to the unified diff of the user's file to the current version.
 type scaffoldReport struct {
@@ -33,7 +33,7 @@ func renderHugoToml(tmpl, title string) []byte {
 
 // exportScaffoldHugo brings the Hugo site files in out up to the embedded scaffold, by the rule in docs/adr/0001-export-scaffold-updates-by-known-hashes.md:
 // a missing file is created; a file that equals a released version (scaffoldHashes, hugoTomlTemplates) is replaced; any other file is kept.
-// Files under static/vendor/ are replaced whenever they differ. hugo.toml is not created when another Hugo config exists.
+// Files under static/vendored/ are replaced whenever they differ. hugo.toml is not created when another Hugo config exists.
 func exportScaffoldHugo(out, title string) (scaffoldReport, error) {
 	rep := scaffoldReport{[]string{}, []string{}, []string{}, map[string]string{}}
 	tree, err := fs.Sub(Assets, exportScaffoldDir)
@@ -78,7 +78,7 @@ func exportScaffoldHugo(out, title string) (scaffoldReport, error) {
 			return err
 		case !missing && bytes.Equal(have, want):
 			return nil
-		case !missing && !strings.HasPrefix(rel, scaffoldVendorDir) && !shipped(have):
+		case !missing && !strings.HasPrefix(rel, scaffoldVendoredDir) && !shipped(have):
 			rep.kept = append(rep.kept, rel)
 			rep.diffs[rel] = diff.Unified(rel, string(have), string(want))
 			return nil

@@ -46,9 +46,26 @@ Layout change: `export --generator hugo DIR` now makes `DIR` the site root. It w
 
 1. For each changed layout, run `sha256sum layouts/<file>` in `export-scaffold/hugo`. Append the hash to that file's list in `scaffoldHashes`, with the version in a comment. A file the release adds gets a new entry.
 2. If `hugo.toml.tmpl` changed, append its full text to `hugoTomlTemplates`.
-3. Do not list `static/vendor/` files. zk-chef overwrites them.
+3. Do not list `static/vendored/` files. zk-chef overwrites them.
 
 `TestScaffoldHashesCoverEmbeddedFiles` fails when the current version of an embedded file is not in the list.
+
+## Tufte vendoring
+
+The Hugo Export scaffold ships Tufte CSS and the ET Book fonts in `export-scaffold/hugo/static/vendored/tufte/`. Upstream, and the commits the files come from:
+
+- [edwardtufte/tufte-css](https://github.com/edwardtufte/tufte-css) at `b5d7b7bbe5ce9c4c50fcfad4f19ee3646cfd7ae1`: `tufte.css`, `LICENSE` (copied as `LICENSE-tufte-css`) and the `.woff` files of its `et-book/` folder.
+- [edwardtufte/et-book](https://github.com/edwardtufte/et-book) at `24d3a3bbfc880095d3df2b9e9d60d05819138e89`: `LICENSE` (copied as `LICENSE-et-book`).
+
+`tufte.css` differs from upstream only in its `@font-face` lines. Each `src:` lists only the `.woff` file (`url(...) format("woff")`), because zk-chef ships no `.eot`, `.ttf` or `.svg` files. The relative paths stay `et-book/<name>/<name>.woff`.
+
+To refresh:
+
+1. Clone both repos and check out the new commits.
+2. Copy `tufte.css`, the five `et-book/<name>/<name>.woff` files (the same names as now) and the two licences into `static/vendored/tufte/`.
+3. Apply the `@font-face` edit again: remove the `.eot` `src:` lines and cut each remaining `src:` to its `.woff` entry.
+4. Replace the two commits above.
+5. Do not append hashes to `scaffoldHashes`. `static/vendored/` files have no hash history, and zk-chef overwrites them.
 
 ## Floor guard check
 
