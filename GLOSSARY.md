@@ -20,6 +20,10 @@ _Avoid_: SSG, target, theme
 The site files that an Export with a Generator writes beside the pages (for `hugo`: `hugo.toml`, layouts and vendored static files). It is not listed in the manifest. Not the vault's own `scaffold/`, which `zk-chef init` writes.
 _Avoid_: Theme, template (the `zk new` templates are a different thing)
 
+**Style**:
+A named look of the Export scaffold: `plain` or `tufte`, selected with `--style`. A site keeps its Style between Exports until another one is selected. A Hugo theme (a `themes/` folder or module) is a different thing.
+_Avoid_: Theme, skin
+
 **Hubs line**:
 The first body line of every page except the root page: `Hubs: ` followed by links to the hubs the page belongs to. It decides Members.
 _Avoid_: Parents line, breadcrumb
