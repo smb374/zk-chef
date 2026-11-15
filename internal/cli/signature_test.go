@@ -68,13 +68,13 @@ func (s signer) review(t *testing.T, path, sha, verdict string) string {
 	return s.fenced(t, "vault-review v1\npath: "+path+"\nsha256: "+sha+"\nverdict: "+verdict+"\ndate: 2026-01-02\n")
 }
 
-const sourceHubs = "Hubs: [[000000000000src0|Sources]]\n\nWhy.\n\n## Extract\n\ntext\n\n"
+const sourceHubs = "Hubs: [[hubsrc|Sources]]\n\nWhy.\n\n## Extract\n\ntext\n\n"
 
-// source builds sources/s1.md with the review blocks under ## Review, newest first.
+// source builds notes/src001.md with the review blocks under ## Review, newest first.
 func source(reviewState, sha string, blocks ...string) string {
 	body := sourceHubs
 	body += "## Review\n\n" + strings.Join(blocks, "")
-	return doc("s1", "Source one", "source", body, kv{"raw", "raw/s1-a.bin"}, kv{"sha256", sha}, kv{"review", reviewState})
+	return doc("Source one", "source", body, kv{"raw", "raw/src001-a.bin"}, kv{"sha256", sha}, kv{"review", reviewState})
 }
 
 // signedVault is the base vault with keys/me.asc, the signer pinned, and extra changes applied.
@@ -112,7 +112,7 @@ func fenceLine(text string, nth int) int {
 
 func TestReviewSignatures(t *testing.T) {
 	s := newSigner(t)
-	const raw = "raw/s1-a.bin"
+	const raw = "raw/src001-a.bin"
 	newSHA := fmt.Sprintf("%x", sha256.Sum256([]byte("new"))) // hash of the updated raw file
 	good := s.review(t, raw, rawSHA, "reviewed")
 	disputed := s.review(t, raw, rawSHA, "disputed")
@@ -127,47 +127,47 @@ func TestReviewSignatures(t *testing.T) {
 		wantLine int      // line of the first want code; 0 skips the check
 		wantMsg  string   // substring of the message of the first want code
 	}{
-		{name: "valid signed review", changes: map[string]string{"sources/s1.md": source("reviewed", rawSHA, good)}},
+		{name: "valid signed review", changes: map[string]string{"notes/src001.md": source("reviewed", rawSHA, good)}},
 		{name: "raw file changed after review",
-			changes: map[string]string{"sources/s1.md": source("reviewed", rawSHA, good), raw: "RAW bytes\n\nwith newlines\n"},
+			changes: map[string]string{"notes/src001.md": source("reviewed", rawSHA, good), raw: "RAW bytes\n\nwith newlines\n"},
 			want:    []string{"E_REVIEW_MISMATCH", "E_SHA256"}, wantLine: 1, wantMsg: "differs from the raw file"},
 		{name: "signer not pinned", pinned: zeros,
-			changes: map[string]string{"sources/s1.md": source("reviewed", rawSHA, good)},
+			changes: map[string]string{"notes/src001.md": source("reviewed", rawSHA, good)},
 			want:    []string{"E_SIGNATURE"}, wantLine: fenceLine(source("reviewed", rawSHA, good), 1), wantMsg: "is not pinned in .zk-chef/config.toml"},
 		{name: "signer key not in keys/",
-			changes: map[string]string{"sources/s1.md": source("reviewed", rawSHA, good), "keys/me.asc": del},
+			changes: map[string]string{"notes/src001.md": source("reviewed", rawSHA, good), "keys/me.asc": del},
 			want:    []string{"E_SIGNATURE"}, wantLine: fenceLine(source("reviewed", rawSHA, good), 1), wantMsg: "signature does not verify against keys/"},
 		{name: "signed text edited after signing",
-			changes: map[string]string{"sources/s1.md": strings.Replace(source("reviewed", rawSHA, good), "verdict: reviewed", "verdict: disputed", 1)},
+			changes: map[string]string{"notes/src001.md": strings.Replace(source("reviewed", rawSHA, good), "verdict: reviewed", "verdict: disputed", 1)},
 			want:    []string{"E_SIGNATURE"}, wantLine: fenceLine(source("reviewed", rawSHA, good), 1), wantMsg: "signature does not verify against keys/"},
 		{name: "signed text is not a review message",
-			changes: map[string]string{"sources/s1.md": source("reviewed", rawSHA, s.fenced(t, "hello\n"))},
+			changes: map[string]string{"notes/src001.md": source("reviewed", rawSHA, s.fenced(t, "hello\n"))},
 			want:    []string{"E_SIGNATURE"}, wantMsg: "signed text is not a vault-review v1 message"},
 		{name: "note verdict differs from block",
-			changes: map[string]string{"sources/s1.md": source("disputed", rawSHA, good)},
+			changes: map[string]string{"notes/src001.md": source("disputed", rawSHA, good)},
 			want:    []string{"E_REVIEW_MISMATCH"}, wantLine: 1, wantMsg: "latest block verdict 'reviewed' differs from note 'disputed'"},
 		{name: "block path differs from note",
-			changes: map[string]string{"sources/s1.md": source("reviewed", rawSHA, s.review(t, "raw/s1-other.bin", rawSHA, "reviewed"))},
-			want:    []string{"E_REVIEW_MISMATCH"}, wantLine: 1, wantMsg: "latest block path 'raw/s1-other.bin' differs from note 'raw/s1-a.bin'"},
+			changes: map[string]string{"notes/src001.md": source("reviewed", rawSHA, s.review(t, "raw/src001-other.bin", rawSHA, "reviewed"))},
+			want:    []string{"E_REVIEW_MISMATCH"}, wantLine: 1, wantMsg: "latest block path 'raw/src001-other.bin' differs from note 'raw/src001-a.bin'"},
 		{name: "block sha256 differs from note",
-			changes: map[string]string{"sources/s1.md": source("reviewed", rawSHA, s.review(t, raw, newSHA, "reviewed"))},
+			changes: map[string]string{"notes/src001.md": source("reviewed", rawSHA, s.review(t, raw, newSHA, "reviewed"))},
 			want:    []string{"E_REVIEW_MISMATCH"}, wantLine: 1, wantMsg: "latest block sha256 '" + newSHA + "' differs from note '" + rawSHA + "'"},
 		{name: "same-name raw update, unreviewed, old block kept",
-			changes: map[string]string{"sources/s1.md": source("unreviewed", newSHA, good), raw: "new"},
+			changes: map[string]string{"notes/src001.md": source("unreviewed", newSHA, good), raw: "new"},
 		},
 		{name: "same-name raw update claims reviewed with a stale block",
-			changes: map[string]string{"sources/s1.md": source("reviewed", newSHA, good), raw: "new"},
+			changes: map[string]string{"notes/src001.md": source("reviewed", newSHA, good), raw: "new"},
 			want:    []string{"E_REVIEW_MISMATCH"}, wantLine: 1, wantMsg: "latest block sha256"},
 		{name: "reviewed with no signed block",
-			changes: map[string]string{"sources/s1.md": source("reviewed", rawSHA, "```\njust text\n```\n\n")},
+			changes: map[string]string{"notes/src001.md": source("reviewed", rawSHA, "```\njust text\n```\n\n")},
 			want:    []string{"E_REVIEW_MISMATCH"}, wantLine: 1, wantMsg: "review is reviewed but no signed block exists"},
 		{name: "second review goes first",
-			changes: map[string]string{"sources/s1.md": source("disputed", rawSHA, disputed, good)}},
+			changes: map[string]string{"notes/src001.md": source("disputed", rawSHA, disputed, good)}},
 		{name: "first block is the latest",
-			changes: map[string]string{"sources/s1.md": source("disputed", rawSHA, good, disputed)},
+			changes: map[string]string{"notes/src001.md": source("disputed", rawSHA, good, disputed)},
 			want:    []string{"E_REVIEW_MISMATCH"}, wantLine: 1, wantMsg: "latest block verdict 'reviewed' differs from note 'disputed'"},
 		{name: "bad older block is reported at its fence",
-			changes: map[string]string{"sources/s1.md": source("disputed", rawSHA, disputed, strings.Replace(good, "verdict: reviewed", "verdict: disputed", 1))},
+			changes: map[string]string{"notes/src001.md": source("disputed", rawSHA, disputed, strings.Replace(good, "verdict: reviewed", "verdict: disputed", 1))},
 			want:    []string{"E_SIGNATURE"}, wantLine: fenceLine(source("disputed", rawSHA, disputed, good), 2), wantMsg: "does not verify"},
 	}
 	for _, tt := range tests {
@@ -222,15 +222,15 @@ func writeFile(t *testing.T, path, content string) {
 // TestReviewSignaturesStaged: the commit hook runs lint --staged, so the staged note must be checked, not the worktree.
 func TestReviewSignaturesStaged(t *testing.T) {
 	s := newSigner(t)
-	good := s.review(t, "raw/s1-a.bin", rawSHA, "reviewed")
+	good := s.review(t, "raw/src001-a.bin", rawSHA, "reviewed")
 	tampered := strings.Replace(good, "verdict: reviewed", "verdict: disputed", 1)
-	env := setupVault(t, "dev", signedVault(t, s, s.fpr, map[string]string{"sources/s1.md": source("reviewed", rawSHA, tampered)}))
+	env := setupVault(t, "dev", signedVault(t, s, s.fpr, map[string]string{"notes/src001.md": source("reviewed", rawSHA, tampered)}))
 	for _, args := range [][]string{{"init", "-q"}, {"add", "."}} {
 		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
 	}
-	writeFile(t, "sources/s1.md", source("reviewed", rawSHA, good))
+	writeFile(t, "notes/src001.md", source("reviewed", rawSHA, good))
 
 	if codes := codesOf(t, run(env, "lint", "--json")); len(codes) != 0 {
 		t.Errorf("worktree lint codes %v, want none", codes)
@@ -249,11 +249,11 @@ func TestReviewSignaturesStaged(t *testing.T) {
 
 func TestReviewSignaturesGPGMissing(t *testing.T) {
 	s := newSigner(t)
-	good := s.review(t, "raw/s1-a.bin", rawSHA, "reviewed")
-	files := signedVault(t, s, s.fpr, map[string]string{"sources/s1.md": source("reviewed", rawSHA, good)})
+	good := s.review(t, "raw/src001-a.bin", rawSHA, "reviewed")
+	files := signedVault(t, s, s.fpr, map[string]string{"notes/src001.md": source("reviewed", rawSHA, good)})
 	t.Setenv("PATH", t.TempDir())
 	got := runIn(t, "dev", files, "lint")
-	want := "sources/s1.md:" + fmt.Sprint(fenceLine(source("reviewed", rawSHA, good), 1)) + ": E_SIGNATURE gpg not found\n1 errors, 0 warnings\n"
+	want := "notes/src001.md:" + fmt.Sprint(fenceLine(source("reviewed", rawSHA, good), 1)) + ": E_SIGNATURE gpg not found\n1 errors, 0 warnings\n"
 	if got.code != 1 || got.stdout != want {
 		t.Errorf("got code %d stdout %q, want 1 %q", got.code, got.stdout, want)
 	}
@@ -262,8 +262,8 @@ func TestReviewSignaturesGPGMissing(t *testing.T) {
 // TestReviewSignaturesIgnoresUserKeyring: a key in the caller's GNUPGHOME does not count; only keys/ does.
 func TestReviewSignaturesIgnoresUserKeyring(t *testing.T) {
 	s := newSigner(t)
-	good := s.review(t, "raw/s1-a.bin", rawSHA, "reviewed")
-	files := signedVault(t, s, s.fpr, map[string]string{"sources/s1.md": source("reviewed", rawSHA, good), "keys/me.asc": "\x00delete"})
+	good := s.review(t, "raw/src001-a.bin", rawSHA, "reviewed")
+	files := signedVault(t, s, s.fpr, map[string]string{"notes/src001.md": source("reviewed", rawSHA, good), "keys/me.asc": "\x00delete"})
 	env := setupVault(t, "dev", files)
 	t.Setenv("GNUPGHOME", s.home)
 	got := run(env, "lint", "--json")
@@ -275,8 +275,8 @@ func TestReviewSignaturesIgnoresUserKeyring(t *testing.T) {
 // TestReviewSignaturesRemovesTempHome: the temporary GNUPGHOME is gone after the run.
 func TestReviewSignaturesRemovesTempHome(t *testing.T) {
 	s := newSigner(t)
-	good := s.review(t, "raw/s1-a.bin", rawSHA, "reviewed")
-	files := signedVault(t, s, s.fpr, map[string]string{"sources/s1.md": source("reviewed", rawSHA, good)})
+	good := s.review(t, "raw/src001-a.bin", rawSHA, "reviewed")
+	files := signedVault(t, s, s.fpr, map[string]string{"notes/src001.md": source("reviewed", rawSHA, good)})
 	env := setupVault(t, "dev", files)
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)

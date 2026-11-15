@@ -2,7 +2,6 @@ package lint
 
 import (
 	"errors"
-	"path"
 	"slices"
 	"strings"
 )
@@ -23,7 +22,7 @@ func ParseSource(p, text string) (Source, error) {
 		return Source{}, errors.New("kind is not source")
 	}
 	s := Source{
-		ID:     strings.TrimSuffix(path.Base(p), ".md"),
+		ID:     d.ID(),
 		Title:  d.Title(),
 		Path:   p,
 		Raw:    d.str("raw"),
@@ -40,7 +39,7 @@ func ParseSource(p, text string) (Source, error) {
 func Sources(files map[string][]byte) []Source {
 	var out []Source
 	for p, b := range files {
-		if dir, name, _ := strings.Cut(p, "/"); dir == "sources" && strings.HasSuffix(name, ".md") && !strings.Contains(name, "/") {
+		if dir, name, _ := strings.Cut(p, "/"); dir == NotesDir && strings.HasSuffix(name, ".md") && !strings.Contains(name, "/") {
 			if s, err := ParseSource(p, strings.ToValidUTF8(string(b), "\ufffd")); err == nil {
 				out = append(out, s)
 			}

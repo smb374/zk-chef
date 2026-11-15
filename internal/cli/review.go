@@ -27,14 +27,15 @@ func failCode(inv *invocation, code int, msg string) int {
 }
 
 var (
-	reviewLineRe = regexp.MustCompile(`(?m)^review:.*$`)
+	reviewTagRe  = regexp.MustCompile(`\breview:(?:unreviewed|reviewed|disputed)\b`)
 	reviewHeadRe = regexp.MustCompile(`(?m)^## Review[ \t]*\n\n?`)
 )
 
-// withReview sets the note's review: line and puts block first in ## Review, as v1 does.
+// withReview sets the note's review: tag and puts block first in ## Review, as v1 does.
 func withReview(text, verdict, block string) string {
-	if loc := reviewLineRe.FindStringIndex(text); loc != nil {
-		text = text[:loc[0]] + "review: " + verdict + text[loc[1]:]
+	if _, body, ok := lint.SplitFrontmatter(text); ok {
+		head := text[:len(text)-len(body)]
+		text = reviewTagRe.ReplaceAllLiteralString(head, "review:"+verdict) + body
 	}
 	if loc := reviewHeadRe.FindStringIndex(text); loc != nil {
 		return text[:loc[0]] + "## Review\n\n" + block + text[loc[1]:]
@@ -70,9 +71,9 @@ func gitRun(inv *invocation, root string, args ...string) error {
 	return nil
 }
 
-// signSource signs a verdict on the raw file of sources/<id>.md and records it in the note.
+// signSource signs a verdict on the raw file of notes/<id>.md and records it in the note.
 func signSource(inv *invocation, root, id, verdict string) error {
-	rel := "sources/" + id + ".md"
+	rel := lint.NotesDir + "/" + id + ".md"
 	notePath := filepath.Join(root, rel)
 	b, err := os.ReadFile(notePath)
 	if err != nil {
@@ -204,8 +205,8 @@ func reviewVerb(inv *invocation) int {
 	if err != nil {
 		return fail(inv, "zk-chef review: "+err.Error())
 	}
-	if _, err := os.Stat(filepath.Join(root, "sources", id+".md")); err != nil {
-		return fail(inv, "zk-chef review: no source note sources/"+id+".md")
+	if _, err := os.Stat(filepath.Join(root, lint.NotesDir, id+".md")); err != nil {
+		return fail(inv, "zk-chef review: no source note "+lint.NotesDir+"/"+id+".md")
 	}
 	if err := signSource(inv, root, id, verdict); err != nil {
 		return failCode(inv, 1, "zk-chef review: "+err.Error())
@@ -217,7 +218,7 @@ func reviewVerb(inv *invocation) int {
 			Verdict   string `json:"verdict"`
 			Path      string `json:"path"`
 			Committed bool   `json:"committed"`
-		}{true, id, verdict, "sources/" + id + ".md", !inv.noCommit})
+		}{true, id, verdict, lint.NotesDir + "/" + id + ".md", !inv.noCommit})
 		return 0
 	}
 	fmt.Fprintf(inv.stdout, "signed %s: %s\n", id, verdict)

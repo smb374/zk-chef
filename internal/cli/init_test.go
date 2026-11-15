@@ -7,9 +7,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 // gitConfig reads one git config key of the repo in dir (v1 git_cfg).
@@ -45,7 +49,9 @@ func tree(t *testing.T, root string) map[string]string {
 
 func TestInitFreshVault(t *testing.T) {
 	env := setupVault(t, "1.2.3", nil)
+	before := time.Now().UTC().Truncate(time.Second)
 	got := run(env, "init", "v")
+	after := time.Now().UTC()
 	if got.code != 0 {
 		t.Fatalf("init exit %d, stderr %q", got.code, got.stderr)
 	}
@@ -53,14 +59,19 @@ func TestInitFreshVault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{".zk/config.toml", ".zk-chef/config.toml", ".githooks/pre-commit", "AGENTS.md", "index.md"} {
+	for _, p := range []string{".zk/config.toml", ".zk/templates/note.md", ".zk/templates/source.md", ".zk/templates/hub.md", ".zk/templates/log.md", ".zk-chef/config.toml", ".githooks/pre-commit", "AGENTS.md", "index.md"} {
 		if _, err := os.Stat(filepath.Join(v, p)); err != nil {
 			t.Errorf("missing file %s: %v", p, err)
 		}
 	}
-	for _, f := range []string{"notes", "hubs", "sources", "projects", "raw", "keys"} {
+	for _, f := range []string{"notes", "raw", "keys"} {
 		if st, err := os.Stat(filepath.Join(v, f)); err != nil || !st.IsDir() {
 			t.Errorf("missing folder %s: %v", f, err)
+		}
+	}
+	for _, f := range []string{"hubs", "sources", "projects"} {
+		if _, err := os.Stat(filepath.Join(v, f)); err == nil {
+			t.Errorf("v0.2 folder %s exists, want only notes/, raw/ and keys/", f)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(v, ".git")); err != nil {
@@ -83,10 +94,95 @@ func TestInitFreshVault(t *testing.T) {
 			t.Errorf("hook runs absolute path: %q", line)
 		}
 	}
-	if lint := run(env, "lint", "--root", "v"); lint.code != 0 {
+	if lint := run(env, "lint", "--root", "v"); lint.code != 0 || lint.stdout != "0 errors, 0 warnings\n" {
 		t.Errorf("fresh vault lint exit %d:\n%s%s", lint.code, lint.stdout, lint.stderr)
 	}
+
+	t.Run("index.md holds a UTC date and its kind tag", func(t *testing.T) {
+		index := readFile(t, filepath.Join(v, "index.md"))
+		m := regexp.MustCompile(`(?m)^date: (\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ)$`).FindStringSubmatch(index)
+		if m == nil {
+			t.Fatalf("index.md has no UTC date with Z:\n%s", index)
+		}
+		date, err := time.Parse(time.RFC3339, m[1])
+		if err != nil || date.Before(before) || date.After(after) {
+			t.Errorf("index.md date %s (%v), want a time between %s and %s", m[1], err, before, after)
+		}
+		if !strings.Contains(index, "\ntags: [kind:hub]\n") || strings.Contains(index, "\nid:") {
+			t.Errorf("index.md:\n%s\nwant tags: [kind:hub] and no id: field", index)
+		}
+	})
+
+	t.Run("vault config drops the seed hub IDs", func(t *testing.T) {
+		var cfg map[string]any
+		if err := toml.Unmarshal([]byte(readFile(t, filepath.Join(v, ".zk-chef", "config.toml"))), &cfg); err != nil {
+			t.Fatal(err)
+		}
+		for _, k := range []string{"index_id", "projects_id", "sources_id"} {
+			if _, ok := cfg[k]; ok {
+				t.Errorf("vault config has %s, want it dropped", k)
+			}
+		}
+		if cfg["min_version"] != "1.2.3" || cfg["word_count_warn"] != int64(400) || cfg["pinned_fingerprints"] == nil {
+			t.Errorf("vault config %v, want min_version 1.2.3, word_count_warn 400 and pinned_fingerprints", cfg)
+		}
+	})
+
+	t.Run("zk config makes 6-character lowercase stems and flag-only aliases", func(t *testing.T) {
+		var cfg struct {
+			Note struct {
+				Filename string   `toml:"filename"`
+				Charset  string   `toml:"id-charset"`
+				Length   int64    `toml:"id-length"`
+				Case     string   `toml:"id-case"`
+				Exclude  []string `toml:"exclude"`
+			} `toml:"note"`
+			Format struct {
+				Markdown struct {
+					LinkFormat string `toml:"link-format"`
+					ColonTags  bool   `toml:"colon-tags"`
+				} `toml:"markdown"`
+			} `toml:"format"`
+			Group map[string]any    `toml:"group"`
+			Alias map[string]string `toml:"alias"`
+		}
+		text := readFile(t, filepath.Join(v, ".zk", "config.toml"))
+		if err := toml.Unmarshal([]byte(text), &cfg); err != nil {
+			t.Fatal(err)
+		}
+		if cfg.Note.Filename != "{{id}}" || cfg.Note.Charset != "alphanum" || cfg.Note.Length != 6 || cfg.Note.Case != "lower" || !slices.Equal(cfg.Note.Exclude, []string{"raw"}) {
+			t.Errorf("[note] = %+v, want filename {{id}}, alphanum, 6, lower, exclude [raw]", cfg.Note)
+		}
+		if md := cfg.Format.Markdown; md.LinkFormat != "[[{{filename}}|{{title}}]]" || md.ColonTags {
+			t.Errorf("[format.markdown] = %+v, want link-format [[{{filename}}|{{title}}]] and colon-tags false", md)
+		}
+		if len(cfg.Group) != 0 {
+			t.Errorf("config has groups %v, want none", cfg.Group)
+		}
+		for _, kind := range []string{"note", "source", "hub", "log"} {
+			if want := "zk new notes --template " + kind + ".md --print-path --no-input"; cfg.Alias[kind] != want {
+				t.Errorf("alias %s = %q, want %q", kind, cfg.Alias[kind], want)
+			}
+		}
+	})
+
+	t.Run("one template per kind", func(t *testing.T) {
+		for _, tt := range []struct{ kind, tags string }{
+			{"note", "[kind:note]"}, {"source", "[kind:source, review:unreviewed]"}, {"hub", "[kind:hub]"}, {"log", "[kind:log]"},
+		} {
+			text := readFile(t, filepath.Join(v, ".zk", "templates", tt.kind+".md"))
+			for _, want := range []string{"\ntitle: {{json title}}\n", "\ntags: " + tt.tags + "\n", "\ndate: {{sh 'date -u +%Y-%m-%dT%H:%M:%SZ'}}\n"} {
+				if !strings.Contains(text, want) {
+					t.Errorf("%s.md lacks %q:\n%s", tt.kind, want, text)
+				}
+			}
+			if strings.Contains(text, "\nid:") || strings.Contains(text, "\nkind:") {
+				t.Errorf("%s.md has an id: or kind: field:\n%s", tt.kind, text)
+			}
+		}
+	})
 }
+
 func TestInitAgentsMd(t *testing.T) {
 	block, err := os.ReadFile(filepath.Join("..", "..", "scaffold", "AGENTS.md"))
 	if err != nil {

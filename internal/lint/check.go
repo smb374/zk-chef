@@ -8,10 +8,7 @@ import (
 	"strings"
 )
 
-var (
-	reviews  = []string{"unreviewed", "reviewed", "disputed"}
-	logTypes = []string{"decision", "meeting", "plan", "status"}
-)
+var reviews = []string{"unreviewed", "reviewed", "disputed"}
 
 // adder records one finding.
 type adder func(code, path string, line int, msg string)
@@ -36,29 +33,52 @@ func pyRepr(v any) string {
 	return fmt.Sprint(v)
 }
 
+// stemRe is the stem of every page but the root index: 6 lowercase letters and digits.
+var stemRe = regexp.MustCompile(`\A[a-z0-9]{6}\z`)
+
+// kindValues are the values of the kind: tag.
+var kindValues = []string{"note", "hub", "source", "log"}
+
 func checkFrontmatter(d *Page, add adder) {
-	fm := d.fm
-	folder, _, _ := strings.Cut(d.path, "/")
-	if d.path == IndexPath {
-		folder = "hubs"
-	}
-	for _, f := range []struct{ key, val string }{{"id", d.ID()}, {"title", d.Title()}, {"kind", d.Kind()}} {
-		if strings.TrimSpace(f.val) == "" {
-			add("E_FRONTMATTER", d.path, 1, f.key+" must be a non-empty string (quote it in YAML)")
+	if d.path != IndexPath {
+		if strings.Contains(strings.TrimPrefix(d.path, NotesDir+"/"), "/") {
+			add("E_FRONTMATTER", d.path, 1, "subfolder in "+NotesDir+"/; the folder is flat")
+		}
+		if !stemRe.MatchString(d.stem) {
+			add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("stem %s must be 6 lowercase letters and digits", pyRepr(d.stem)))
 		}
 	}
-	kind := d.Kind()
-	switch {
-	case !slices.Contains(kindValues(), kind):
-		add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("kind %s is not note, hub, source or log", pyRepr(fm["kind"])))
-	case kind != folderKind[folder]:
-		add("E_WRONG_FOLDER", d.path, 1, fmt.Sprintf("kind %s does not belong in %s/", kind, folder))
+	if strings.TrimSpace(d.Title()) == "" {
+		add("E_FRONTMATTER", d.path, 1, "title must be a non-empty string (quote it in YAML)")
 	}
-	if _, has := fm["status"]; has {
+	if v, has := d.fm["date"]; !has || v == nil || strings.TrimSpace(fmt.Sprint(v)) == "" {
+		add("E_FRONTMATTER", d.path, 1, "date is required (UTC, such as 2026-01-02T03:04:05Z)")
+	}
+	if d.tagsErr != "" {
+		add("E_FRONTMATTER", d.path, 1, d.tagsErr)
+		return
+	}
+	kinds := d.tagValues("kind")
+	switch {
+	case len(kinds) != 1:
+		add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("page needs exactly one kind: tag (note, hub, source or log), found %d", len(kinds)))
+	case !slices.Contains(kindValues, kinds[0]):
+		add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("kind %s is not note, hub, source or log", pyRepr(kinds[0])))
+	}
+	kind := d.Kind()
+	if d.path == IndexPath && kind != "" && kind != "hub" {
+		add("E_FRONTMATTER", d.path, 1, "index.md must be kind hub")
+	}
+	for _, s := range d.tagValues("status") {
+		if s != "superseded" {
+			add("E_FRONTMATTER", d.path, 1, "status tag must be status:superseded, found status:"+s)
+		}
+	}
+	if d.Superseded() {
 		if kind == "hub" || kind == "log" {
-			add("E_FRONTMATTER", d.path, 1, kind+" must not have status")
-		} else if _, ok := fm["superseded_by"].(string); !d.Superseded() || !ok {
-			add("E_FRONTMATTER", d.path, 1, "status must be 'superseded' with superseded_by: ID")
+			add("E_FRONTMATTER", d.path, 1, kind+" must not be superseded")
+		} else if _, ok := d.fm["superseded_by"].(string); !ok {
+			add("E_FRONTMATTER", d.path, 1, "status:superseded needs superseded_by: STEM")
 		}
 	}
 	if kind == "source" {
@@ -70,21 +90,12 @@ func checkFrontmatter(d *Page, add adder) {
 		if d.str("url") != "" && d.str("citation") == "" {
 			add("E_FRONTMATTER", d.path, 1, "source with url needs citation (IEEE form)")
 		}
-		if !slices.Contains(reviews, d.Review()) {
-			add("E_FRONTMATTER", d.path, 1, "review must be one of "+strings.Join(reviews, ", "))
+		if r := d.tagValues("review"); len(r) != 1 || !slices.Contains(reviews, r[0]) {
+			add("E_FRONTMATTER", d.path, 1, "source needs exactly one review: tag, one of "+strings.Join(reviews, ", "))
 		}
+	} else if kind != "" && len(d.tagValues("review")) > 0 {
+		add("E_FRONTMATTER", d.path, 1, "only a source has a review: tag")
 	}
-	if _, has := fm["type"]; has && kind == "log" && !slices.Contains(logTypes, d.str("type")) {
-		add("E_FRONTMATTER", d.path, 1, "type must be one of "+strings.Join(logTypes, ", "))
-	}
-}
-
-func kindValues() []string {
-	out := make([]string, 0, len(folderKind))
-	for _, k := range folderKind {
-		out = append(out, k)
-	}
-	return out
 }
 
 // hubMapMissing reports a hub whose members link each other but whose map holds neither an

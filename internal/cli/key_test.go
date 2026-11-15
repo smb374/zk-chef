@@ -118,20 +118,13 @@ func TestKeyAddKeepsOtherConfigKeys(t *testing.T) {
 	}
 	b, _ := os.ReadFile(".zk-chef/config.toml")
 	var cfg struct {
-		WordCountWarn int    `toml:"word_count_warn"`
-		IndexID       string `toml:"index_id"`
-		ProjectsID    string `toml:"projects_id"`
-		SourcesID     string `toml:"sources_id"`
+		WordCountWarn int `toml:"word_count_warn"`
 	}
 	if err := toml.Unmarshal(b, &cfg); err != nil {
 		t.Fatal(err)
 	}
-	want := struct {
-		n                int
-		idx, prj, source string
-	}{400, "index", "000000000000prj0", "000000000000src0"}
-	if cfg.WordCountWarn != want.n || cfg.IndexID != want.idx || cfg.ProjectsID != want.prj || cfg.SourcesID != want.source {
-		t.Errorf("config %+v after add, want the scaffold values %+v", cfg, want)
+	if cfg.WordCountWarn != 400 {
+		t.Errorf("config %+v after add, want the scaffold value word_count_warn 400", cfg)
 	}
 }
 func TestKeyRmKeepsFileAndUnpins(t *testing.T) {
@@ -220,8 +213,8 @@ func TestKeyRmJSON(t *testing.T) {
 }
 func TestKeyAddMakesSignedSourceLintClean(t *testing.T) {
 	s := newSigner(t)
-	good := s.review(t, "raw/s1-a.bin", rawSHA, "reviewed")
-	env := keyVault(t, s, map[string]string{"sources/s1.md": source("reviewed", rawSHA, good)})
+	good := s.review(t, "raw/src001-a.bin", rawSHA, "reviewed")
+	env := keyVault(t, s, map[string]string{"notes/src001.md": source("reviewed", rawSHA, good)})
 	if !codesOf(t, run(env, "lint", "--json"))["E_SIGNATURE"] {
 		t.Fatal("lint before key add has no E_SIGNATURE, want one")
 	}

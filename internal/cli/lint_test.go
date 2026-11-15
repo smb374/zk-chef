@@ -8,11 +8,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
 
-// Fixtures ported from tests/test_vault.py (IDX, HUB, doc, RAW, SHA, base, codes, with_).
+// Fixtures ported from tests/test_vault.py (IDX, HUB, doc, RAW, SHA, base, codes, with_), in the v0.3 format.
 const (
 	idxID    = "index"
 	hubLine  = "Hubs: [[" + idxID + "|Index]]"
@@ -21,46 +22,42 @@ const (
 
 var rawSHA = fmt.Sprintf("%x", sha256.Sum256([]byte(rawBytes)))
 
-// kv is one extra frontmatter line, in order.
+// kv is one extra frontmatter line, in order. doc turns the keys review and status into tags.
 type kv [2]string
 
-func doc(id, title, kind, body string, extra ...kv) string {
+// doc builds a v0.3 page: title, date and a tags list that starts with the kind. The ID is the file stem, so doc takes none.
+func doc(title, kind, body string, extra ...kv) string {
+	tags := []string{"kind:" + kind}
 	var fm strings.Builder
 	for _, e := range extra {
-		fm.WriteString(e[0])
-		fm.WriteString(": ")
-		fm.WriteString(e[1])
-		fm.WriteString("\n")
+		if e[0] == "review" || e[0] == "status" {
+			tags = append(tags, e[0]+":"+e[1])
+			continue
+		}
+		fm.WriteString(e[0] + ": " + e[1] + "\n")
 	}
-	return "---\nid: " + id + "\ntitle: " + title + "\nkind: " + kind + "\n" + fm.String() + "---\n" + body + "\n"
+	return "---\ntitle: " + title + "\ndate: 2026-01-02T03:04:05Z\ntags: [" + strings.Join(tags, ", ") + "]\n" + fm.String() + "---\n" + body + "\n"
 }
 
-// baseVault is the scaffold hubs and config plus one source and one note.
+// baseVault is the scaffold config, the root index, a Sources hub (hubsrc), a Projects hub (hubprj), one source and one note.
 func baseVault(t *testing.T) map[string]string {
 	t.Helper()
-	files := map[string]string{}
-	scaffold := filepath.Join("..", "..", "scaffold")
-	hubs, err := os.ReadDir(filepath.Join(scaffold, "hubs"))
+	cfg, err := os.ReadFile(filepath.Join("..", "..", "scaffold", ".zk-chef", "config.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	paths := []string{".zk-chef/config.toml", "index.md"}
-	for _, h := range hubs {
-		paths = append(paths, "hubs/"+h.Name())
+	files := map[string]string{
+		".zk-chef/config.toml": string(cfg),
+		"index.md":             doc("Index", "hub", "Root of the vault. Every note reaches this hub through Hubs lines.\n\n- [[hubprj|Projects]]\n- [[hubsrc|Sources]]"),
+		"notes/hubprj.md":      doc("Projects", "hub", "Hubs: [[index|Index]]\n\nOne project hub per project sits under this hub."),
+		"notes/hubsrc.md":      doc("Sources", "hub", "Hubs: [[index|Index]]\n\nOne source note per raw file."),
 	}
-	for _, p := range paths {
-		b, err := os.ReadFile(filepath.Join(scaffold, p))
-		if err != nil {
-			t.Fatal(err)
-		}
-		files[p] = string(b)
-	}
-	files["sources/s1.md"] = doc("s1", "Source one", "source",
-		"Hubs: [[000000000000src0|Sources]]\n\nWhy.\n\n## Review",
-		kv{"raw", "raw/s1-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})
-	files["raw/s1-a.bin"] = rawBytes
-	files["notes/n1.md"] = doc("n1", "Leaders are unique", "note",
-		hubLine+"\n\nOne leader per term [1, p. 4].\n\n## References\n\n1. [[s1|Source one]]")
+	files["notes/src001.md"] = doc("Source one", "source",
+		"Hubs: [[hubsrc|Sources]]\n\nWhy.\n\n## Review",
+		kv{"raw", "raw/src001-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})
+	files["raw/src001-a.bin"] = rawBytes
+	files["notes/not001.md"] = doc("Leaders are unique", "note",
+		hubLine+"\n\nOne leader per term [1, p. 4].\n\n## References\n\n1. [[src001|Source one]]")
 	return files
 }
 
@@ -157,23 +154,23 @@ func TestLintOutput(t *testing.T) {
 
 // TestLintYAMLDifferences pins the cases where yaml.v3 (YAML 1.2) and PyYAML (YAML 1.1) differ.
 func TestLintYAMLDifferences(t *testing.T) {
-	linksN1 := hubLine + "\n\n[[n1|Leaders are unique]]"
+	linksN1 := hubLine + "\n\n[[not001|Leaders are unique]]"
 	tests := []struct {
 		name     string
 		file     string
 		wantMsg  string // substring of one E_FRONTMATTER message; empty means no E_FRONTMATTER at all
 		wantPath string
 	}{
-		{"unquoted numeric id is not a string", doc("123", "Two", "note", linksN1),
-			"id must be a non-empty string (quote it in YAML)", "notes/n2.md"},
-		{"yes is a string in YAML 1.2, a bool in PyYAML", doc("n2", "yes", "note", linksN1), "", ""},
-		{"non-string key is accepted, as in PyYAML", doc("n2", "Two", "note", linksN1, kv{"1", "x"}), "", ""},
-		{"duplicate key is an error, PyYAML keeps the last", doc("n2", "Two", "note", linksN1, kv{"title", "Three"}),
-			"invalid YAML: ", "notes/n2.md"},
+		{"unquoted numeric title is not a string", doc("123", "note", linksN1),
+			"title must be a non-empty string (quote it in YAML)", "notes/not002.md"},
+		{"yes is a string in YAML 1.2, a bool in PyYAML", doc("yes", "note", linksN1), "", ""},
+		{"non-string key is accepted, as in PyYAML", doc("Two", "note", linksN1, kv{"1", "x"}), "", ""},
+		{"duplicate key is an error, PyYAML keeps the last", doc("Two", "note", linksN1, kv{"title", "Three"}),
+			"invalid YAML: ", "notes/not002.md"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := runIn(t, "dev", with_(t, map[string]string{"notes/n2.md": tt.file}), "lint", "--json")
+			got := runIn(t, "dev", with_(t, map[string]string{"notes/not002.md": tt.file}), "lint", "--json")
 			var r report
 			if err := json.Unmarshal([]byte(got.stdout), &r); err != nil {
 				t.Fatalf("stdout %q stderr %q: %v", got.stdout, got.stderr, err)
@@ -222,84 +219,163 @@ func runCodeCases(t *testing.T, tests []codeCase) {
 
 // TestLintErrors ports tests/test_vault.py test_lint_errors. The Python test has no signature case.
 func TestLintErrors(t *testing.T) {
-	n := func(body string) string { return doc("n2", "Two", "note", body) }
+	n := func(body string) string { return doc("Two", "note", body) }
 	runCodeCases(t, []codeCase{
 		{name: "E_BROKEN_LINK", want: "E_BROKEN_LINK", changes: map[string]string{
-			"notes/n2.md": n(hubLine + "\n\nSee [[nope|X]] and [[n1|Leaders are unique]].")}},
-		{name: "E_FRONTMATTER", want: "E_FRONTMATTER", changes: map[string]string{"notes/n2.md": "no frontmatter"}},
-		{name: "E_WRONG_FOLDER", want: "E_WRONG_FOLDER", changes: map[string]string{"notes/n2.md": doc("n2", "Two", "hub", hubLine)}},
-		{name: "E_DUPLICATE_ID", want: "E_DUPLICATE_ID", changes: map[string]string{"notes/n2.md": doc("zz", "Two", "note", hubLine)}},
+			"notes/not002.md": n(hubLine + "\n\nSee [[nope|X]] and [[not001|Leaders are unique]].")}},
+		{name: "E_FRONTMATTER", want: "E_FRONTMATTER", changes: map[string]string{"notes/not002.md": "no frontmatter"}},
+		{name: "E_DUPLICATE_ID", want: "E_DUPLICATE_ID", changes: map[string]string{"notes/sub/not001.md": doc("Two", "note", hubLine)}},
 		{name: "E_HUBS_LINE", want: "E_HUBS_LINE", changes: map[string]string{
-			"notes/n2.md": n("Intro\n\n[[n1|Leaders are unique]]")}},
+			"notes/not002.md": n("Intro\n\n[[not001|Leaders are unique]]")}},
 		{name: "E_UNREACHABLE", want: "E_UNREACHABLE", changes: map[string]string{
-			"hubs/h1.md":  doc("h1", "H1", "hub", "Hubs: [[h2|H2]]"),
-			"hubs/h2.md":  doc("h2", "H2", "hub", "Hubs: [[h1|H1]]"),
-			"notes/n2.md": n("Hubs: [[h1|H1]]\n\n[[n1|Leaders are unique]]")}},
+			"notes/hub001.md": doc("H1", "hub", "Hubs: [[hub002|H2]]"),
+			"notes/hub002.md": doc("H2", "hub", "Hubs: [[hub001|H1]]"),
+			"notes/not002.md": n("Hubs: [[hub001|H1]]\n\n[[not001|Leaders are unique]]")}},
 		{name: "E_CITATION", want: "E_CITATION", changes: map[string]string{
-			"notes/n2.md": n(hubLine + "\n\nClaim [2].\n\n## References\n\n1. [[s1|Source one]]")}},
+			"notes/not002.md": n(hubLine + "\n\nClaim [2].\n\n## References\n\n1. [[src001|Source one]]")}},
 		{name: "E_RAW_ORPHAN", want: "E_RAW_ORPHAN", changes: map[string]string{"raw/stray.txt": "x"}},
-		{name: "E_SHA256", want: "E_SHA256", changes: map[string]string{"raw/s1-a.bin": "changed"}},
+		{name: "E_SHA256", want: "E_SHA256", changes: map[string]string{"raw/src001-a.bin": "changed"}},
 		{name: "a Hubs line that links a non-hub is E_HUBS_LINE", want: "E_HUBS_LINE", changes: map[string]string{
-			"notes/n2.md": n("Hubs: [[n1|Leaders are unique]]\n\n[[n1|x]]")}},
-		{name: "E_REVIEW_HEADING", want: "E_REVIEW_HEADING", changes: map[string]string{"sources/s1.md": doc("s1", "Source one", "source", "Hubs: [[000000000000src0|Sources]]\n\nWhy.", kv{"raw", "raw/s1-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})}},
-		{name: "a URL source without citation is E_FRONTMATTER", want: "E_FRONTMATTER", changes: map[string]string{"sources/s1.md": doc("s1", "Source one", "source", "Hubs: [[000000000000src0|Sources]]\n\n## Review", kv{"raw", "raw/s1-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"}, kv{"url", "https://example.com/x"})}},
+			"notes/not002.md": n("Hubs: [[not001|Leaders are unique]]\n\n[[not001|x]]")}},
+		{name: "E_REVIEW_HEADING", want: "E_REVIEW_HEADING", changes: map[string]string{"notes/src001.md": doc("Source one", "source", "Hubs: [[hubsrc|Sources]]\n\nWhy.", kv{"raw", "raw/src001-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})}},
+		{name: "a URL source without citation is E_FRONTMATTER", want: "E_FRONTMATTER", changes: map[string]string{"notes/src001.md": doc("Source one", "source", "Hubs: [[hubsrc|Sources]]\n\n## Review", kv{"raw", "raw/src001-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"}, kv{"url", "https://example.com/x"})}},
+	})
+}
+
+// findingsOf runs lint --json over files and returns the findings.
+func findingsOf(t *testing.T, files map[string]string) []finding {
+	t.Helper()
+	got := runIn(t, "dev", files, "lint", "--json")
+	var r report
+	if err := json.Unmarshal([]byte(got.stdout), &r); err != nil {
+		t.Fatalf("stdout %q stderr %q is not a lint report: %v", got.stdout, got.stderr, err)
+	}
+	return r.Findings
+}
+
+// TestLintPageFormat covers the v0.3 page rules: the stem is the ID, the kind is one tag, date and tags are required, notes/ is flat.
+func TestLintPageFormat(t *testing.T) {
+	note := func(fm string) string {
+		return "---\n" + fm + "---\nHubs: [[hubsrc|Sources]]\n\nSee [[not001|Leaders are unique]].\n"
+	}
+	valid := "title: Other\ndate: 2026-01-02T03:04:05Z\ntags: [kind:note]\n"
+	tests := []struct {
+		name    string
+		changes map[string]string
+		want    []finding // exactly these findings; the message is checked by substring
+	}{
+		{"a valid page is clean", map[string]string{"notes/notaaa.md": note(valid)}, nil},
+		{"no kind tag", map[string]string{"notes/notaaa.md": note("title: Other\ndate: 2026-01-02T03:04:05Z\ntags: [topic:x]\n")},
+			[]finding{{"E_FRONTMATTER", "notes/notaaa.md", 1, "kind"}}},
+		{"two kind tags", map[string]string{"notes/notaaa.md": note("title: Other\ndate: 2026-01-02T03:04:05Z\ntags: [kind:note, kind:hub]\n")},
+			[]finding{{"E_FRONTMATTER", "notes/notaaa.md", 1, "kind"}}},
+		{"unknown kind", map[string]string{"notes/notaaa.md": note("title: Other\ndate: 2026-01-02T03:04:05Z\ntags: [kind:essay]\n")},
+			[]finding{{"E_FRONTMATTER", "notes/notaaa.md", 1, "kind"}}},
+		{"no date", map[string]string{"notes/notaaa.md": note("title: Other\ntags: [kind:note]\n")},
+			[]finding{{"E_FRONTMATTER", "notes/notaaa.md", 1, "date"}}},
+		{"no tags", map[string]string{"notes/notaaa.md": note("title: Other\ndate: 2026-01-02T03:04:05Z\n")},
+			[]finding{{"E_FRONTMATTER", "notes/notaaa.md", 1, "tags"}}},
+		{"stem with capitals", map[string]string{"notes/NotAaa.md": note(valid)},
+			[]finding{{"E_FRONTMATTER", "notes/NotAaa.md", 1, "stem"}}},
+		{"stem too short", map[string]string{"notes/short.md": note(valid)},
+			[]finding{{"E_FRONTMATTER", "notes/short.md", 1, "stem"}}},
+		{"stem too long", map[string]string{"notes/notaaaa.md": note(valid)},
+			[]finding{{"E_FRONTMATTER", "notes/notaaaa.md", 1, "stem"}}},
+		{"index is a stem only at the root", map[string]string{"notes/index.md": note(valid)},
+			[]finding{{"E_DUPLICATE_ID", "notes/index.md", 1, "index"}, {"E_FRONTMATTER", "notes/index.md", 1, "stem"}}},
+		{"subfolder in notes/", map[string]string{"notes/sub/notaaa.md": note(valid)},
+			[]finding{{"E_FRONTMATTER", "notes/sub/notaaa.md", 1, "subfolder"}}},
+		{"duplicate stem", map[string]string{"notes/sub/not001.md": note(valid)},
+			[]finding{{"E_DUPLICATE_ID", "notes/sub/not001.md", 1, "not001"}, {"E_FRONTMATTER", "notes/sub/not001.md", 1, "subfolder"}}},
+		{"E_WRONG_FOLDER is gone: a hub sits in notes/", map[string]string{"notes/hubaaa.md": doc("Hub", "hub", "Hubs: [[index|Index]]\n\nA hub.")}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := findingsOf(t, with_(t, tt.changes))
+			if len(got) != len(tt.want) {
+				t.Fatalf("findings %+v, want %d like %+v", got, len(tt.want), tt.want)
+			}
+			for i, w := range tt.want {
+				if g := got[i]; g.Code != w.Code || g.Path != w.Path || g.Line != w.Line || !strings.Contains(g.Msg, w.Msg) {
+					t.Errorf("finding %d = %+v, want code %s path %s line %d, message containing %q", i, g, w.Code, w.Path, w.Line, w.Msg)
+				}
+			}
+		})
+	}
+}
+
+// TestLintHubsLineSeparator: the Hubs line joins links with ", "; the v0.2 " · " is E_HUBS_LINE.
+func TestLintHubsLineSeparator(t *testing.T) {
+	page := func(hubs string) map[string]string {
+		return map[string]string{"notes/notaaa.md": doc("Other", "note", hubs+"\n\nSee [[not001|Leaders are unique]].")}
+	}
+	t.Run("comma separator is clean", func(t *testing.T) {
+		if got := findingsOf(t, with_(t, page("Hubs: [[hubsrc|Sources]], [[hubprj|Projects]]"))); len(got) != 0 {
+			t.Errorf("findings %+v, want none", got)
+		}
+	})
+	t.Run("middle dot separator is E_HUBS_LINE", func(t *testing.T) {
+		got := findingsOf(t, with_(t, page("Hubs: [[hubsrc|Sources]] · [[hubprj|Projects]]")))
+		if !slices.ContainsFunc(got, func(f finding) bool { return f.Code == "E_HUBS_LINE" && f.Path == "notes/notaaa.md" && f.Line == 6 }) {
+			t.Errorf("findings %+v, want E_HUBS_LINE at notes/notaaa.md:6", got)
+		}
 	})
 }
 
 // TestLintCitationRules ports tests/test_vault.py test_lint_citation_rules.
 func TestLintCitationRules(t *testing.T) {
 	ref := "\n\n## References\n\n"
-	s1 := "[[s1|Source one]]"
+	src001 := "[[src001|Source one]]"
 	note := func(body string) map[string]string {
-		return map[string]string{"notes/n2.md": doc("n2", "Two", "note", hubLine+"\n\n"+body)}
+		return map[string]string{"notes/not002.md": doc("Two", "note", hubLine+"\n\n"+body)}
 	}
 	runCodeCases(t, []codeCase{
-		{name: "in order with a page locator", absent: "E_CITATION", changes: note("A [1], B [2, p. 9]." + ref + "1. " + s1 + "\n2. " + s1)},
-		{name: "first-use order", want: "E_CITATION", changes: note("A [2], B [1]." + ref + "1. " + s1 + "\n2. " + s1)},
-		{name: "entry never cited", want: "E_CITATION", changes: note("A [1]." + ref + "1. " + s1 + "\n2. " + s1)},
-		{name: "References not last H2", want: "E_CITATION", changes: note("A [1]." + ref + "1. " + s1 + "\n\n## Later\n\ntext")},
+		{name: "in order with a page locator", absent: "E_CITATION", changes: note("A [1], B [2, p. 9]." + ref + "1. " + src001 + "\n2. " + src001)},
+		{name: "first-use order", want: "E_CITATION", changes: note("A [2], B [1]." + ref + "1. " + src001 + "\n2. " + src001)},
+		{name: "entry never cited", want: "E_CITATION", changes: note("A [1]." + ref + "1. " + src001 + "\n2. " + src001)},
+		{name: "References not last H2", want: "E_CITATION", changes: note("A [1]." + ref + "1. " + src001 + "\n\n## Later\n\ntext")},
 		{name: "no References", want: "E_CITATION", changes: note("A [1].")},
 		{name: "no evidence", absent: "E_CITATION", changes: note("Plain text, no evidence.")},
-		{name: "markdown link and wiki link are not citations", absent: "E_CITATION", changes: note("A [link](http://x) and [[n1|Leaders are unique]]")},
+		{name: "markdown link and wiki link are not citations", absent: "E_CITATION", changes: note("A [link](http://x) and [[not001|Leaders are unique]]")},
 	})
 }
 
 // TestLintWarnings ports tests/test_vault.py test_lint_warnings.
 func TestLintWarnings(t *testing.T) {
-	n2 := func(body string) map[string]string {
-		return map[string]string{"notes/n2.md": doc("n2", "Two", "note", hubLine+"\n\n"+body)}
+	not002 := func(body string) map[string]string {
+		return map[string]string{"notes/not002.md": doc("Two", "note", hubLine+"\n\n"+body)}
 	}
-	// hubMap builds hub h1 under the Index, with members a1 and a2 that link each other.
+	// hubMap builds hub hub001 under the Index, with members nota01 and nota02 that link each other.
 	hubMap := func(body string) map[string]string {
-		m := "Hubs: [[h1|H1]]\n\n"
+		m := "Hubs: [[hub001|H1]]\n\n"
 		return map[string]string{
-			"hubs/h1.md":  doc("h1", "H1", "hub", "Hubs: [[index|Index]]\n\n"+body),
-			"notes/a1.md": doc("a1", "A", "note", m+"[[a2|B]] refines it."),
-			"notes/a2.md": doc("a2", "B", "note", m+"[[a1|A]] comes first."),
+			"notes/hub001.md": doc("H1", "hub", "Hubs: [[index|Index]]\n\n"+body),
+			"notes/nota01.md": doc("A", "note", m+"[[nota02|B]] refines it."),
+			"notes/nota02.md": doc("B", "note", m+"[[nota01|A]] comes first."),
 		}
 	}
-	oldN3 := doc("n3", "Old", "note", hubLine+"\n\n[[n1|Leaders are unique]]", kv{"status", "superseded"}, kv{"superseded_by", "n1"})
+	oldN3 := doc("Old", "note", hubLine+"\n\n[[not001|Leaders are unique]]", kv{"status", "superseded"}, kv{"superseded_by", "not001"})
 	runCodeCases(t, []codeCase{
-		{name: "W_STALE_ALIAS in a note's References", want: "W_STALE_ALIAS", changes: n2("A claim [1].\n\n## References\n\n1. [[s1|Old title]]")},
-		{name: "W_STALE_ALIAS on a note's Hubs line", want: "W_STALE_ALIAS", changes: map[string]string{"notes/n2.md": doc("n2", "Two", "note", "Hubs: [[index|Old hub]]\n\n[[n1|Leaders are unique]]")}},
-		{name: "W_STALE_ALIAS on a hub's prose", want: "W_STALE_ALIAS", changes: hubMap("See [[a1|Old title]].")},
-		{name: "a stale alias in note Prose is the writer's wording", absent: "W_STALE_ALIAS", changes: n2("See [[n1|Old title]].")},
-		{name: "a stale alias under a note H2 before References is Prose", absent: "W_STALE_ALIAS", changes: n2("## See also\n\n[[n1|Old title]]")},
-		{name: "W_DEAD_END", want: "W_DEAD_END", changes: n2("Nothing linked.")},
-		{name: "W_MARKER", want: "W_MARKER", changes: n2("TODO: later. [[n1|Leaders are unique]]")},
-		{name: "W_WORD_COUNT", want: "W_WORD_COUNT", changes: n2(strings.Repeat("word ", 500) + "[[n1|Leaders are unique]]")},
+		{name: "W_STALE_ALIAS in a note's References", want: "W_STALE_ALIAS", changes: not002("A claim [1].\n\n## References\n\n1. [[src001|Old title]]")},
+		{name: "W_STALE_ALIAS on a note's Hubs line", want: "W_STALE_ALIAS", changes: map[string]string{"notes/not002.md": doc("Two", "note", "Hubs: [[index|Old hub]]\n\n[[not001|Leaders are unique]]")}},
+		{name: "W_STALE_ALIAS on a hub's prose", want: "W_STALE_ALIAS", changes: hubMap("See [[nota01|Old title]].")},
+		{name: "a stale alias in note Prose is the writer's wording", absent: "W_STALE_ALIAS", changes: not002("See [[not001|Old title]].")},
+		{name: "a stale alias under a note H2 before References is Prose", absent: "W_STALE_ALIAS", changes: not002("## See also\n\n[[not001|Old title]]")},
+		{name: "W_DEAD_END", want: "W_DEAD_END", changes: not002("Nothing linked.")},
+		{name: "W_MARKER", want: "W_MARKER", changes: not002("TODO: later. [[not001|Leaders are unique]]")},
+		{name: "W_WORD_COUNT", want: "W_WORD_COUNT", changes: not002(strings.Repeat("word ", 500) + "[[not001|Leaders are unique]]")},
 		{name: "W_SUPERSEDED_LINK", want: "W_SUPERSEDED_LINK", changes: map[string]string{
-			"notes/n3.md": oldN3, "notes/n2.md": doc("n2", "Two", "note", hubLine+"\n\nSee [[n3|Old]].")}},
+			"notes/not003.md": oldN3, "notes/not002.md": doc("Two", "note", hubLine+"\n\nSee [[not003|Old]].")}},
 		{name: "W_HUB_MAP", want: "W_HUB_MAP", changes: hubMap("A short scope line.")},
 		{name: "a hub map with a GAP: line is clean", absent: "W_HUB_MAP", changes: hubMap("GAP: a note on retries.")},
-		{name: "a hub map with a walk is clean", absent: "W_HUB_MAP", changes: hubMap("1. [[a1|A]]\n2. [[a2|B]] follows A.")},
+		{name: "a hub map with a walk is clean", absent: "W_HUB_MAP", changes: hubMap("1. [[nota01|A]]\n2. [[nota02|B]] follows A.")},
 	})
 
 	t.Run("Extract and code fences are not scanned", func(t *testing.T) {
-		src := doc("s1", "Source one", "source",
-			"Hubs: [[000000000000src0|Sources]]\n\n## Extract\n\nTODO: [[x]] [3]\n\n```\nGAP: [[y]]\n```\n\n## Review",
-			kv{"raw", "raw/s1-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})
-		got := runIn(t, "dev", with_(t, map[string]string{"sources/s1.md": src}), "lint")
+		src := doc("Source one", "source",
+			"Hubs: [[hubsrc|Sources]]\n\n## Extract\n\nTODO: [[x]] [3]\n\n```\nGAP: [[y]]\n```\n\n## Review",
+			kv{"raw", "raw/src001-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})
+		got := runIn(t, "dev", with_(t, map[string]string{"notes/src001.md": src}), "lint")
 		if got.code != 0 || got.stdout != "0 errors, 0 warnings\n" {
 			t.Errorf("got code %d stdout %q, want 0 \"0 errors, 0 warnings\\n\"", got.code, got.stdout)
 		}
@@ -315,7 +391,7 @@ func TestLintStaged(t *testing.T) {
 		}
 	}
 	// Break a staged file and add an untracked raw file, both after staging.
-	if err := os.WriteFile("notes/n1.md", []byte("changed after staging"), 0o644); err != nil {
+	if err := os.WriteFile("notes/not001.md", []byte("changed after staging"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile("raw/stray.txt", []byte("x"), 0o644); err != nil {
@@ -341,18 +417,18 @@ func TestLintStagedOutsideGitRepo(t *testing.T) {
 
 // TestFix ports tests/test_vault.py test_fix.
 func TestFix(t *testing.T) {
-	body := "Hubs: [[index|%s]]\n\nSee [[n1|Old title]] and [[n1]] and [[nope|X]].\n\n## See also\n\n[[n1|Old title]]\n\n```\n[[n1|Old title]]\n```\n\n## Extract\n\n[[n1|Old title]]\n\n## References\n\n1. [[n1|%s]]"
-	files := with_(t, map[string]string{"notes/n2.md": doc("n2", "Two", "note", fmt.Sprintf(body, "Old hub", "Old title"))})
+	body := "Hubs: [[index|%s]]\n\nSee [[not001|Old title]] and [[not001]] and [[nope|X]].\n\n## See also\n\n[[not001|Old title]]\n\n```\n[[not001|Old title]]\n```\n\n## Extract\n\n[[not001|Old title]]\n\n## References\n\n1. [[not001|%s]]"
+	files := with_(t, map[string]string{"notes/not002.md": doc("Two", "note", fmt.Sprintf(body, "Old hub", "Old title"))})
 	env := setupVault(t, "dev", files)
 	// Only the Hubs line and References change; Prose, the H2 before References, code and Extract stay.
-	want := doc("n2", "Two", "note", fmt.Sprintf(body, "Index", "Leaders are unique"))
+	want := doc("Two", "note", fmt.Sprintf(body, "Index", "Leaders are unique"))
 
 	got := run(env, "fix")
-	if got.code != 0 || got.stdout != "fixed notes/n2.md\n" {
-		t.Errorf("first fix: code %d stdout %q stderr %q, want 0 \"fixed notes/n2.md\\n\"", got.code, got.stdout, got.stderr)
+	if got.code != 0 || got.stdout != "fixed notes/not002.md\n" {
+		t.Errorf("first fix: code %d stdout %q stderr %q, want 0 \"fixed notes/not002.md\\n\"", got.code, got.stdout, got.stderr)
 	}
-	if b, err := os.ReadFile("notes/n2.md"); err != nil || string(b) != want {
-		t.Errorf("notes/n2.md = %q (%v), want %q", b, err, want)
+	if b, err := os.ReadFile("notes/not002.md"); err != nil || string(b) != want {
+		t.Errorf("notes/not002.md = %q (%v), want %q", b, err, want)
 	}
 	got = run(env, "fix")
 	if got.code != 0 || got.stdout != "" {
@@ -362,20 +438,20 @@ func TestFix(t *testing.T) {
 
 // TestFixProseOfOtherKinds checks that hub, source and log docs refresh Aliases on every scanned line.
 func TestFixProseOfOtherKinds(t *testing.T) {
-	prose := func(old string) string { return "Hubs: [[index|Index]]\n\nSee [[n1|" + old + "]]." }
+	prose := func(old string) string { return "Hubs: [[index|Index]]\n\nSee [[not001|" + old + "]]." }
 	files := with_(t, map[string]string{
-		"hubs/h1.md":     doc("h1", "H1", "hub", prose("Old title")),
-		"projects/p1.md": doc("p1", "P1", "log", prose("Old title")),
-		"sources/s1.md": doc("s1", "Source one", "source", prose("Old title")+"\n\n## Review",
-			kv{"raw", "raw/s1-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"}),
+		"notes/hub001.md": doc("H1", "hub", prose("Old title")),
+		"notes/log001.md": doc("P1", "log", prose("Old title")),
+		"notes/src001.md": doc("Source one", "source", prose("Old title")+"\n\n## Review",
+			kv{"raw", "raw/src001-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"}),
 	})
 	got := runIn(t, "dev", files, "fix")
-	if got.code != 0 || got.stdout != "fixed hubs/h1.md\nfixed projects/p1.md\nfixed sources/s1.md\n" {
+	if got.code != 0 || got.stdout != "fixed notes/hub001.md\nfixed notes/log001.md\nfixed notes/src001.md\n" {
 		t.Errorf("code %d stdout %q stderr %q, want 0 and the three docs fixed", got.code, got.stdout, got.stderr)
 	}
 	for p, want := range map[string]string{
-		"hubs/h1.md":     doc("h1", "H1", "hub", prose("Leaders are unique")),
-		"projects/p1.md": doc("p1", "P1", "log", prose("Leaders are unique")),
+		"notes/hub001.md": doc("H1", "hub", prose("Leaders are unique")),
+		"notes/log001.md": doc("P1", "log", prose("Leaders are unique")),
 	} {
 		if b, err := os.ReadFile(p); err != nil || string(b) != want {
 			t.Errorf("%s = %q (%v), want %q", p, b, err, want)
@@ -384,10 +460,10 @@ func TestFixProseOfOtherKinds(t *testing.T) {
 }
 
 func TestFixJSON(t *testing.T) {
-	files := with_(t, map[string]string{"notes/n2.md": doc("n2", "Two", "note", "Hubs: [[index|Old hub]]\n\n[[n1|Leaders are unique]].")})
+	files := with_(t, map[string]string{"notes/not002.md": doc("Two", "note", "Hubs: [[index|Old hub]]\n\n[[not001|Leaders are unique]].")})
 	env := setupVault(t, "dev", files)
 	for _, want := range []string{
-		`{"ok":true,"fixed":["notes/n2.md"]}` + "\n",
+		`{"ok":true,"fixed":["notes/not002.md"]}` + "\n",
 		`{"ok":true,"fixed":[]}` + "\n",
 	} {
 		if got := run(env, "fix", "--json"); got.code != 0 || got.stdout != want {

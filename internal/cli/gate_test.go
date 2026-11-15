@@ -59,6 +59,36 @@ func TestRunVersionGate(t *testing.T) {
 	}
 }
 
+// A v0.3 binary reads v0.3 vaults only: every gated verb and upgrade refuse a min_version older than 0.3.0, even a dev binary.
+func TestGateRefusesV02Vault(t *testing.T) {
+	verbs := [][]string{
+		{"lint"}, {"status"}, {"export", "out"}, {"ingest", "x.txt", "--title", "T", "--hub", "index"},
+		{"review"}, {"key", "list"}, {"upgrade", "-y"},
+	}
+	for _, binVersion := range []string{"dev", "1.0.0"} {
+		for _, args := range verbs {
+			t.Run(binVersion+" "+args[0], func(t *testing.T) {
+				got := runIn(t, binVersion, vaultWith(`"0.2.2"`), args...)
+				if got.code != 2 || got.stdout != "" || !strings.Contains(got.stderr, "v0.2.x") || !strings.Contains(got.stderr, "zk-chef init") {
+					t.Errorf("got code %d stdout %q stderr %q, want 2, no stdout, and a message that names v0.2.x and zk-chef init", got.code, got.stdout, got.stderr)
+				}
+			})
+		}
+	}
+	t.Run("0.3.0 passes", func(t *testing.T) {
+		got := runIn(t, "dev", vaultWith(`"0.3.0"`), "lint")
+		if strings.Contains(got.stderr, "v0.2.x") {
+			t.Errorf("stderr %q: gate refused a 0.3.0 vault", got.stderr)
+		}
+	})
+	t.Run("doctor is never gated", func(t *testing.T) {
+		got := runIn(t, "dev", vaultWith(`"0.2.2"`), "doctor")
+		if strings.Contains(got.stderr, "v0.2.x") {
+			t.Errorf("stderr %q: gate refused doctor", got.stderr)
+		}
+	})
+}
+
 func TestGateUsesRootFlag(t *testing.T) {
 	tests := []struct {
 		name, binVersion string

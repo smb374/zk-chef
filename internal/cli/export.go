@@ -13,7 +13,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/smb374/zk-chef/internal/lint"
 	"gopkg.in/yaml.v3"
@@ -37,33 +36,63 @@ func escapeHugoShortcodes(body string) string {
 }
 
 // exportFolders are the vault folders whose pages go to the export, one level deep.
-var exportFolders = []string{"notes", "hubs", "sources", "projects"}
+var exportFolders = []string{lint.NotesDir}
 
 // exportManifest is the file in OUT that lists, as slash paths relative to OUT, the files the last run wrote.
 const exportManifest = ".zk-chef-export.json"
 
-// exportKeys are the frontmatter fields an export keeps on every page; exportSourceKeys are the ones it keeps on sources only.
-var (
-	exportKeys       = []string{"title", "kind", "status", "superseded_by"}
-	exportSourceKeys = []string{"review", "url", "citation", "authors", "published"}
-)
+// exportSourceKeys are the fields an export keeps from the frontmatter of a source page, after the keys it unpacks from the tags.
+var exportSourceKeys = []string{"url", "citation", "accessed", "authors", "published"}
 
 // exportHugoKeys maps the exported keys that Hugo reserves to the names a Hugo export writes instead.
 var exportHugoKeys = map[string]string{"kind": "zk_kind", "url": "source_url", "published": "source_published"}
 
-// exportFrontmatter keeps only the exportKeys of the YAML mapping fm, and the exportSourceKeys too when source is set, in file order. When hugo is set it renames the keys in exportHugoKeys.
-func exportFrontmatter(fm string, source, hugo bool) (string, error) {
+// exportFrontmatter builds the frontmatter of an exported page from the YAML mapping fm and the page model, in this order:
+// title and date from the fields; kind, review and status unpacked from the tags; superseded_by; the topic: and type: tags as tags
+// (aliases and every other tag stay behind); and the exportSourceKeys for a source. When hugo is set it renames the keys in exportHugoKeys.
+func exportFrontmatter(fm string, page *lint.Page, hugo bool) (string, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal([]byte(fm), &doc); err != nil {
 		return "", err
 	}
-	kept := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	fields := map[string]*yaml.Node{}
 	for i := 0; i+1 < len(doc.Content[0].Content); i += 2 {
-		if k := doc.Content[0].Content[i]; slices.Contains(exportKeys, k.Value) || source && slices.Contains(exportSourceKeys, k.Value) {
-			if to, ok := exportHugoKeys[k.Value]; ok && hugo {
-				k.Value = to
-			}
-			kept.Content = append(kept.Content, k, doc.Content[0].Content[i+1])
+		fields[doc.Content[0].Content[i].Value] = doc.Content[0].Content[i+1]
+	}
+	str := func(s string) *yaml.Node { return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: s} }
+	kept := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	put := func(key string, v *yaml.Node) {
+		if v == nil {
+			return
+		}
+		if to, ok := exportHugoKeys[key]; ok && hugo {
+			key = to
+		}
+		kept.Content = append(kept.Content, str(key), v)
+	}
+	source := page.Kind() == "source"
+	put("title", fields["title"])
+	put("date", fields["date"])
+	put("kind", str(page.Kind()))
+	if source {
+		put("review", str(page.Review()))
+	}
+	if page.Superseded() {
+		put("status", str("superseded"))
+	}
+	put("superseded_by", fields["superseded_by"])
+	tags := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Style: yaml.FlowStyle}
+	for _, tag := range page.Tags() {
+		if strings.HasPrefix(tag, "topic:") || strings.HasPrefix(tag, "type:") {
+			tags.Content = append(tags.Content, str(tag))
+		}
+	}
+	if len(tags.Content) > 0 {
+		put("tags", tags)
+	}
+	if source {
+		for _, key := range exportSourceKeys {
+			put(key, fields[key])
 		}
 	}
 	var buf bytes.Buffer
@@ -171,15 +200,9 @@ func exportPages(files map[string][]byte, hugo bool) (map[string]string, error) 
 			text = lint.StripExtract(text)
 		}
 		fm, body, _ := lint.SplitFrontmatter(text)
-		kept, err := exportFrontmatter(fm, s.page.Kind() == "source", hugo)
+		kept, err := exportFrontmatter(fm, s.page, hugo)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
-		}
-		if hugo && len(s.page.ID()) >= 12 {
-			// The first 12 digits of an ID are its UTC minute; a stem that is not a valid date has no date.
-			if d, err := time.Parse("200601021504", s.page.ID()[:12]); err == nil {
-				kept += "date: " + d.Format("2006-01-02T15:04:00Z") + "\n"
-			}
 		}
 		if s.page.Superseded() {
 			t := targets[s.page.SupersededBy()]

@@ -2,6 +2,7 @@ package lint
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -23,12 +24,16 @@ type line struct {
 }
 
 // Page is one markdown file: frontmatter plus body lines. It is the one model every verb reads
-// a page's ID, kind, title, review state, supersede state and Hubs-line links through.
+// a page's ID (the file stem), kind, title, review state, supersede state and Hubs-line links through.
+// The kind, the review state and the supersede state are tags.
 type Page struct {
-	path  string
-	fm    map[string]any
-	err   string
-	lines []line
+	path    string
+	stem    string
+	fm      map[string]any
+	tags    []string
+	tagsErr string // non-empty when the tags key is missing or is not a list of strings
+	err     string
+	lines   []line
 }
 
 // parseDoc splits text into frontmatter and body lines.
@@ -41,7 +46,7 @@ type Page struct {
 //
 // A mapping with non-string keys is accepted, with the keys printed as text.
 func parseDoc(path, text string) *Page {
-	d := &Page{path: path}
+	d := &Page{path: path, stem: strings.TrimSuffix(filepath.Base(path), ".md")}
 	m := frontmatterRe.FindStringSubmatchIndex(text)
 	if m == nil {
 		d.err = "missing frontmatter"
@@ -63,6 +68,7 @@ func parseDoc(path, text string) *Page {
 			d.err = "frontmatter is not a mapping"
 		}
 	}
+	d.readTags()
 	start := strings.Count(text[:m[1]], "\n") + 1
 	fenced, section := false, ""
 	for i, l := range strings.Split(text[m[1]:], "\n") {
@@ -78,6 +84,40 @@ func parseDoc(path, text string) *Page {
 		d.lines = append(d.lines, line{start + i, l, scan, section})
 	}
 	return d
+}
+
+// readTags fills tags from the tags key, or sets tagsErr.
+func (d *Page) readTags() {
+	raw, ok := d.fm["tags"]
+	if !ok {
+		d.tagsErr = "tags is required (a list such as [kind:note])"
+		return
+	}
+	list, isList := raw.([]any)
+	if !isList {
+		d.tagsErr = "tags must be a list of strings"
+		return
+	}
+	for _, v := range list {
+		s, isStr := v.(string)
+		if !isStr {
+			d.tagsErr = "tags must be a list of strings"
+			d.tags = nil
+			return
+		}
+		d.tags = append(d.tags, s)
+	}
+}
+
+// tagValues returns the values of the tags in namespace ns ("kind" gives "note" for kind:note), in file order.
+func (d *Page) tagValues(ns string) []string {
+	var out []string
+	for _, t := range d.tags {
+		if v, ok := strings.CutPrefix(t, ns+":"); ok {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // SplitFrontmatter returns the YAML between the opening and closing --- lines and the body after them.

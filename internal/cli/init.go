@@ -7,7 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/pelletier/go-toml/v2"
 	"github.com/smb374/zk-chef/internal/version"
@@ -16,7 +18,10 @@ import (
 // Assets holds the embedded "scaffold", "skills" and "export-scaffold" trees; main sets it.
 var Assets fs.FS
 
-var vaultFolders = []string{"notes", "hubs", "sources", "projects", "raw", "keys"}
+var vaultFolders = []string{"notes", "raw", "keys"}
+
+// indexDatePlaceholder stands for the init time in the scaffold index.md.
+const indexDatePlaceholder = "INIT_DATE_UTC"
 
 // copyMissing copies files from src to dst without overwriting. It returns the created
 // paths and the paths whose existing file differs from the source, both slash-separated.
@@ -89,6 +94,9 @@ func initVerb(inv *invocation) int {
 	if err != nil {
 		return fail(inv, "zk-chef init: "+err.Error())
 	}
+	if err := stampIndexDate(dir, created); err != nil {
+		return fail(inv, "zk-chef init: "+err.Error())
+	}
 	if writeAgents {
 		if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), agents, 0o644); err != nil {
 			return fail(inv, "zk-chef init: "+err.Error())
@@ -140,6 +148,20 @@ func initVerb(inv *invocation) int {
 		fmt.Fprintf(inv.stdout, "kept your %s (differs from the scaffold)\n", p)
 	}
 	return 0
+}
+
+// stampIndexDate writes the current UTC time into the date of index.md when init created it.
+func stampIndexDate(dir string, created []string) error {
+	if !slices.Contains(created, "index.md") {
+		return nil
+	}
+	target := filepath.Join(dir, "index.md")
+	b, err := os.ReadFile(target)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+	return os.WriteFile(target, []byte(strings.Replace(string(b), indexDatePlaceholder, now, 1)), 0o644)
 }
 
 const (

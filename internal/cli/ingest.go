@@ -29,7 +29,10 @@ var unsafeNameRe = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 // ingestVerb makes a source note for a local file or URL and keeps the raw bytes in raw/.
 func ingestVerb(inv *invocation) int {
 	if inv.title == "" || len(inv.args) != 1 {
-		return fail(inv, "usage: zk-chef ingest PATH|URL --title|-t T [--hub ID]... [--root DIR] [--json]")
+		return fail(inv, "usage: zk-chef ingest PATH|URL --title|-t T --hub ID [--hub ID]... [--root DIR] [--json]")
+	}
+	if len(inv.hubs) == 0 {
+		return fail(inv, "zk-chef ingest: need at least one --hub ID, so that the source has a Hubs line")
 	}
 	root, err := filepath.Abs(inv.root)
 	if err != nil {
@@ -49,14 +52,11 @@ func ingestVerb(inv *invocation) int {
 		}
 		name = unsafeNameRe.ReplaceAllString(filepath.Base(src), "-")
 	}
-	var pages map[string]*lint.Page
-	if len(inv.hubs) > 0 { // loading the vault reads raw/ too, so skip it without --hub
-		files, err := lint.LoadWorktree(root)
-		if err != nil {
-			return failCode(inv, 1, "zk-chef ingest: "+err.Error())
-		}
-		pages = lint.Pages(files)
+	files, err := lint.LoadWorktree(root)
+	if err != nil {
+		return failCode(inv, 1, "zk-chef ingest: "+err.Error())
 	}
+	pages := lint.Pages(files)
 	for _, id := range inv.hubs {
 		if p, ok := pages[id]; !ok || p.Kind() != "hub" {
 			return fail(inv, "zk-chef ingest: --hub "+id+": no hub with that ID")
@@ -82,7 +82,7 @@ func ingestVerb(inv *invocation) int {
 	}
 	defer os.Remove(tmp)
 
-	cmd := exec.Command(zk, "new", "sources", "--title", inv.title, "--print-path", "--no-input")
+	cmd := exec.Command(zk, "new", lint.NotesDir, "--template", "source.md", "--title", inv.title, "--print-path", "--no-input")
 	cmd.Dir = root
 	cmd.Env = append(append(os.Environ(), inv.env...), "ZK_NOTEBOOK_DIR="+root)
 	var zkOut, zkErr bytes.Buffer
@@ -101,8 +101,8 @@ func ingestVerb(inv *invocation) int {
 	if err != nil {
 		return failCode(inv, 1, "zk-chef ingest: "+err.Error())
 	}
-	fm := map[string]string{"raw": raw, "sha256": sum, "review": "unreviewed"}
-	order := []string{"raw", "sha256", "review"}
+	fm := map[string]string{"raw": raw, "sha256": sum}
+	order := []string{"raw", "sha256"}
 	if isURL {
 		fm["url"] = strconv.Quote(src)
 		order = append(order, "url")
@@ -205,7 +205,7 @@ func stage(in io.Reader, dir string) (path, sum string, err error) {
 	return out.Name(), hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// addHubs appends a link to each hub in ids, in order, to the Hubs line of text. A hub the line already links is skipped.
+// addHubs appends a link to each hub in ids, in order, to the Hubs line of text, joined with ", ". A hub the line already links is skipped.
 func addHubs(text string, ids []string, pages map[string]*lint.Page) (string, error) {
 	_, body, ok := lint.SplitFrontmatter(text)
 	if !ok || !strings.HasPrefix(body, "Hubs: ") {
@@ -220,7 +220,10 @@ func addHubs(text string, ids []string, pages map[string]*lint.Page) (string, er
 	for _, id := range ids {
 		if !slices.Contains(named, id) {
 			named = append(named, id)
-			add.WriteString(" · [[" + id + "|" + pages[id].Title() + "]]")
+			if strings.HasSuffix(strings.TrimRight(body[:end], " ")+add.String(), "]]") {
+				add.WriteString(", ")
+			}
+			add.WriteString("[[" + id + "|" + pages[id].Title() + "]]")
 		}
 	}
 	at := len(text) - len(body) + end

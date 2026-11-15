@@ -57,7 +57,7 @@ func TestExportHugoScaffoldFreshOut(t *testing.T) {
 
 func TestExportHugoScaffoldTitleIsQuotedForToml(t *testing.T) {
 	tree := exportHugoOK(t, with_(t, map[string]string{
-		"index.md": doc("index", `"It's a \"vault\""`, "hub", "- [[000000000000src0|Sources]]"),
+		"index.md": doc(`"It's a \"vault\""`, "hub", "- [[hubsrc|Sources]]"),
 	}))
 	if want := `title = "It's a \"vault\""` + "\n"; !strings.Contains(tree["hugo.toml"], want) {
 		t.Errorf("hugo.toml = %q, want it to contain %q", tree["hugo.toml"], want)
@@ -409,11 +409,11 @@ func TestExportHugoSiteBuilds(t *testing.T) {
 		t.Skipf("hugo not on PATH: %v", err)
 	}
 	files := exportVault(t)
-	files["notes/202611091044tnn3.md"] = doc("202611091044tnn3", "Dated note", "note", hubLine+"\n\nSee [[n1]] and [[s1|Reading]].\n\n{{< figure src=\"x\" >}}")
-	files["notes/n9.md"] = doc("n9", "Old claim", "note", hubLine+"\n\nOld.", kv{"status", "superseded"}, kv{"superseded_by", "n1"})
-	files["sources/s1.md"] = doc("s1", "Source one", "source",
-		"Hubs: [[000000000000src0|Sources]]\n\nWhy.\n\n## Review",
-		kv{"raw", "raw/s1-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"},
+	files["notes/notdt1.md"] = doc("Dated note", "note", hubLine+"\n\nSee [[not001]] and [[src001|Reading]].\n\n{{< figure src=\"x\" >}}")
+	files["notes/not009.md"] = doc("Old claim", "note", hubLine+"\n\nOld.", kv{"status", "superseded"}, kv{"superseded_by", "not001"})
+	files["notes/src001.md"] = doc("Source one", "source",
+		"Hubs: [[hubsrc|Sources]]\n\nWhy.\n\n## Review",
+		kv{"raw", "raw/src001-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"},
 		kv{"url", "https://example.com/x"}, kv{"citation", "Doe 2026, https://example.com/paper (see https://example.org/b?x=1&y=2)."}, kv{"authors", "[Doe, Roe]"}, kv{"published", "2026-01-02"})
 	for _, style := range []string{"tufte", "plain"} {
 		t.Run(style, func(t *testing.T) { testExportHugoSiteBuilds(t, hugoBin, style, files) })
@@ -429,7 +429,7 @@ func testExportHugoSiteBuilds(t *testing.T, hugoBin, style string, files map[str
 	}
 	// Lint rejects a URL source without a citation, so write the page by hand.
 	noCitation := "---\ntitle: No citation\nzk_kind: source\nreview: unreviewed\nsource_url: https://example.com/z\nauthors: [Doe, Roe]\nsource_published: 2026-01-02\n---\nBody.\n"
-	if err := os.WriteFile(filepath.Join(out, "content", "sources", "s3.md"), []byte(noCitation), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(out, "content", "notes", "src003.md"), []byte(noCitation), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	public := t.TempDir()
@@ -455,26 +455,26 @@ func testExportHugoSiteBuilds(t *testing.T, hugoBin, style string, files map[str
 		}
 	}
 	wants := map[string][]string{
-		"index.html":                       {"<h1>", "<ul>"},
-		"notes/n1/index.html":              {"<h1>"},
-		"hubs/000000000000src0/index.html": {`id="members"`, `id="backlinks"`},
-		"sources/s1/index.html":            {"<p>review: unreviewed</p>", `<p><a href="https://example.com/x">https://example.com/x</a></p>`},
-		"sources/s3/index.html":            {"<p>review: unreviewed</p>"},
-		"notes/n9/index.html":              {"<p>Superseded by "},
+		"index.html":              {"<h1>", "<ul>"},
+		"notes/not001/index.html": {"<h1>"},
+		"notes/hubsrc/index.html": {`id="members"`, `id="backlinks"`},
+		"notes/src001/index.html": {"<p>review: unreviewed</p>", `<p><a href="https://example.com/x">https://example.com/x</a></p>`},
+		"notes/src003/index.html": {"<p>review: unreviewed</p>"},
+		"notes/not009/index.html": {"<p>Superseded by "},
 	}
-	denies := map[string][]string{"index.html": {"tufte.css", "<article"}, "sources/s1/index.html": {"source-meta"}}
+	denies := map[string][]string{"index.html": {"tufte.css", "<article"}, "notes/src001/index.html": {"source-meta"}}
 	if tufte {
 		wants = map[string][]string{
-			"index.html":                       {`href="/vendored/tufte/tufte.css"`, "<article>", "<section>"},
-			"notes/n1/index.html":              {`href="/vendored/tufte/tufte.css"`, "<article", "<section>"},
-			"hubs/000000000000src0/index.html": {`id="members"`, `id="backlinks"`},
-			"sources/s1/index.html":            {`<p class="source-meta">`, `<span class="review review-unreviewed">unreviewed</span>`, `<p class="citation">Doe 2026, <a href="https://example.com/paper">https://example.com/paper</a> (see <a href="https://example.org/b?x=1&amp;y=2">https://example.org/b?x=1&amp;y=2</a>).</p>`},
-			"sources/s3/index.html":            {`<p><a href="https://example.com/z">https://example.com/z</a></p>`, `<span class="authors">Doe, Roe</span>`, `<span class="published">2026-01-02</span>`},
-			"notes/n9/index.html":              {`<article class="status-superseded">`, "<p>Superseded by "},
+			"index.html":              {`href="/vendored/tufte/tufte.css"`, "<article>", "<section>"},
+			"notes/not001/index.html": {`href="/vendored/tufte/tufte.css"`, "<article", "<section>"},
+			"notes/hubsrc/index.html": {`id="members"`, `id="backlinks"`},
+			"notes/src001/index.html": {`<p class="source-meta">`, `<span class="review review-unreviewed">unreviewed</span>`, `<p class="citation">Doe 2026, <a href="https://example.com/paper">https://example.com/paper</a> (see <a href="https://example.org/b?x=1&amp;y=2">https://example.org/b?x=1&amp;y=2</a>).</p>`},
+			"notes/src003/index.html": {`<p><a href="https://example.com/z">https://example.com/z</a></p>`, `<span class="authors">Doe, Roe</span>`, `<span class="published">2026-01-02</span>`},
+			"notes/not009/index.html": {`<article class="status-superseded">`, "<p>Superseded by "},
 		}
 		denies = map[string][]string{
-			"sources/s1/index.html": {`<p><a href="https://example.com/x">`, `href="https://example.com/x"`, `class="authors"`, `class="published"`},
-			"sources/s3/index.html": {`class="citation"`},
+			"notes/src001/index.html": {`<p><a href="https://example.com/x">`, `href="https://example.com/x"`, `class="authors"`, `class="published"`},
+			"notes/src003/index.html": {`class="citation"`},
 		}
 	}
 	for p, ss := range wants {
@@ -501,7 +501,7 @@ func testExportHugoSiteBuilds(t *testing.T, hugoBin, style string, files map[str
 			}
 		}
 	}
-	for _, p := range []string{"index.html", "notes/n1/index.html", "sources/s1/index.html", "notes/202611091044tnn3/index.html"} {
+	for _, p := range []string{"index.html", "notes/not001/index.html", "notes/src001/index.html", "notes/notdt1/index.html"} {
 		if _, err := os.Stat(filepath.Join(public, filepath.FromSlash(p))); err != nil {
 			t.Errorf("hugo output lacks %s: %v", p, err)
 		}

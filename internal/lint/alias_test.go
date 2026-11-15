@@ -9,7 +9,7 @@ import (
 )
 
 // aliasBody has one stale alias per line type: Hubs line (6), Prose (8), a body H2 (12) and References (16).
-const aliasBody = "Hubs: [[t1|Old]]\n\nProse [[t1|Old]].\n\n## See also\n\n[[t1|Old]]\n\n## References\n\n1. [[t1|Old]]"
+const aliasBody = "Hubs: [[tgt001|Old]]\n\nProse [[tgt001|Old]].\n\n## See also\n\n[[tgt001|Old]]\n\n## References\n\n1. [[tgt001|Old]]"
 
 var aliasLines = []int{6, 8, 12, 16}
 
@@ -20,24 +20,24 @@ func TestAliasScope(t *testing.T) {
 		want                 []int // lines checked, out of aliasLines
 		lintable             bool  // kind passes the frontmatter checks, so Lint reports it
 	}{
-		{"note", "note", "notes/x1.md", "x1", []int{6, 16}, true},
-		{"hub", "hub", "hubs/x1.md", "x1", aliasLines, true},
-		{"log", "log", "projects/x1.md", "x1", aliasLines, true},
+		{"note", "note", "notes/xxx001.md", "xxx001", []int{6, 16}, true},
+		{"hub", "hub", "notes/xxx001.md", "xxx001", aliasLines, true},
+		{"log", "log", "notes/xxx001.md", "xxx001", aliasLines, true},
 		{"root index", "hub", "index.md", "index", aliasLines, true},
-		{"source", "source", "sources/x1.md", "x1", aliasLines, false},
-		{"odd kind", "essay", "notes/x1.md", "x1", aliasLines, false},
-		{"no kind", "", "notes/x1.md", "x1", []int{5, 7, 11, 15}, false}, // Lint drops a doc with no kind; lines sit one above aliasLines
+		{"source", "source", "notes/xxx001.md", "xxx001", aliasLines, false},
+		{"odd kind", "essay", "notes/xxx001.md", "xxx001", aliasLines, false},
+		{"no kind", "", "notes/xxx001.md", "xxx001", aliasLines, false}, // Lint drops a doc with no kind
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			kindLine := "kind: " + tc.kind + "\n"
+			tags := "[kind:" + tc.kind + "]"
 			if tc.kind == "" {
-				kindLine = ""
+				tags = "[]"
 			}
-			subject := "---\nid: " + tc.id + "\ntitle: X\n" + kindLine + "---\n" + aliasBody + "\n"
+			subject := "---\ntitle: X\ndate: 2026-01-02T03:04:05Z\ntags: " + tags + "\n---\n" + aliasBody + "\n"
 			files := map[string]string{
-				".zk-chef/config.toml": "index_id = \"index\"\n",
-				"index.md":             "---\nid: index\ntitle: Index\nkind: hub\n---\nIndex.\n",
-				"notes/t1.md":          "---\nid: t1\ntitle: New\nkind: note\n---\nHubs: [[index|Index]]\n",
+				".zk-chef/config.toml": "",
+				"index.md":             "---\ntitle: Index\ndate: 2026-01-02T03:04:05Z\ntags: [kind:hub]\n---\nIndex.\n",
+				"notes/tgt001.md":      "---\ntitle: New\ndate: 2026-01-02T03:04:05Z\ntags: [kind:note]\n---\nHubs: [[index|Index]]\n",
 				tc.path:                subject,
 			}
 			if tc.path == "index.md" {

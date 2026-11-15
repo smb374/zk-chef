@@ -14,6 +14,9 @@ import (
 
 const configPath = ".zk-chef/config.toml"
 
+// firstTagVersion is the first release that reads the tag-based vault format; a vault with an older min_version is a v0.2.x vault.
+const firstTagVersion = "0.3.0"
+
 // ungated verbs must run on a binary older than the vault's min_version.
 var ungated = map[string]bool{"self-update": true, "doctor": true}
 
@@ -43,6 +46,10 @@ func gate(root string, stderr io.Writer) bool {
 	minVersion, isString := raw.(string)
 	if !isString || !version.Valid(minVersion) {
 		fmt.Fprintf(stderr, "zk-chef: %s: min_version %v is not a semantic version\n", path, raw)
+		return false
+	}
+	if cmp, err := version.Compare(minVersion, firstTagVersion); err == nil && cmp < 0 {
+		fmt.Fprintf(stderr, "zk-chef: %s: min_version %s is a v0.2.x vault; zk-chef %s reads v0.3 vaults only\nrun zk-chef init in a new directory; there is no migration\n", path, minVersion, firstTagVersion)
 		return false
 	}
 	bin := version.Current()

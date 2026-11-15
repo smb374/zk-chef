@@ -28,7 +28,7 @@ type Status struct {
 
 // ComputeStatus classifies the sources among files. It fails only when the config is unusable.
 //
-// A live note is a non-superseded note in notes/, hubs/ or projects/. It cites a source
+// A live note is a non-superseded page that is not a source. It cites a source
 // when a [[ID]] or [[ID|alias]] link to it sits in a line lint scans (not in Extract, Review or code fences).
 func ComputeStatus(files map[string][]byte) (Status, error) {
 	cfg, err := parseConfig(files)
@@ -55,7 +55,7 @@ func ComputeStatus(files map[string][]byte) (Status, error) {
 		}
 	}
 	for _, d := range parseDocs(files) {
-		if folder, _, _ := strings.Cut(d.path, "/"); d.err != "" || folder == "sources" || d.Superseded() {
+		if d.err != "" || d.Kind() == "source" || d.Superseded() {
 			continue
 		}
 		seen := map[string]bool{}

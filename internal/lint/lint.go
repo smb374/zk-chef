@@ -30,7 +30,6 @@ var (
 )
 
 type config struct {
-	IndexID       string   `toml:"index_id"`
 	WordCountWarn int      `toml:"word_count_warn"`
 	Pinned        []string `toml:"pinned_fingerprints"`
 }
@@ -40,22 +39,14 @@ func parseConfig(files map[string][]byte) (config, error) {
 	if err := toml.Unmarshal(files[ConfigPath], &cfg); err != nil {
 		return cfg, fmt.Errorf("%s: %w", ConfigPath, err)
 	}
-	if cfg.IndexID == "" {
-		return cfg, fmt.Errorf("%s: index_id is missing", ConfigPath)
-	}
 	return cfg, nil
 }
 
-// parseDocs parses every markdown file that sits directly in a note folder, sorted by path.
+// parseDocs parses index.md and every markdown file under notes/, subfolders included (lint reports them), sorted by path.
 func parseDocs(files map[string][]byte) []*Page {
 	var docs []*Page
 	for p, b := range files {
-		if p == IndexPath {
-			docs = append(docs, parseDoc(p, strings.ToValidUTF8(string(b), "\ufffd")))
-			continue
-		}
-		folder, name, ok := strings.Cut(p, "/")
-		if _, isNoteFolder := folderKind[folder]; ok && isNoteFolder && strings.HasSuffix(name, ".md") && !strings.Contains(name, "/") {
+		if p == IndexPath || strings.HasPrefix(p, NotesDir+"/") && strings.HasSuffix(p, ".md") {
 			docs = append(docs, parseDoc(p, strings.ToValidUTF8(string(b), "\ufffd")))
 		}
 	}
@@ -77,7 +68,16 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 		out = append(out, Finding{code, path, line, msg})
 	}
 	var good []*Page
-	for _, d := range parseDocs(files) {
+	docs := parseDocs(files)
+	firstOf := map[string]*Page{}
+	for _, d := range docs {
+		if first, dup := firstOf[d.stem]; dup {
+			add("E_DUPLICATE_ID", d.path, 1, fmt.Sprintf("stem %s also used by %s", d.stem, first.path))
+		} else {
+			firstOf[d.stem] = d
+		}
+	}
+	for _, d := range docs {
 		if d.err != "" {
 			add("E_FRONTMATTER", d.path, 1, d.err)
 			continue
@@ -90,15 +90,8 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 	}
 	byID := map[string]*Page{}
 	for _, d := range good {
-		id := d.ID()
-		stem := strings.TrimSuffix(path.Base(d.path), ".md")
-		if id != stem {
-			add("E_DUPLICATE_ID", d.path, 1, fmt.Sprintf("id %s differs from filename %s", id, stem))
-		}
-		if first, dup := byID[id]; dup {
-			add("E_DUPLICATE_ID", d.path, 1, fmt.Sprintf("id %s also used by %s", id, first.path))
-		} else {
-			byID[id] = d
+		if byID[d.ID()] == nil {
+			byID[d.ID()] = d
 		}
 	}
 	for _, d := range good {
@@ -109,8 +102,8 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 		}
 	}
 
-	if byID[cfg.IndexID] == nil {
-		add("E_UNREACHABLE", ConfigPath, 1, fmt.Sprintf("index hub %s not found", cfg.IndexID))
+	if byID[indexStem] == nil {
+		add("E_UNREACHABLE", IndexPath, 1, "index.md not found")
 	}
 	edges := map[string][]string{}  // hub id -> ids of the docs that name it in their Hubs line
 	linked := map[string][]string{} // doc id -> ids its body links, past the Hubs line
@@ -152,7 +145,7 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 				add("W_WORD_COUNT", d.path, d.lines[0].n, fmt.Sprintf("%d words", words))
 			}
 		}
-		if d.ID() == cfg.IndexID {
+		if d.ID() == indexStem {
 			continue
 		}
 		first := d.lines[0]
@@ -160,7 +153,7 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 		var hubs [][]string
 		ok := strings.HasPrefix(text, "Hubs: ")
 		if ok {
-			for _, part := range strings.Split(text[len("Hubs: "):], " · ") {
+			for _, part := range strings.Split(text[len("Hubs: "):], ", ") {
 				m := linkFullRe.FindStringSubmatch(part)
 				if m == nil {
 					ok = false
@@ -170,7 +163,7 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 			}
 		}
 		if !ok {
-			add("E_HUBS_LINE", d.path, first.n, "first body line must be: Hubs: [[ID|Hub]] · [[ID|Hub]]")
+			add("E_HUBS_LINE", d.path, first.n, "first body line must be: Hubs: [[ID|Hub]], [[ID|Hub]]")
 			continue
 		}
 		for _, m := range hubs {
@@ -185,7 +178,7 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 			}
 		}
 	}
-	reach, todo := map[string]bool{cfg.IndexID: true}, []string{cfg.IndexID}
+	reach, todo := map[string]bool{indexStem: true}, []string{indexStem}
 	for len(todo) > 0 {
 		hub := todo[len(todo)-1]
 		todo = todo[:len(todo)-1]
@@ -202,7 +195,7 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 		}
 	}
 	for _, d := range good {
-		if d.Kind() == "hub" && d.ID() != cfg.IndexID && hubMapMissing(d, edges[d.ID()], linked) {
+		if d.Kind() == "hub" && d.ID() != indexStem && hubMapMissing(d, edges[d.ID()], linked) {
 			add("W_HUB_MAP", d.path, d.lines[0].n, "members link each other, but the map has no ordered walk or GAP: line")
 		}
 	}

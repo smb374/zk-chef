@@ -14,14 +14,16 @@ import (
 // ConfigPath is the vault config, relative to the vault root.
 const ConfigPath = ".zk-chef/config.toml"
 
-// folderKind maps each note folder to the kind it holds.
-var folderKind = map[string]string{"notes": "note", "hubs": "hub", "sources": "source", "projects": "log"}
-
-// IndexPath is the root index hub, which sits beside AGENTS.md.
+// IndexPath is the root index hub, which sits beside AGENTS.md. Its stem, indexStem, is the one fixed ID.
 const IndexPath = "index.md"
 
+const indexStem = "index"
+
+// NotesDir is the one folder of notes; it is flat.
+const NotesDir = "notes"
+
 // loaded lists every folder lint reads, plus the root index file; raw/ and keys/ are read as bytes only.
-var loaded = []string{IndexPath, "notes", "hubs", "sources", "projects", "raw", "keys"}
+var loaded = []string{IndexPath, NotesDir, "raw", "keys"}
 
 // LoadWorktree reads the lint inputs under root into a map of slash paths to bytes.
 func LoadWorktree(root string) (map[string][]byte, error) {
