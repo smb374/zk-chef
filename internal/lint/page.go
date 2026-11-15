@@ -2,6 +2,7 @@ package lint
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 )
@@ -18,6 +19,25 @@ func Pages(files map[string][]byte) map[string]*Page {
 		}
 	}
 	return out
+}
+
+// Children returns the paths of the parsable pages whose Hubs line names hub, sorted by path.
+// It fails when hub is not the ID of a parsable hub page.
+func Children(files map[string][]byte, hub string) ([]string, error) {
+	pages := Pages(files)
+	if pages[hub] == nil {
+		return nil, fmt.Errorf("no page with id %s", hub)
+	}
+	if pages[hub].Kind() != "hub" {
+		return nil, fmt.Errorf("%s is not a hub", hub)
+	}
+	out := []string{}
+	for _, d := range parseDocs(files) {
+		if hubs, _ := d.Links(); d.err == "" && slices.Contains(hubs, hub) {
+			out = append(out, d.path)
+		}
+	}
+	return out, nil
 }
 
 // Err reports why the frontmatter did not parse, or nil.

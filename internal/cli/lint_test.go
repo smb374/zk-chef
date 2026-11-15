@@ -371,7 +371,8 @@ func TestLintPageFormat(t *testing.T) {
 			[]finding{{"E_FRONTMATTER", "notes/sub/notaaa.md", 1, "subfolder"}}},
 		{"duplicate stem", map[string]string{"notes/sub/not001.md": note(valid)},
 			[]finding{{"E_DUPLICATE_ID", "notes/sub/not001.md", 1, "not001"}, {"E_FRONTMATTER", "notes/sub/not001.md", 1, "subfolder"}}},
-		{"E_WRONG_FOLDER is gone: a hub sits in notes/", map[string]string{"notes/hubaaa.md": doc("Hub", "hub", "Hubs: [[index|Index]]\n\nA hub.")}, nil},
+		{"E_WRONG_FOLDER is gone: a hub sits in notes/", map[string]string{"notes/hubaaa.md": doc("Hub", "hub", "Hubs: [[index|Index]]\n\nA hub.")},
+			[]finding{{"W_HUB_UNLISTED", "notes/hubaaa.md", 6, "hubaaa"}}}, // only the index does not link it
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -438,21 +439,20 @@ func TestLintWarnings(t *testing.T) {
 			"notes/nota02.md": doc("B", "note", m+"[[nota01|A]] comes first."),
 		}
 	}
-	oldN3 := doc("Old", "note", hubLine+"\n\n[[not001|Leaders are unique]]", kv{"status", "superseded"}, kv{"superseded_by", "not001"})
+	oldN3 := doc("Old", "note", hubLine+"\n\nSuperseded by [[not001|Leaders are unique]]", kv{"status", "superseded"}, kv{"superseded_by", "not001"})
 	runCodeCases(t, []codeCase{
 		{name: "W_STALE_ALIAS in a note's References", want: "W_STALE_ALIAS", changes: not002("A claim [1].\n\n## References\n\n1. [[src001|Old title]]")},
 		{name: "W_STALE_ALIAS on a note's Hubs line", want: "W_STALE_ALIAS", changes: map[string]string{"notes/not002.md": doc("Two", "note", "Hubs: [[index|Old hub]]\n\n[[not001|Leaders are unique]]")}},
 		{name: "W_STALE_ALIAS on a hub's prose", want: "W_STALE_ALIAS", changes: hubMap("See [[nota01|Old title]].")},
 		{name: "a stale alias in note Prose is the writer's wording", absent: "W_STALE_ALIAS", changes: not002("See [[not001|Old title]].")},
 		{name: "a stale alias under a note H2 before References is Prose", absent: "W_STALE_ALIAS", changes: not002("## See also\n\n[[not001|Old title]]")},
-		{name: "W_DEAD_END", want: "W_DEAD_END", changes: not002("Nothing linked.")},
+		{name: "W_DEAD_END is removed: a note may link nothing besides its Hubs line", absent: "W_DEAD_END", changes: not002("Nothing linked.")},
 		{name: "W_MARKER", want: "W_MARKER", changes: not002("TODO: later. [[not001|Leaders are unique]]")},
+		{name: "W_MARKER no longer reports GAP:", absent: "W_MARKER", changes: not002("GAP: a note on retries. [[not001|Leaders are unique]]")},
 		{name: "W_WORD_COUNT", want: "W_WORD_COUNT", changes: not002(strings.Repeat("word ", 500) + "[[not001|Leaders are unique]]")},
 		{name: "W_SUPERSEDED_LINK", want: "W_SUPERSEDED_LINK", changes: map[string]string{
 			"notes/not003.md": oldN3, "notes/not002.md": doc("Two", "note", hubLine+"\n\nSee [[not003|Old]].")}},
-		{name: "W_HUB_MAP", want: "W_HUB_MAP", changes: hubMap("A short scope line.")},
-		{name: "a hub map with a GAP: line is clean", absent: "W_HUB_MAP", changes: hubMap("GAP: a note on retries.")},
-		{name: "a hub map with a walk is clean", absent: "W_HUB_MAP", changes: hubMap("1. [[nota01|A]]\n2. [[nota02|B]] follows A.")},
+		{name: "W_HUB_MAP is removed: interlinked members need no walk or GAP: line", absent: "W_HUB_MAP", changes: hubMap("A short scope line.")},
 	})
 
 	t.Run("Extract and code fences are not scanned", func(t *testing.T) {
@@ -499,43 +499,116 @@ func TestLintStagedOutsideGitRepo(t *testing.T) {
 	}
 }
 
-// TestFix ports tests/test_vault.py test_fix.
-func TestFix(t *testing.T) {
-	body := "Hubs: [[index|%s]]\n\nSee [[not001|Old title]] and [[not001]] and [[nope|X]].\n\n## See also\n\n[[not001|Old title]]\n\n```\n[[not001|Old title]]\n```\n\n## Extract\n\n[[not001|Old title]]\n\n## References\n\n1. [[not001|%s]]"
-	files := with_(t, map[string]string{"notes/not002.md": doc("Two", "note", fmt.Sprintf(body, "Old hub", "Old title"))})
-	env := setupVault(t, "dev", files)
+// TestLintFix: lint --fix rewrites stale aliases on a note's Hubs line and in its References, leaves its Prose, code and Extract alone, then lints.
+func TestLintFix(t *testing.T) {
+	body := "Hubs: [[index|%s]]\n\nSee [[not001|Old title]] and [[not001]] [1].\n\n## See also\n\n[[not001|Old title]]\n\n```\n[[not001|Old title]]\n```\n\n## Extract\n\n[[not001|Old title]]\n\n## References\n\n1. [[not001|%s]]"
+	orig := doc("Two", "note", fmt.Sprintf(body, "Old hub", "Old title"))
 	// Only the Hubs line and References change; Prose, the H2 before References, code and Extract stay.
 	want := doc("Two", "note", fmt.Sprintf(body, "Index", "Leaders are unique"))
+	env := setupVault(t, "dev", with_(t, map[string]string{"notes/not002.md": orig}))
 
-	got := run(env, "fix")
-	if got.code != 0 || got.stdout != "fixed notes/not002.md\n" {
-		t.Errorf("first fix: code %d stdout %q stderr %q, want 0 \"fixed notes/not002.md\\n\"", got.code, got.stdout, got.stderr)
+	if got := run(env, "lint"); !strings.Contains(got.stdout, "W_STALE_ALIAS") {
+		t.Errorf("lint without --fix: stdout %q, want W_STALE_ALIAS", got.stdout)
+	}
+	if b, err := os.ReadFile("notes/not002.md"); err != nil || string(b) != orig {
+		t.Errorf("lint without --fix changed notes/not002.md: %q (%v)", b, err)
+	}
+	got := run(env, "lint", "--fix")
+	if got.code != 0 || got.stdout != "fixed notes/not002.md\n0 errors, 0 warnings\n" || got.stderr != "" {
+		t.Errorf("first lint --fix: code %d stdout %q stderr %q, want 0 \"fixed notes/not002.md\\n0 errors, 0 warnings\\n\"", got.code, got.stdout, got.stderr)
 	}
 	if b, err := os.ReadFile("notes/not002.md"); err != nil || string(b) != want {
 		t.Errorf("notes/not002.md = %q (%v), want %q", b, err, want)
 	}
-	got = run(env, "fix")
-	if got.code != 0 || got.stdout != "" {
-		t.Errorf("second fix: code %d stdout %q, want 0 and no output", got.code, got.stdout)
+	got = run(env, "lint", "--fix")
+	if got.code != 0 || got.stdout != "0 errors, 0 warnings\n" {
+		t.Errorf("second lint --fix: code %d stdout %q, want 0 \"0 errors, 0 warnings\\n\"", got.code, got.stdout)
 	}
 }
 
-// TestFixProseOfOtherKinds checks that hub, source and log docs refresh Aliases on every scanned line.
-func TestFixProseOfOtherKinds(t *testing.T) {
+// TestLintFixThenLints: the findings that --fix cannot cure still show, with exit code 1.
+func TestLintFixThenLints(t *testing.T) {
+	files := with_(t, map[string]string{"notes/not002.md": doc("Two", "note", "Hubs: [[index|Old hub]]\n\nSee [[nope|X]].")})
+	got := runIn(t, "dev", files, "lint", "--fix")
+	if got.code != 1 || !strings.HasPrefix(got.stdout, "fixed notes/not002.md\n") || !strings.Contains(got.stdout, "notes/not002.md:8: E_BROKEN_LINK no note with id nope\n") {
+		t.Errorf("code %d stdout %q, want 1, the fixed path and the E_BROKEN_LINK finding", got.code, got.stdout)
+	}
+	if b, err := os.ReadFile("notes/not002.md"); err != nil || !strings.Contains(string(b), "Hubs: [[index|Index]]\n") {
+		t.Errorf("notes/not002.md = %q (%v), want the Hubs alias fixed", b, err)
+	}
+}
+
+// TestLintFixAliasScope checks which stale aliases lint warns about and --fix rewrites, by kind and line position.
+func TestLintFixAliasScope(t *testing.T) {
+	// One stale alias per line type: Hubs line (6), Prose (8), a body H2 (12) and References (16).
+	const aliasBody = "Hubs: [[not001|Old]]\n\nProse [[not001|Old]].\n\n## See also\n\n[[not001|Old]]\n\n## References\n\n1. [[not001|Old]]"
+	all := []int{6, 8, 12, 16}
+	for _, tc := range []struct {
+		name, kind, path string
+		want             []int // lines checked, out of all
+		lintable         bool  // the page passes the frontmatter checks, so lint reports it
+	}{
+		{"note", "note", "notes/xxx001.md", []int{6, 16}, true},
+		{"hub", "hub", "notes/xxx001.md", all, true},
+		{"log", "log", "notes/xxx001.md", all, true},
+		{"root index", "hub", "index.md", all, true},
+		{"source", "source", "notes/xxx001.md", all, false},
+		{"odd kind", "essay", "notes/xxx001.md", all, false},
+		{"no kind", "", "notes/xxx001.md", all, false}, // lint drops a page with no kind
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tags := "[kind:" + tc.kind + "]"
+			if tc.kind == "" {
+				tags = "[]"
+			}
+			subject := "---\ntitle: X\ndate: 2026-01-02T03:04:05Z\ntags: " + tags + "\n---\n" + aliasBody + "\n"
+			files := with_(t, map[string]string{tc.path: subject})
+			if tc.lintable {
+				var got []int
+				for _, f := range findingsWith(t, files, "W_STALE_ALIAS") {
+					if f.Path == tc.path {
+						got = append(got, f.Line)
+					}
+				}
+				if !slices.Equal(got, tc.want) {
+					t.Errorf("W_STALE_ALIAS lines %v, want %v", got, tc.want)
+				}
+			}
+			run(setupVault(t, "dev", files), "lint", "--fix")
+			b, err := os.ReadFile(tc.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := strings.Split(subject, "\n")
+			for _, n := range tc.want {
+				want[n-1] = strings.Replace(want[n-1], "Old", "Leaders are unique", 1)
+			}
+			if got := string(b); got != strings.Join(want, "\n") {
+				t.Errorf("after lint --fix:\n%s\nwant:\n%s", got, strings.Join(want, "\n"))
+			}
+		})
+	}
+}
+
+// TestLintFixProseOfOtherKinds checks that hub, source and log pages refresh aliases on every scanned line.
+func TestLintFixProseOfOtherKinds(t *testing.T) {
 	prose := func(old string) string { return "Hubs: [[index|Index]]\n\nSee [[not001|" + old + "]]." }
+	src := func(old string) string {
+		return doc("Source one", "source", prose(old)+"\n\n## Review", kv{"raw", "raw/src001.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})
+	}
 	files := with_(t, map[string]string{
 		"notes/hub001.md": doc("H1", "hub", prose("Old title")),
 		"notes/log001.md": doc("P1", "log", prose("Old title")),
-		"notes/src001.md": doc("Source one", "source", prose("Old title")+"\n\n## Review",
-			kv{"raw", "raw/src001.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"}),
+		"notes/src001.md": src("Old title"),
 	})
-	got := runIn(t, "dev", files, "fix")
-	if got.code != 0 || got.stdout != "fixed notes/hub001.md\nfixed notes/log001.md\nfixed notes/src001.md\n" {
-		t.Errorf("code %d stdout %q stderr %q, want 0 and the three docs fixed", got.code, got.stdout, got.stderr)
+	got := runIn(t, "dev", files, "lint", "--fix")
+	if got.code != 0 || !strings.HasPrefix(got.stdout, "fixed notes/hub001.md\nfixed notes/log001.md\nfixed notes/src001.md\n") {
+		t.Errorf("code %d stdout %q stderr %q, want 0 and the three pages fixed", got.code, got.stdout, got.stderr)
 	}
 	for p, want := range map[string]string{
 		"notes/hub001.md": doc("H1", "hub", prose("Leaders are unique")),
 		"notes/log001.md": doc("P1", "log", prose("Leaders are unique")),
+		"notes/src001.md": src("Leaders are unique"),
 	} {
 		if b, err := os.ReadFile(p); err != nil || string(b) != want {
 			t.Errorf("%s = %q (%v), want %q", p, b, err, want)
@@ -543,15 +616,292 @@ func TestFixProseOfOtherKinds(t *testing.T) {
 	}
 }
 
-func TestFixJSON(t *testing.T) {
+func TestLintFixJSON(t *testing.T) {
 	files := with_(t, map[string]string{"notes/not002.md": doc("Two", "note", "Hubs: [[index|Old hub]]\n\n[[not001|Leaders are unique]].")})
 	env := setupVault(t, "dev", files)
 	for _, want := range []string{
-		`{"ok":true,"fixed":["notes/not002.md"]}` + "\n",
-		`{"ok":true,"fixed":[]}` + "\n",
+		`{"ok":true,"errors":0,"warnings":0,"findings":[],"fixed":["notes/not002.md"]}` + "\n",
+		`{"ok":true,"errors":0,"warnings":0,"findings":[],"fixed":[]}` + "\n",
 	} {
-		if got := run(env, "fix", "--json"); got.code != 0 || got.stdout != want {
-			t.Errorf("fix --json: code %d stdout %q, want 0 %q", got.code, got.stdout, want)
+		if got := run(env, "lint", "--fix", "--json"); got.code != 0 || got.stdout != want {
+			t.Errorf("lint --fix --json: code %d stdout %q, want 0 %q", got.code, got.stdout, want)
 		}
+	}
+}
+
+// TestLintChildren: --children lists the pages whose Hubs line names the hub, not the pages that only mention it.
+func TestLintChildren(t *testing.T) {
+	files := with_(t, map[string]string{
+		"notes/not002.md": doc("Two", "note", "Hubs: [[hubprj|Projects]]\n\nSee [[hubsrc|Sources]] for more."),
+		"notes/src002.md": srcTwo(kv{"url", "https://example.com/y"}, kv{"accessed", "2026-01-03"}),
+		"notes/hub003.md": doc("H3", "hub", "Hubs: [[index|Index]]\n\nNo members yet."),
+	})
+	env := setupVault(t, "dev", files)
+	tests := []struct {
+		name       string
+		args       []string
+		wantCode   int
+		wantStdout string
+		wantStderr string // substring
+	}{
+		{"members of a hub", []string{"lint", "--children", "hubsrc"}, 0, "notes/src001.md\nnotes/src002.md\n", ""},
+		{"a prose mention is not a member", []string{"lint", "--children", "hubprj"}, 0, "notes/not002.md\n", ""},
+		{"the index has members", []string{"lint", "--children", "index"}, 0, "notes/hub003.md\nnotes/hubprj.md\nnotes/hubsrc.md\nnotes/not001.md\n", ""},
+		{"json is a list", []string{"lint", "--children", "hubsrc", "--json"}, 0, `["notes/src001.md","notes/src002.md"]` + "\n", ""},
+		{"json list of no members", []string{"lint", "--children", "hub003", "--json"}, 0, "[]\n", ""},
+		{"no members", []string{"lint", "--children", "hub003"}, 0, "", ""},
+		{"unknown hub", []string{"lint", "--children", "nope"}, 2, "", "nope"},
+		{"a page that is not a hub", []string{"lint", "--children", "not001"}, 2, "", "not001"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := run(env, tt.args...)
+			if got.code != tt.wantCode || got.stdout != tt.wantStdout || !strings.Contains(got.stderr, tt.wantStderr) || (tt.wantStderr == "" && got.stderr != "") {
+				t.Errorf("got code %d stdout %q stderr %q, want %d %q stderr containing %q", got.code, got.stdout, got.stderr, tt.wantCode, tt.wantStdout, tt.wantStderr)
+			}
+		})
+	}
+}
+
+// TestFixVerbIsRemoved: fix is an unknown verb and changes nothing; lint --fix has its job.
+func TestFixVerbIsRemoved(t *testing.T) {
+	orig := doc("Two", "note", "Hubs: [[index|Old hub]]\n\n[[not001|Leaders are unique]].")
+	got := runIn(t, "dev", with_(t, map[string]string{"notes/not002.md": orig}), "fix")
+	if got.code != 2 || got.stdout != "" || !strings.HasPrefix(got.stderr, "usage: zk-chef <verb>") || strings.Contains(got.stderr, "fix") {
+		t.Errorf("code %d stdout %q stderr %q, want 2, no stdout and the usage message without fix", got.code, got.stdout, got.stderr)
+	}
+	if b, err := os.ReadFile("notes/not002.md"); err != nil || string(b) != orig {
+		t.Errorf("notes/not002.md = %q (%v), want it unchanged", b, err)
+	}
+}
+
+// findingsWith returns the findings of lint --json over files that carry code.
+func findingsWith(t *testing.T, files map[string]string, code string) []finding {
+	t.Helper()
+	var out []finding
+	for _, f := range findingsOf(t, files) {
+		if f.Code == code {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// TestLintUnknownKey: a frontmatter key that the page's kind does not list is W_UNKNOWN_KEY.
+func TestLintUnknownKey(t *testing.T) {
+	note := func(extra ...kv) map[string]string {
+		return map[string]string{"notes/not002.md": doc("Two", "note", hubLine+"\n\nSee [[not001|Leaders are unique]].", extra...)}
+	}
+	t.Run("a valid vault is silent", func(t *testing.T) {
+		if got := findingsWith(t, with_(t, note(kv{"aliases", "[Other]"}, kv{"superseded_by", "not001"})), "W_UNKNOWN_KEY"); len(got) != 0 {
+			t.Errorf("findings %+v, want none", got)
+		}
+	})
+	t.Run("a typo in a note key", func(t *testing.T) {
+		got := findingsWith(t, with_(t, note(kv{"alises", "[Other]"})), "W_UNKNOWN_KEY")
+		if len(got) != 1 || got[0].Path != "notes/not002.md" || !strings.Contains(got[0].Msg, "alises") {
+			t.Errorf("findings %+v, want one W_UNKNOWN_KEY on notes/not002.md naming alises", got)
+		}
+	})
+	t.Run("a source key on a note", func(t *testing.T) {
+		got := findingsWith(t, with_(t, note(kv{"url", "https://example.com"})), "W_UNKNOWN_KEY")
+		if len(got) != 1 || !strings.Contains(got[0].Msg, "url") {
+			t.Errorf("findings %+v, want one W_UNKNOWN_KEY naming url", got)
+		}
+	})
+	t.Run("superseded_by on a hub", func(t *testing.T) {
+		files := map[string]string{"notes/hub003.md": doc("H3", "hub", "Hubs: [[index|Index]]\n\nA hub.", kv{"superseded_by", "not001"})}
+		got := findingsWith(t, with_(t, files), "W_UNKNOWN_KEY")
+		if len(got) != 1 || !strings.Contains(got[0].Msg, "superseded_by") {
+			t.Errorf("findings %+v, want one W_UNKNOWN_KEY naming superseded_by", got)
+		}
+	})
+	t.Run("the v0.2 citation key on a source", func(t *testing.T) {
+		files := map[string]string{"notes/src001.md": doc("Source one", "source", "Hubs: [[hubsrc|Sources]]\n\n## Review",
+			kv{"raw", "raw/src001.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"}, kv{"citation", "Doe 2026"})}
+		got := findingsWith(t, with_(t, files), "W_UNKNOWN_KEY")
+		if len(got) != 1 || !strings.Contains(got[0].Msg, "citation") {
+			t.Errorf("findings %+v, want one W_UNKNOWN_KEY naming citation", got)
+		}
+	})
+}
+
+// taggedPage builds a page of notes/ with exactly these tags and the given body.
+func taggedPage(title string, tags []string, body string) string {
+	return "---\ntitle: " + title + "\ndate: 2026-01-02T03:04:05Z\ntags: [" + strings.Join(tags, ", ") + "]\n---\n" + body + "\n"
+}
+
+// TestLintUnknownTag: a tag outside kind:, review: (sources), status:superseded, topic: and type: (logs) is W_UNKNOWN_TAG.
+func TestLintUnknownTag(t *testing.T) {
+	noteBody := hubLine + "\n\nSee [[not001|Leaders are unique]]."
+	logBody := hubLine + "\n\n## Updates"
+	tests := []struct {
+		name string
+		page string
+		want string // the tag the message names; empty means silent
+	}{
+		{"topic with nested kebab segments", taggedPage("Two", []string{"kind:note", "topic:ml/rnn-2", "topic:x"}, noteBody), ""},
+		{"type on a log", taggedPage("Two", []string{"kind:log", "type:decision"}, logBody), ""},
+		{"a bare tag", taggedPage("Two", []string{"kind:note", "custom"}, noteBody), "custom"},
+		{"an unknown namespace", taggedPage("Two", []string{"kind:note", "area:ml"}, noteBody), "area:ml"},
+		{"topic with capitals", taggedPage("Two", []string{"kind:note", "topic:ML"}, noteBody), "topic:ML"},
+		{"topic with an empty segment", taggedPage("Two", []string{"kind:note", "topic:a//b"}, noteBody), "topic:a//b"},
+		{"topic with a trailing slash", taggedPage("Two", []string{"kind:note", "topic:a/"}, noteBody), "topic:a/"},
+		{"empty topic", taggedPage("Two", []string{"kind:note", "topic:"}, noteBody), "topic:"},
+		{"type on a note", taggedPage("Two", []string{"kind:note", "type:decision"}, noteBody), "type:decision"},
+		{"type with a slash", taggedPage("Two", []string{"kind:log", "type:a/b"}, logBody), "type:a/b"},
+		{"type with capitals", taggedPage("Two", []string{"kind:log", "type:Decision"}, logBody), "type:Decision"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := findingsWith(t, with_(t, map[string]string{"notes/not002.md": tt.page}), "W_UNKNOWN_TAG")
+			switch {
+			case tt.want == "" && len(got) != 0:
+				t.Errorf("findings %+v, want none", got)
+			case tt.want != "" && (len(got) != 1 || got[0].Path != "notes/not002.md" || !strings.Contains(got[0].Msg, tt.want)):
+				t.Errorf("findings %+v, want one W_UNKNOWN_TAG on notes/not002.md naming %s", got, tt.want)
+			}
+		})
+	}
+	t.Run("the base vault tags are silent", func(t *testing.T) {
+		if got := findingsWith(t, baseVault(t), "W_UNKNOWN_TAG"); len(got) != 0 {
+			t.Errorf("findings %+v, want none", got)
+		}
+	})
+}
+
+// TestLintSupersede: status:superseded needs superseded_by to an existing page and the body line
+// "Superseded by [[stem|Title]]" after the Hubs line; a hub or a log cannot be superseded.
+func TestLintSupersede(t *testing.T) {
+	new := doc("New claim", "note", hubLine+"\n\nSee [[not001|Leaders are unique]].")
+	superseded := func(kind, body string) map[string]string {
+		return map[string]string{
+			"notes/not002.md": doc("Old claim", kind, body, kv{"status", "superseded"}, kv{"superseded_by", "not003"}),
+			"notes/not003.md": new,
+		}
+	}
+	tests := []struct {
+		name    string
+		changes map[string]string
+		want    string // part of the E_FRONTMATTER message on notes/not002.md; empty means no finding at all
+	}{
+		{"all three parts", superseded("note", hubLine+"\n\nSuperseded by [[not003|New claim]]\n\nOld."), ""},
+		{"a source with all three parts", map[string]string{
+			"notes/not002.md": doc("Old source", "source", hubLine+"\n\nSuperseded by [[not003|New claim]]\n\n## Review",
+				kv{"url", "https://example.com/x"}, kv{"accessed", "2026-01-03"}, kv{"review", "unreviewed"}, kv{"status", "superseded"}, kv{"superseded_by", "not003"}),
+			"notes/not003.md": new}, ""},
+		{"no body line", superseded("note", hubLine+"\n\nOld."), "Superseded by [[not003"},
+		{"body line names another stem", superseded("note", hubLine+"\n\nSuperseded by [[not001|Leaders are unique]]\n\nOld."), "not003"},
+		{"superseded_by names no page", map[string]string{
+			"notes/not002.md": doc("Old claim", "note", hubLine+"\n\nSuperseded by [[nope|X]]\n\nOld.", kv{"status", "superseded"}, kv{"superseded_by", "nope"})}, "nope"},
+		{"a superseded hub", superseded("hub", hubLine+"\n\nSuperseded by [[not003|New claim]]"), "must not be superseded"},
+		{"a superseded log", superseded("log", hubLine+"\n\nSuperseded by [[not003|New claim]]\n\n## Updates"), "must not be superseded"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var msgs []string
+			for _, f := range findingsOf(t, with_(t, tt.changes)) {
+				if f.Path == "notes/not002.md" && strings.HasPrefix(f.Code, "E_") {
+					msgs = append(msgs, f.Code+" "+f.Msg)
+				}
+			}
+			switch {
+			case tt.want == "" && len(msgs) != 0:
+				t.Errorf("errors %q, want none", msgs)
+			case tt.want != "" && !slices.ContainsFunc(msgs, func(m string) bool { return strings.HasPrefix(m, "E_FRONTMATTER ") && strings.Contains(m, tt.want) }):
+				t.Errorf("errors %q, want an E_FRONTMATTER containing %q", msgs, tt.want)
+			}
+		})
+	}
+}
+
+// TestLintHubUnlisted: a hub whose parent's body does not link it is W_HUB_UNLISTED; the index counts as a parent.
+func TestLintHubUnlisted(t *testing.T) {
+	indexLinking := func(links string) string {
+		return doc("Index", "hub", links)
+	}
+	tests := []struct {
+		name    string
+		changes map[string]string
+		want    []string // paths of the hubs reported; none means silent
+	}{
+		{"the base vault lists its hubs in the index", nil, nil},
+		{"the index does not link a hub", map[string]string{"index.md": indexLinking("- [[hubsrc|Sources]]")}, []string{"notes/hubprj.md"}},
+		{"the index links a hub on its first body line", map[string]string{"index.md": indexLinking("[[hubprj|Projects]] [[hubsrc|Sources]]")}, nil},
+		{"the parent names the child on its Hubs line only", map[string]string{
+			"notes/hub001.md": doc("H1", "hub", "Hubs: [[hubsrc|Sources]]\n\nA child hub."),
+			"notes/hubsrc.md": doc("Sources", "hub", "Hubs: [[index|Index]]\n\nOne source note per raw file."),
+		}, []string{"notes/hub001.md"}},
+		{"the parent links the child in its body", map[string]string{
+			"notes/hub001.md": doc("H1", "hub", "Hubs: [[hubsrc|Sources]]\n\nA child hub."),
+			"notes/hubsrc.md": doc("Sources", "hub", "Hubs: [[index|Index]]\n\nSee [[hub001|H1]]."),
+		}, nil},
+		{"a note under a hub needs no link from it", map[string]string{"notes/not002.md": doc("Two", "note", "Hubs: [[hubprj|Projects]]\n\nSee [[not001|Leaders are unique]].")}, nil},
+		{"one of two parents does not link the hub", map[string]string{
+			"notes/hub001.md": doc("H1", "hub", "Hubs: [[hubsrc|Sources]], [[hubprj|Projects]]\n\nA child hub."),
+			"notes/hubsrc.md": doc("Sources", "hub", "Hubs: [[index|Index]]\n\nSee [[hub001|H1]]."),
+		}, []string{"notes/hub001.md"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got []string
+			for _, f := range findingsWith(t, with_(t, tt.changes), "W_HUB_UNLISTED") {
+				got = append(got, f.Path)
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("W_HUB_UNLISTED on %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestLintLogHeading: a log needs ## Updates, whose ### headings are YYYY-MM-DD dates, newest first.
+func TestLintLogHeading(t *testing.T) {
+	log := func(body string) map[string]string {
+		return map[string]string{"notes/log001.md": doc("Project one", "log", hubLine+"\n\n"+body)}
+	}
+	entry := func(h string) string { return "### " + h + "\n\nDecided.\n\n" }
+	tests := []struct {
+		name    string
+		changes map[string]string
+		want    int // the line of the one finding; 0 means silent
+	}{
+		{"entries newest first", log("## Updates\n\n" + entry("2026-02-01") + entry("2026-01-15")), 0},
+		{"two entries on one day", log("## Updates\n\n" + entry("2026-02-01") + entry("2026-02-01")), 0},
+		{"an empty Updates section", log("## Updates"), 0},
+		{"free H2 sections before Updates", log("## Context\n\nWhy.\n\n## Updates\n\n" + entry("2026-02-01")), 0},
+		{"a heading in a code fence is not an entry", log("## Updates\n\n```\n### not a date\n```"), 0},
+		{"no Updates section", log("Decision."), 6},
+		{"an entry heading that is not a date", log("## Updates\n\n" + entry("Later")), 10},
+		{"an impossible date", log("## Updates\n\n" + entry("2026-13-40")), 10},
+		{"a date with a time", log("## Updates\n\n" + entry("2026-02-01 10:00")), 10},
+		{"oldest first", log("## Updates\n\n" + entry("2026-01-15") + entry("2026-02-01")), 14},
+		{"a note needs no Updates section", map[string]string{"notes/not002.md": doc("Two", "note", hubLine+"\n\nSee [[not001|Leaders are unique]].")}, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := findingsWith(t, with_(t, tt.changes), "W_LOG_HEADING")
+			switch {
+			case tt.want == 0 && len(got) != 0:
+				t.Errorf("findings %+v, want none", got)
+			case tt.want != 0 && (len(got) != 1 || got[0].Path != "notes/log001.md" || got[0].Line != tt.want):
+				t.Errorf("findings %+v, want one W_LOG_HEADING on notes/log001.md:%d", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestInitSeedsLogUpdates: the log template that init writes starts a log with a ## Updates section.
+func TestInitSeedsLogUpdates(t *testing.T) {
+	env := setupVault(t, "dev", nil)
+	if got := run(env, "init", "v"); got.code != 0 {
+		t.Fatalf("init exit %d, stderr %q", got.code, got.stderr)
+	}
+	b, err := os.ReadFile(filepath.Join("v", ".zk", "templates", "log.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "\n## Updates\n") {
+		t.Errorf("log template = %q, want a ## Updates section", b)
 	}
 }

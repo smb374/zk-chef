@@ -423,7 +423,7 @@ func TestExportHugoSiteBuilds(t *testing.T) {
 	}
 	files := exportVault(t)
 	files["notes/notdt1.md"] = doc("Dated note", "note", hubLine+"\n\nSee [[not001]] and [[src001|Reading]].\n\n{{< figure src=\"x\" >}}")
-	files["notes/not009.md"] = doc("Old claim", "note", hubLine+"\n\nOld.", kv{"status", "superseded"}, kv{"superseded_by", "not001"})
+	files["notes/not009.md"] = doc("Old claim", "note", hubLine+"\n\nSuperseded by [[not001]]\n\nOld.", kv{"status", "superseded"}, kv{"superseded_by", "not001"})
 	files["notes/src001.md"] = doc("Source one", "source",
 		"Hubs: [[hubsrc|Sources]]\n\nWhy.\n\n## Review",
 		kv{"raw", "raw/src001.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"},

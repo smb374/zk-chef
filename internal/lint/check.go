@@ -39,6 +39,79 @@ var stemRe = regexp.MustCompile(`\A[a-z0-9]{6}\z`)
 // kindValues are the values of the kind: tag.
 var kindValues = []string{"note", "hub", "source", "log"}
 
+// Kebab words, joined by "/" for topic: tags. A type: tag is one kebab word.
+var (
+	kebabRe = regexp.MustCompile(`\A[a-z0-9]+(-[a-z0-9]+)*\z`)
+	topicRe = regexp.MustCompile(`\A[a-z0-9]+(-[a-z0-9]+)*(/[a-z0-9]+(-[a-z0-9]+)*)*\z`)
+)
+
+// tagKnown reports whether tag belongs to the namespaces the page's kind allows.
+func tagKnown(tag, kind string) bool {
+	ns, v, _ := strings.Cut(tag, ":")
+	switch ns {
+	case "kind":
+		return slices.Contains(kindValues, v)
+	case "review":
+		return kind == "source" && slices.Contains(reviews, v)
+	case "status":
+		return v == "superseded"
+	case "topic":
+		return topicRe.MatchString(v)
+	case "type":
+		return kind == "log" && kebabRe.MatchString(v)
+	}
+	return false
+}
+
+// knownKeys are the frontmatter keys every kind lists; keysByKind adds the keys of one kind.
+var (
+	knownKeys  = []string{"title", "date", "tags", "aliases"}
+	keysByKind = map[string][]string{
+		"note":   {"superseded_by"},
+		"source": {"superseded_by", "url", "accessed", "authors", "published", "raw", "sha256"},
+	}
+)
+
+// checkKeys warns about each frontmatter key that the page's kind does not list, and each tag outside the namespaces it allows.
+func checkKeys(d *Page, add adder) {
+	var unknown []string
+	for key := range d.fm {
+		if !slices.Contains(knownKeys, key) && !slices.Contains(keysByKind[d.Kind()], key) {
+			unknown = append(unknown, key)
+		}
+	}
+	slices.Sort(unknown)
+	for _, key := range unknown {
+		add("W_UNKNOWN_KEY", d.path, 1, fmt.Sprintf("key %s is not listed for kind %s", key, d.Kind()))
+	}
+	for _, tag := range d.tags {
+		if !tagKnown(tag, d.Kind()) {
+			add("W_UNKNOWN_TAG", d.path, 1, "tag "+tag+" is not allowed for kind "+d.Kind())
+		}
+	}
+}
+
+// checkSupersedeLine requires, for a superseded page, the first non-blank body line after the Hubs line to be
+// "Superseded by [[superseded_by|Title]]".
+func checkSupersedeLine(d *Page, add adder) {
+	want := d.SupersededBy()
+	for _, l := range d.lines[1:] {
+		if strings.TrimSpace(l.text) == "" {
+			continue
+		}
+		if rest, ok := strings.CutPrefix(l.text, "Superseded by "); ok {
+			if m := linkRe.FindStringSubmatch(rest); m != nil && strings.HasPrefix(rest, "[[") {
+				if got := strings.TrimSpace(m[1]); got != want {
+					add("E_FRONTMATTER", d.path, l.n, fmt.Sprintf("Superseded by line names %s, but superseded_by is %s", got, want))
+				}
+				return
+			}
+		}
+		break
+	}
+	add("E_FRONTMATTER", d.path, d.lines[0].n, fmt.Sprintf("superseded page needs the line \"Superseded by [[%s|Title]]\" after the Hubs line", want))
+}
+
 func checkFrontmatter(d *Page, add adder) {
 	if d.path != IndexPath {
 		if strings.Contains(strings.TrimPrefix(d.path, NotesDir+"/"), "/") {
@@ -91,28 +164,31 @@ func checkFrontmatter(d *Page, add adder) {
 	}
 }
 
-// hubMapMissing reports a hub whose members link each other but whose map holds neither an
-// ordered walk (1. ...) nor a GAP: line.
-func hubMapMissing(d *Page, members []string, linked map[string][]string) bool {
-	in := map[string]bool{}
-	for _, m := range members {
-		in[m] = true
-	}
-	interlinked := false
-	for _, m := range members {
-		for _, t := range linked[m] {
-			interlinked = interlinked || (t != m && in[t])
-		}
-	}
-	if !interlinked {
-		return false
-	}
+// checkLog warns when a log has no ## Updates section, an entry heading under it that is not a YYYY-MM-DD date,
+// or entries that are not newest first.
+func checkLog(d *Page, add adder) {
+	updates, newest := false, ""
 	for _, l := range d.scanned() {
-		if entryRe.MatchString(l.text) || strings.Contains(l.text, "GAP:") {
-			return false
+		if l.section != "Updates" {
+			continue
+		}
+		heading, isH3 := strings.CutPrefix(l.text, "### ")
+		heading = strings.TrimSpace(heading)
+		switch {
+		case strings.TrimSpace(l.text) == "## Updates":
+			updates = true
+		case !isH3:
+		case !validDate(strings.TrimSpace(heading), false):
+			add("W_LOG_HEADING", d.path, l.n, fmt.Sprintf("entry heading %s is not a YYYY-MM-DD date", pyRepr(heading)))
+		case newest != "" && heading > newest:
+			add("W_LOG_HEADING", d.path, l.n, fmt.Sprintf("entry %s is newer than the one above it; list newest first", heading))
+		default:
+			newest = heading
 		}
 	}
-	return true
+	if !updates {
+		add("W_LOG_HEADING", d.path, d.lines[0].n, "log needs a ## Updates section")
+	}
 }
 
 // citeRe finds [3] and [3, p. 4]. Go has no lookaround, so citations() checks the neighbours.

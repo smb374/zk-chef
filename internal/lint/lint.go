@@ -25,7 +25,7 @@ type Finding struct {
 
 var (
 	linkRe     = regexp.MustCompile(`\[\[([^\]|]+)(?:\|([^\]]*))?\]\]`)
-	markerRe   = regexp.MustCompile(`\b(?:TODO|GAP|CONTRADICTION):`)
+	markerRe   = regexp.MustCompile(`\b(?:TODO|CONTRADICTION):`)
 	linkFullRe = regexp.MustCompile(`\A` + linkRe.String() + `\z`)
 )
 
@@ -95,21 +95,27 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 		}
 	}
 	for _, d := range good {
+		checkKeys(d, add)
 		if v, has := d.fm["superseded_by"]; has {
 			if s, isStr := v.(string); !isStr || byID[s] == nil {
 				add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("superseded_by %v does not exist", v))
 			}
+		}
+		if d.Superseded() && d.SupersededBy() != "" {
+			checkSupersedeLine(d, add)
 		}
 	}
 
 	if byID[indexStem] == nil {
 		add("E_UNREACHABLE", IndexPath, 1, "index.md not found")
 	}
-	edges := map[string][]string{}  // hub id -> ids of the docs that name it in their Hubs line
-	linked := map[string][]string{} // doc id -> ids its body links, past the Hubs line
+	edges := map[string][]string{}             // hub id -> ids of the docs that name it in their Hubs line
+	linked := map[string][]string{}            // doc id -> ids its body links, past the Hubs line
+	type hubLink struct{ child, parent *Page } // a hub and one parent hub on its Hubs line
+	var hubLinks []hubLink
 	for _, d := range good {
 		live := !d.Superseded()
-		bodyLinks, words := 0, 0
+		words := 0
 		for _, l := range d.scanned() {
 			for _, m := range linkRe.FindAllStringSubmatch(l.text, -1) {
 				target := byID[strings.TrimSpace(m[1])]
@@ -124,8 +130,7 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 				if live && target.Superseded() {
 					add("W_SUPERSEDED_LINK", d.path, l.n, fmt.Sprintf("links %s, superseded by %v", target.ID(), target.SupersededBy()))
 				}
-				if l.n != d.lines[0].n {
-					bodyLinks++
+				if d.ID() == indexStem || l.n != d.lines[0].n { // index has no Hubs line
 					linked[d.ID()] = append(linked[d.ID()], target.ID())
 				}
 			}
@@ -137,13 +142,12 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 			}
 		}
 		if d.Kind() == "note" {
-			if bodyLinks == 0 {
-				add("W_DEAD_END", d.path, d.lines[0].n, "links nothing besides its Hubs line")
-			}
 			checkCitations(d, add)
 			if words > cfg.WordCountWarn {
 				add("W_WORD_COUNT", d.path, d.lines[0].n, fmt.Sprintf("%d words", words))
 			}
+		} else if d.Kind() == "log" {
+			checkLog(d, add)
 		}
 		if d.ID() == indexStem {
 			continue
@@ -175,7 +179,15 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 				add("E_HUBS_LINE", d.path, first.n, m[1]+" is not another hub")
 			} else {
 				edges[target.ID()] = append(edges[target.ID()], d.ID())
+				if d.Kind() == "hub" {
+					hubLinks = append(hubLinks, hubLink{d, target})
+				}
 			}
+		}
+	}
+	for _, h := range hubLinks {
+		if child, parent := h.child, h.parent; !slices.Contains(linked[parent.ID()], child.ID()) {
+			add("W_HUB_UNLISTED", child.path, child.lines[0].n, fmt.Sprintf("hub %s does not link %s in its body", parent.ID(), child.ID()))
 		}
 	}
 	reach, todo := map[string]bool{indexStem: true}, []string{indexStem}
@@ -192,11 +204,6 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 	for _, d := range good {
 		if !reach[d.ID()] {
 			add("E_UNREACHABLE", d.path, 1, "does not reach the Index hub through Hubs lines")
-		}
-	}
-	for _, d := range good {
-		if d.Kind() == "hub" && d.ID() != indexStem && hubMapMissing(d, edges[d.ID()], linked) {
-			add("W_HUB_MAP", d.path, d.lines[0].n, "members link each other, but the map has no ordered walk or GAP: line")
 		}
 	}
 

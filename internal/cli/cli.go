@@ -25,6 +25,8 @@ type invocation struct {
 	env            []string
 	root           string   // --root, for verbs that take it
 	staged         bool     // --staged, for lint
+	fix            bool     // --fix, for lint
+	children       string   // --children, for lint
 	yes            bool     // -y, for init, install and upgrade
 	skillsOnly     bool     // --skills-only, for install
 	noCommit       bool     // --no-commit, for review
@@ -76,9 +78,12 @@ var verbs = []verb{
 		}},
 	{name: "lint", usage: "check the vault against the rules", root: true, run: lintVerb,
 		flags: func() []cli.Flag {
-			return []cli.Flag{boolFlag("staged", "check the git index instead of the worktree")}
+			return []cli.Flag{
+				boolFlag("staged", "check the git index instead of the worktree"),
+				boolFlag("fix", "first rewrite stale link aliases on a note's Hubs line and in its References, and on every line of other kinds"),
+				&cli.StringFlag{Name: "children", Usage: "HUB: print the pages whose Hubs line names HUB, and do not lint"},
+			}
 		}},
-	{name: "fix", usage: "rewrite stale link aliases on a note's Hubs line and in its References, and on every line of other kinds", root: true, run: fixVerb},
 	{name: "review", usage: "sign a source's review, or list the review queue", argsUsage: "[SRC-ID reviewed|disputed]", root: true, run: reviewVerb,
 		flags: func() []cli.Flag { return []cli.Flag{boolFlag("no-commit", "sign the note but do not commit")} }},
 	{name: "status", usage: "summarize the vault", root: true, run: statusVerb},
@@ -135,6 +140,8 @@ func (v verb) command(base invocation, code *int) *cli.Command {
 			inv.yes = cmd.Bool("y")
 			inv.skillsOnly = cmd.Bool("skills-only")
 			inv.staged = cmd.Bool("staged")
+			inv.fix = cmd.Bool("fix")
+			inv.children = cmd.String("children")
 			inv.noCommit = cmd.Bool("no-commit")
 			inv.title = cmd.String("title")
 			inv.generator = cmd.String("generator")

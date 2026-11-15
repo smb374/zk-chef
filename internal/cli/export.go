@@ -204,14 +204,6 @@ func exportPages(files map[string][]byte, hugo bool) (map[string]string, error) 
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
 		}
-		if s.page.Superseded() {
-			t := targets[s.page.SupersededBy()]
-			link, err := exportLink(p, t, t.title)
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", p, err)
-			}
-			body = "Superseded by " + link + ".\n\n" + body
-		}
 		backlinks := map[string]bool{}
 		for id := range linkedBy[s.page.ID()] {
 			if id != s.page.ID() && !members[s.page.ID()][id] {

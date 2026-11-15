@@ -404,13 +404,14 @@ func TestExportExtractFencedHeadingIsNotASection(t *testing.T) {
 	}
 }
 
+// TestExportSupersededNoticeLinksReplacement: the export shows the vault's own Superseded by line once, as a link, and adds none.
 func TestExportSupersededNoticeLinksReplacement(t *testing.T) {
 	tree := exportOK(t, with_(t, map[string]string{
-		"notes/not001.md": doc("Leaders are unique", "note", hubLine+"\n\nOld claim.",
+		"notes/not001.md": doc("Leaders are unique", "note", hubLine+"\n\nSuperseded by [[not002]]\n\nOld claim.",
 			kv{"status", "superseded"}, kv{"superseded_by", "not002"}),
 		"notes/not002.md": doc("Array [a] of x", "note", hubLine+"\n\nNew claim."),
 	}))
-	want := "---\ntitle: Leaders are unique\ndate: 2026-01-02T03:04:05Z\nkind: note\nstatus: superseded\nsuperseded_by: not002\n---\nSuperseded by [Array \\[a\\] of x](not002.md).\n\nHubs: [Index](../index.md)\n\nOld claim.\n"
+	want := "---\ntitle: Leaders are unique\ndate: 2026-01-02T03:04:05Z\nkind: note\nstatus: superseded\nsuperseded_by: not002\n---\nHubs: [Index](../index.md)\n\nSuperseded by [Array \\[a\\] of x](not002.md)\n\nOld claim.\n"
 	if got := tree["notes/not001.md"]; got != want {
 		t.Errorf("notes/not001.md = %q, want %q", got, want)
 	}
@@ -421,7 +422,7 @@ func TestExportSupersededNoticeLinksReplacement(t *testing.T) {
 
 func TestExportSupersededLiveNoteHasNoNotice(t *testing.T) {
 	tree := exportOK(t, with_(t, map[string]string{
-		"notes/not001.md": doc("Leaders are unique", "note", hubLine+"\n\nOld claim.",
+		"notes/not001.md": doc("Leaders are unique", "note", hubLine+"\n\nSuperseded by [[not002]]\n\nOld claim.",
 			kv{"status", "superseded"}, kv{"superseded_by", "not002"}),
 		"notes/not002.md": doc("New note", "note", hubLine+"\n\nNew claim."),
 	}))
@@ -723,7 +724,7 @@ func hugoPages(tree map[string]string) map[string]string {
 
 func TestExportHugoBodiesMatchGeneric(t *testing.T) {
 	files := memberVault(t)
-	files["notes/not005.md"] = doc("Old note", "note", hubLine+"\n\nOld claim.", kv{"status", "superseded"}, kv{"superseded_by", "not002"})
+	files["notes/not005.md"] = doc("Old note", "note", hubLine+"\n\nSuperseded by [[not002]]\n\nOld claim.", kv{"status", "superseded"}, kv{"superseded_by", "not002"})
 	generic, hugo := withoutManifest(exportOK(t, files)), exportHugoOK(t, files)
 	if n := len(hugoPages(hugo)); len(generic) != n {
 		t.Fatalf("generic has %d pages, hugo %d", len(generic), n)
