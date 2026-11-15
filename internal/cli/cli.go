@@ -111,7 +111,7 @@ func (v verb) command(base invocation, code *int) *cli.Command {
 		flags = append(flags, v.flags()...)
 	}
 	if v.root {
-		flags = append(flags, &cli.StringFlag{Name: "root", Usage: "vault root (default: $" + rootEnv + ", else the current directory)"})
+		flags = append(flags, &cli.StringFlag{Name: "root", Aliases: []string{"r"}, Usage: "vault root (default: $" + rootEnv + ", else the current directory)"})
 	}
 	return &cli.Command{
 		Name:            v.name,
