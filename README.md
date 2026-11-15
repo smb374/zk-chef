@@ -55,7 +55,7 @@ Without a fingerprint, it uses your first secret key. It exports the public key 
 
 ## Use
 
-The agent loads the skills from `AGENTS.md`. It creates notes with `zk new`, edits files and commits. The hook runs `zk-chef lint --staged` on every commit.
+The agent loads the skills from `AGENTS.md`. It creates pages with `zk note`, `zk hub` and `zk log` (each with `--title`), makes sources with `zk-chef ingest`, edits files and commits. The hook runs `zk-chef lint --staged` on every commit.
 
 Every verb accepts `--json` and `--help`. Verbs that work on a vault pick it in this order: `--root DIR` (short form `-r DIR`), the `ZK_CHEF_ROOT` env var, the current directory. There is no search up the directory tree. `zk-chef --help` lists the verbs.
 
@@ -90,7 +90,7 @@ What it writes:
 - the root `index.md` and the pages in `notes/`, with the same paths (`index.md` and `notes/<stem>.md`);
 - `[[ID|Title]]` links as relative Markdown links, such as `[Title](other.md)` from one page in `notes/` to another;
 - only these frontmatter fields: `title`, `date` (from the field), `kind`, `status` and `review` (unpacked from the `kind:`, `status:superseded` and `review:` tags), `superseded_by`, `tags` (only the `topic:` and `type:` tags), and for sources `url`, `accessed`, `authors`, `published`. `aliases` is not exported;
-- a `Superseded by` line at the top of a superseded note;
+- the vault's own `Superseded by [[stem|Title]]` line of a superseded note, as a Markdown link. The export adds no such line;
 - a `## Backlinks` section on a page that other pages link to, and a `## Members` section on a hub that other pages name in their `Hubs:` line. Both are sorted by title. A parent hub is a backlink, not a member.
 
 What it leaves out:
@@ -167,7 +167,7 @@ npx quartz build --serve   # or without --serve; output goes to public/
 
 Notes:
 
-- Quartz resolves a bare ID such as `[[ab12cd|Title]]` when exactly one file has that name. Keep note names unique across folders, which the lint already requires.
+- Quartz resolves a bare ID such as `[[ab12cd|Title]]` when exactly one file has that name. Stems are unique and `notes/` is flat, which lint requires.
 - Quartz reads dates from git. Copied files give a "not tracked by git" warning and wrong dates; this is harmless.
 - A published note that links to a note in an ignored folder gets a broken link.
 - Quartz lists backlinks by frontmatter `title`. Every note has one.

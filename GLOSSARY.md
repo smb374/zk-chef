@@ -5,8 +5,28 @@ A tool kit that keeps an agent-maintained Zettelkasten vault valid, and that can
 ## Language
 
 **Vault**:
-A separate git repo of Markdown notes, hubs, sources and project logs that `zk-chef init` sets up. The vault is the source of truth.
+A separate git repo that `zk-chef init` sets up. Its pages are Markdown files in one flat folder, `notes/`, plus the root page `index.md`. The vault is the source of truth.
 _Avoid_: Wiki, notebook
+
+**Page**:
+A Markdown file of the vault: the root page, or a file in `notes/`. Its **Kind** says what it is. Its ID is its file name without `.md`: 6 lowercase letters and digits, or `index` for the root page.
+_Avoid_: Document, file
+
+**Kind**:
+What a Page is: `note` (one claim), `hub`, `source` or `log`. A tag on the Page, `kind:note` and so on. Each Page has exactly one.
+_Avoid_: Class, variety
+
+**Source**:
+A Page of Kind `source` that records a work that notes cite. It has evidence: a URL with the date it was accessed, a raw copy kept in `raw/`, or both. Its review state is a tag, `review:unreviewed`, `review:reviewed` or `review:disputed`.
+_Avoid_: Reference, citation
+
+**Log**:
+A Page of Kind `log` that holds project material. Its body has an `## Updates` section made of Log entries.
+_Avoid_: Journal, diary
+
+**Log entry**:
+A `### YYYY-MM-DD` heading under `## Updates` in a Log, with the text below it. The newest entry comes first.
+_Avoid_: Update, post
 
 **Export**:
 A derived copy of the vault, written to another directory as standard Markdown by `zk-chef export DIR`. The generic Export can be read by any static site generator. With a **Generator** selected by `--generator`, the Export is tailored to that generator (today: `hugo`). Either way, an Export keeps a manifest of the pages it wrote (never the Export scaffold), and the vault itself is never changed.
@@ -25,7 +45,7 @@ A named look of the Export scaffold: `plain` or `tufte`, selected with `--style`
 _Avoid_: Theme, skin
 
 **Hubs line**:
-The first body line of every page except the root page: `Hubs: ` followed by links to the hubs the page belongs to. It decides Members.
+The first body line of every page except the root page: `Hubs: ` followed by links to the hubs the page belongs to, joined with `, `. It decides Members.
 _Avoid_: Parents line, breadcrumb
 
 **Alias**:
@@ -41,5 +61,5 @@ The section that Export appends to a page. It lists the pages that link to that 
 _Avoid_: Inbound links, citers
 
 **Members**:
-The section of a hub that lists the pages whose `Hubs:` line names it. It is separate from Backlinks: a parent or a prose mention that links to the hub is a backlink, not a member.
-_Avoid_: Children, forward links
+The section of a hub that lists the pages whose `Hubs:` line names it. It is separate from Backlinks: a parent or a prose mention that links to the hub is a backlink, not a member. `zk-chef lint --children HUB` lists them.
+_Avoid_: Forward links

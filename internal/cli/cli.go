@@ -72,7 +72,7 @@ var verbs = []verb{
 		flags: func() []cli.Flag {
 			return []cli.Flag{
 				&cli.StringFlag{Name: "title", Aliases: []string{"t"}, Usage: "note title (required)"},
-				&cli.StringSliceFlag{Name: "hub", Usage: "ID of a hub the source joins besides Sources (repeatable)"},
+				&cli.StringSliceFlag{Name: "hub", Usage: "ID of a hub the source joins (repeatable; at least one is required)"},
 				boolFlag("no-raw", "URL only: record url and accessed, download nothing"),
 			}
 		}},

@@ -16,9 +16,13 @@ link-format = "[[{{filename}}|{{title}}]]"
 hashtags = false
 colon-tags = false
 
-# Flags only, so the aliases work in every login shell. Use: zk note --title "Title"
+# zk passes the arguments to an alias only through "$@". Run aliases with sh, because fish and other login shells reject "$@".
+# Use: zk note --title "Title"
+[tool]
+shell = "/bin/sh"
+
 [alias]
-note = "zk new notes --template note.md --print-path --no-input"
-source = "zk new notes --template source.md --print-path --no-input"
-hub = "zk new notes --template hub.md --print-path --no-input"
-log = "zk new notes --template log.md --print-path --no-input"
+note = "zk new notes --template note.md --print-path --no-input \"$@\""
+source = "zk new notes --template source.md --print-path --no-input \"$@\""
+hub = "zk new notes --template hub.md --print-path --no-input \"$@\""
+log = "zk new notes --template log.md --print-path --no-input \"$@\""

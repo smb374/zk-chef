@@ -145,6 +145,9 @@ func TestInitFreshVault(t *testing.T) {
 			} `toml:"format"`
 			Group map[string]any    `toml:"group"`
 			Alias map[string]string `toml:"alias"`
+			Tool  struct {
+				Shell string `toml:"shell"`
+			} `toml:"tool"`
 		}
 		text := readFile(t, filepath.Join(v, ".zk", "config.toml"))
 		if err := toml.Unmarshal([]byte(text), &cfg); err != nil {
@@ -159,8 +162,12 @@ func TestInitFreshVault(t *testing.T) {
 		if len(cfg.Group) != 0 {
 			t.Errorf("config has groups %v, want none", cfg.Group)
 		}
+		// zk drops the arguments of an alias without "$@", and fish rejects "$@": aliases pass them and run with sh.
+		if cfg.Tool.Shell != "/bin/sh" {
+			t.Errorf("[tool] shell = %q, want /bin/sh", cfg.Tool.Shell)
+		}
 		for _, kind := range []string{"note", "source", "hub", "log"} {
-			if want := "zk new notes --template " + kind + ".md --print-path --no-input"; cfg.Alias[kind] != want {
+			if want := "zk new notes --template " + kind + ".md --print-path --no-input \"$@\""; cfg.Alias[kind] != want {
 				t.Errorf("alias %s = %q, want %q", kind, cfg.Alias[kind], want)
 			}
 		}
@@ -406,5 +413,34 @@ func TestInitZkHint(t *testing.T) {
 				t.Errorf("stderr %q, want hint %v", got.stderr, !withZk)
 			}
 		})
+	}
+}
+
+// TestZkAliasesPassTitle: zk note|source|hub|log --title sets the title of the new page, and a title
+// with spaces, quotes or shell syntax stays one argument that the shell never runs.
+func TestZkAliasesPassTitle(t *testing.T) {
+	ingestVault(t)
+	titles := []string{"B two words", `Say "hi"`, "it's $(touch injected) ; touch injected2 `touch injected3`"}
+	for _, alias := range []string{"note", "source", "hub", "log"} {
+		for _, title := range titles {
+			out, err := exec.Command("zk", alias, "--title", title).Output()
+			if err != nil {
+				t.Fatalf("zk %s --title %q: %v", alias, title, err)
+			}
+			path := strings.TrimSpace(string(out))
+			b, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("zk %s printed %q: %v", alias, out, err)
+			}
+			quoted, _ := json.Marshal(title)
+			if want := "\ntitle: " + string(quoted) + "\n"; !strings.Contains(string(b), want) {
+				t.Errorf("zk %s --title %q wrote:\n%s\nwant the line %q", alias, title, b, want)
+			}
+		}
+	}
+	for _, name := range []string{"injected", "injected2", "injected3"} {
+		if _, err := os.Stat(name); err == nil {
+			t.Errorf("a title ran a shell command: %s exists", name)
+		}
 	}
 }
