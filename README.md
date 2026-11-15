@@ -45,7 +45,7 @@ It prints `kept your …` for files that differ from the scaffold. Run `zk-chef 
 
 ## Set up your signing key (once, human)
 
-Source reviews need a pinned key.
+Source reviews need a pinned key. A review signs a `vault-review v2` message with `verdict` and `date`, and with `path` and `sha256` for a source with a raw file, or `url` and `accessed` for a source with no raw file. A source with both signs the raw form. A review of a URL-only source vouches for what you read at that URL on that date, not for bytes that the vault holds.
 
 ```sh
 zk-chef key add YOUR_FINGERPRINT
@@ -70,7 +70,7 @@ Every verb accepts `--json` and `--help`. Verbs that work on a vault pick it in 
 | `zk-chef ingest PATH\|URL --title T --hub ID [--hub ID]... [--no-raw]` | agent | Creates a source note in `notes/`, tagged `kind:source` and `review:unreviewed`. `ingest PATH` copies the file to `raw/` and sets `raw` and `sha256`. `ingest URL` downloads the page to `raw/` and sets `url`, `accessed` (today, UTC), `raw` and `sha256`. `ingest URL --no-raw` downloads nothing and sets only `url` and `accessed`; `--no-raw` with a PATH exits with code 2. The raw file is `raw/<stem>` plus an extension: from the original name (lowercased), else from the response Content-Type, else none. `-t` is short for `--title`. `--hub ID` is required and repeatable: each hub goes on the note's Hubs line. Without `--hub`, an unknown ID or a non-hub ID, ingest exits with code 2 and writes nothing. When `zk new` returns a note that already exists, ingest tries again, up to 3 times in all, then exits with code 1 and leaves that note as it was |
 | `zk-chef lint [--staged]` | agent, hook | Runs every check; errors give exit code 1 |
 | `zk-chef fix` | agent | Rewrites stale link aliases to the targets' current titles; leaves aliases in note prose alone |
-| `zk-chef review [SRC-ID reviewed\|disputed] [--no-commit]` | human only | Shows the raw file, asks you to confirm, signs the verdict and commits. Without arguments it walks the queue |
+| `zk-chef review [SRC-ID reviewed\|disputed] [--no-commit]` | human only | Shows the raw path or the URL, asks you to confirm, signs the verdict and commits. Without arguments it walks the queue |
 | `zk-chef status` | agent | Lists new and re-review sources, disputed sources still cited, and lint counts |
 | `zk-chef export DIR [--generator hugo [--style plain\|tufte]]` | agent | Writes the root page and the pages in `notes/` to `DIR` as Markdown, with frontmatter cut to a safe set of fields. `--generator hugo` (`-g hugo`) shapes the output for Hugo. With it, `DIR` is a Hugo site root. The pages go to `DIR/content/`. The export also creates and updates a scaffold in one of two Styles (see Hugo below). Lint errors stop it with exit code 1. It never changes the vault. `DIR` must be outside the vault |
 
@@ -202,7 +202,7 @@ Pushing a `v*` tag runs `.github/workflows/release.yml`. It builds four binaries
 ## Limits
 
 - The gate guards against mistakes, not against an agent set on bypassing the hook.
-- A review vouches for a raw file, not for the notes that cite it. Lint compares notes with each other, not with reality.
+- A review vouches for a raw file, or for a URL on its `accessed` date, not for the notes that cite it. Lint compares notes with each other, not with reality.
 - `## Extract` and the paraphrases in a source note are unsigned.
 - Search is keyword-only. Windows is not supported.
 - Not yet checked: that Obsidian resolves `[[ID|Title]]` in `notes/` (`docs/build-notes.md`, item 2).

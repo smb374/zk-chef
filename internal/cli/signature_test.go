@@ -11,7 +11,7 @@ import (
 )
 
 // Signature tests port tests/test_vault.py test_review_and_signatures. They sign blocks with
-// real gpg, the way v1 review builds the clearsigned message; review itself is ticket #7.
+// real gpg, the way review builds the clearsigned message.
 
 func requireGPG(t *testing.T) {
 	t.Helper()
@@ -55,17 +55,23 @@ func newSigner(t *testing.T) signer {
 	return signer{home, fpr, gpg(t, home, "", "--armor", "--export", fpr)}
 }
 
-// fenced signs message and wraps it as v1 review does: a fenced block plus a blank line.
+// fenced signs message and wraps it as review does: a fenced block plus a blank line.
 func (s signer) fenced(t *testing.T, message string) string {
 	t.Helper()
 	signed := gpg(t, s.home, message, "--local-user", s.fpr, "--clearsign", "--armor")
 	return "```\n" + strings.TrimRight(signed, "\n") + "\n```\n\n"
 }
 
-// review signs a vault-review v1 message.
+// review signs a vault-review v2 message for a source with a raw file.
 func (s signer) review(t *testing.T, path, sha, verdict string) string {
 	t.Helper()
-	return s.fenced(t, "vault-review v1\npath: "+path+"\nsha256: "+sha+"\nverdict: "+verdict+"\ndate: 2026-01-02\n")
+	return s.fenced(t, "vault-review v2\npath: "+path+"\nsha256: "+sha+"\nverdict: "+verdict+"\ndate: 2026-01-02\n")
+}
+
+// reviewURL signs a vault-review v2 message for a source with no raw file.
+func (s signer) reviewURL(t *testing.T, url, accessed, verdict string) string {
+	t.Helper()
+	return s.fenced(t, "vault-review v2\nurl: "+url+"\naccessed: "+accessed+"\nverdict: "+verdict+"\ndate: 2026-01-02\n")
 }
 
 const sourceHubs = "Hubs: [[hubsrc|Sources]]\n\nWhy.\n\n## Extract\n\ntext\n\n"
@@ -75,6 +81,12 @@ func source(reviewState, sha string, blocks ...string) string {
 	body := sourceHubs
 	body += "## Review\n\n" + strings.Join(blocks, "")
 	return doc("Source one", "source", body, kv{"raw", "raw/src001.bin"}, kv{"sha256", sha}, kv{"review", reviewState})
+}
+
+// urlNote builds notes/src001.md as a URL-only source (no raw file) with the review blocks under ## Review, newest first.
+func urlNote(reviewState, url, accessed string, blocks ...string) string {
+	body := sourceHubs + "## Review\n\n" + strings.Join(blocks, "")
+	return doc("Source one", "source", body, kv{"url", url}, kv{"accessed", accessed}, kv{"review", reviewState})
 }
 
 // signedVault is the base vault with keys/me.asc, the signer pinned, and extra changes applied.
@@ -142,7 +154,10 @@ func TestReviewSignatures(t *testing.T) {
 			want:    []string{"E_SIGNATURE"}, wantLine: fenceLine(source("reviewed", rawSHA, good), 1), wantMsg: "signature does not verify against keys/"},
 		{name: "signed text is not a review message",
 			changes: map[string]string{"notes/src001.md": source("reviewed", rawSHA, s.fenced(t, "hello\n"))},
-			want:    []string{"E_SIGNATURE"}, wantMsg: "signed text is not a vault-review v1 message"},
+			want:    []string{"E_SIGNATURE"}, wantMsg: "signed text is not a vault-review v2 message"},
+		{name: "v1 block is no longer a valid message",
+			changes: map[string]string{"notes/src001.md": source("reviewed", rawSHA, s.fenced(t, "vault-review v1\npath: raw/src001.bin\nsha256: "+rawSHA+"\nverdict: reviewed\ndate: 2026-01-02\n"))},
+			want:    []string{"E_SIGNATURE"}, wantMsg: "signed text is not a vault-review v2 message"},
 		{name: "note verdict differs from block",
 			changes: map[string]string{"notes/src001.md": source("disputed", rawSHA, good)},
 			want:    []string{"E_REVIEW_MISMATCH"}, wantLine: 1, wantMsg: "latest block verdict 'reviewed' differs from note 'disputed'"},
@@ -216,6 +231,59 @@ func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestReviewSignaturesURLOnly: lint compares the latest block with the url and accessed fields of a URL-only source.
+func TestReviewSignaturesURLOnly(t *testing.T) {
+	s := newSigner(t)
+	const url, accessed = "https://example.com/x", "2026-01-03"
+	good := s.reviewURL(t, url, accessed, "reviewed")
+	with := func(note string) map[string]string {
+		return map[string]string{"notes/src001.md": note, "raw/src001.bin": "\x00delete"}
+	}
+	tests := []struct {
+		name    string
+		changes map[string]string
+		want    string // code of the finding; empty means lint must be clean
+		wantMsg string
+	}{
+		{name: "valid signed URL-only review", changes: with(urlNote("reviewed", url, accessed, good))},
+		{name: "unreviewed keeps an old block", changes: with(urlNote("unreviewed", "https://example.com/new", accessed, good))},
+		{name: "tag differs from block", changes: with(urlNote("disputed", url, accessed, good)),
+			want: "E_REVIEW_MISMATCH", wantMsg: "latest block verdict 'reviewed' differs from note 'disputed'"},
+		{name: "url differs from block", changes: with(urlNote("reviewed", "https://example.com/other", accessed, good)),
+			want: "E_REVIEW_MISMATCH", wantMsg: "latest block url 'https://example.com/x' differs from note 'https://example.com/other'"},
+		{name: "accessed differs from block", changes: with(urlNote("reviewed", url, "2026-02-04", good)),
+			want: "E_REVIEW_MISMATCH", wantMsg: "latest block accessed '2026-01-03' differs from note '2026-02-04'"},
+		{name: "raw-form block on a URL-only note", changes: with(urlNote("reviewed", url, accessed, s.review(t, "raw/src001.bin", rawSHA, "reviewed"))),
+			want: "E_REVIEW_MISMATCH", wantMsg: "latest block url '' differs from note 'https://example.com/x'"},
+		{name: "URL-form block on a raw note", changes: map[string]string{"notes/src001.md": source("reviewed", rawSHA, good)},
+			want: "E_REVIEW_MISMATCH", wantMsg: "latest block path '' differs from note 'raw/src001.bin'"},
+		{name: "raw and url note signs the raw form and ignores url changes",
+			changes: map[string]string{"notes/src001.md": doc("Source one", "source", sourceHubs+"## Review\n\n"+s.review(t, "raw/src001.bin", rawSHA, "reviewed"),
+				kv{"raw", "raw/src001.bin"}, kv{"sha256", rawSHA}, kv{"url", "https://example.com/moved"}, kv{"accessed", "2026-02-04"}, kv{"review", "reviewed"})}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := runIn(t, "dev", signedVault(t, s, s.fpr, tt.changes), "lint", "--json")
+			var r report
+			if err := json.Unmarshal([]byte(got.stdout), &r); err != nil {
+				t.Fatalf("stdout %q stderr %q: %v", got.stdout, got.stderr, err)
+			}
+			if tt.want == "" {
+				if len(r.Findings) != 0 {
+					t.Errorf("findings %+v, want a clean lint", r.Findings)
+				}
+				return
+			}
+			for _, f := range r.Findings {
+				if f.Code == tt.want && strings.Contains(f.Msg, tt.wantMsg) {
+					return
+				}
+			}
+			t.Errorf("findings %+v, want %s containing %q", r.Findings, tt.want, tt.wantMsg)
+		})
 	}
 }
 

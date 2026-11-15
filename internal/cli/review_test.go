@@ -51,6 +51,47 @@ func readFile(t *testing.T, path string) string {
 	return string(b)
 }
 
+// TestReviewSignsRawSourceV2: a source with a raw file gets a vault-review v2 message with path and sha256.
+func TestReviewSignsRawSourceV2(t *testing.T) {
+	s := newSigner(t)
+	env := reviewVault(t, s, nil)
+	if got := run(env, "review", "src001", "reviewed", "--no-commit"); got.code != 0 {
+		t.Fatalf("code %d stderr %q, want 0", got.code, got.stderr)
+	}
+	want := "vault-review v2\npath: raw/src001.bin\nsha256: " + rawSHA + "\nverdict: reviewed\ndate: "
+	if note := readNote(t); !strings.Contains(note, want) {
+		t.Errorf("note %q, want it to contain %q", note, want)
+	}
+}
+
+// urlSource returns the files of notes/<id>.md, a URL-only source (no raw file), in the given review state.
+func urlSource(id, review string) map[string]string {
+	return map[string]string{
+		"notes/" + id + ".md": doc("Title "+id, "source", sourceHubs+"## Review\n\n", kv{"url", "https://example.com/" + id}, kv{"accessed", "2026-01-03"}, kv{"review", review}),
+	}
+}
+
+// TestReviewSignsURLOnlySource: a source with no raw file gets a vault-review v2 message with url and accessed, the tag changes, and git commits.
+func TestReviewSignsURLOnlySource(t *testing.T) {
+	s := newSigner(t)
+	env := reviewVault(t, s, urlSource("srcurl", "unreviewed"))
+	got := run(env, "review", "srcurl", "reviewed")
+	if got.code != 0 || got.stdout != "signed srcurl: reviewed\n" {
+		t.Fatalf("got code %d stdout %q stderr %q, want 0 \"signed srcurl: reviewed\\n\"", got.code, got.stdout, got.stderr)
+	}
+	note := readFile(t, "notes/srcurl.md")
+	want := "vault-review v2\nurl: https://example.com/srcurl\naccessed: 2026-01-03\nverdict: reviewed\ndate: "
+	if !strings.Contains(note, want) || !strings.Contains(note, "\ntags: [kind:source, review:reviewed]\n") {
+		t.Errorf("note %q, want the tag review:reviewed and a block containing %q", note, want)
+	}
+	if lint := run(env, "lint"); lint.code != 0 || lint.stdout != "0 errors, 0 warnings\n" {
+		t.Errorf("lint after review: code %d stdout %q, want clean", lint.code, lint.stdout)
+	}
+	if subj := gitOut(t, "log", "-1", "--format=%s"); subj != "review: srcurl reviewed" {
+		t.Errorf("commit subject %q, want %q", subj, "review: srcurl reviewed")
+	}
+}
+
 func readNote(t *testing.T) string { return readFile(t, "notes/src001.md") }
 
 func TestReviewSignsAndCommits(t *testing.T) {
@@ -221,6 +262,44 @@ func TestReviewQueueKeys(t *testing.T) {
 	}
 	if lint := run(env, "lint"); strings.Contains(lint.stdout, "notes/src00") { // srcr00 is reviewed without a block on purpose
 		t.Errorf("lint: code %d stdout %q, want no errors", lint.code, lint.stdout)
+	}
+}
+
+// TestReviewQueueURLOnlySource: the queue shows url and accessed for a URL-only source, o prints the url, and y signs it.
+func TestReviewQueueURLOnlySource(t *testing.T) {
+	s := newSigner(t)
+	env := reviewVault(t, s, urlSource("srcu01", "unreviewed"))
+	got := runStdin(env, "s\no\ny\n", "review")
+	if got.code != 0 {
+		t.Fatalf("code %d stdout %q stderr %q, want 0", got.code, got.stdout, got.stderr)
+	}
+	for _, want := range []string{"raw: raw/src001.bin\n", "srcu01: Title srcu01\nurl: https://example.com/srcu01 (accessed 2026-01-03)\n", "\nhttps://example.com/srcu01\n", "signed srcu01: reviewed\n", "reviewed 1, disputed 0, skipped 1\n"} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("stdout %q, want it to contain %q", got.stdout, want)
+		}
+	}
+	if strings.Contains(got.stdout, "srcu01: Title srcu01\nraw:") {
+		t.Errorf("stdout %q shows a raw line for the URL-only source", got.stdout)
+	}
+	if note := readFile(t, "notes/srcu01.md"); !strings.Contains(note, "tags: [kind:source, review:reviewed]\n") {
+		t.Errorf("srcu01 not reviewed:\n%s", note)
+	}
+}
+
+// TestReviewSignsRawFormWhenRawAndURL: a source with both raw and url signs the raw form.
+func TestReviewSignsRawFormWhenRawAndURL(t *testing.T) {
+	s := newSigner(t)
+	note := doc("Source one", "source", sourceHubs+"## Review\n\n", kv{"raw", "raw/src001.bin"}, kv{"sha256", rawSHA}, kv{"url", "https://example.com/x"}, kv{"accessed", "2026-01-03"}, kv{"review", "unreviewed"})
+	env := reviewVault(t, s, map[string]string{"notes/src001.md": note})
+	if got := run(env, "review", "src001", "reviewed"); got.code != 0 {
+		t.Fatalf("code %d stderr %q, want 0", got.code, got.stderr)
+	}
+	got := readNote(t)
+	if !strings.Contains(got, "vault-review v2\npath: raw/src001.bin\nsha256: "+rawSHA+"\nverdict: reviewed\n") || strings.Contains(got, "\nurl: https://example.com/x\naccessed: 2026-01-03\nverdict:") {
+		t.Errorf("note %q, want a raw-form block and no URL-form block", got)
+	}
+	if lint := run(env, "lint"); lint.code != 0 {
+		t.Errorf("lint: code %d stdout %q, want clean", lint.code, lint.stdout)
 	}
 }
 

@@ -45,9 +45,7 @@ func ComputeStatus(files map[string][]byte) (Status, error) {
 		case "disputed":
 			disputed[src.ID] = &DisputedCite{ID: src.ID, CitedBy: []string{}}
 		case "unreviewed":
-			if blockSHA, ok := latestVerifiedSHA(v, src, files); !ok {
-				st.New = append(st.New, ref)
-			} else if sum := sha256.Sum256(files[src.Raw]); blockSHA != hex.EncodeToString(sum[:]) {
+			if fields, ok := latestVerified(v, src, files); ok && signedOther(src, fields, files) {
 				st.ReReview = append(st.ReReview, ref)
 			} else {
 				st.New = append(st.New, ref)
@@ -77,21 +75,28 @@ func ComputeStatus(files map[string][]byte) (Status, error) {
 	return st, nil
 }
 
-// latestVerifiedSHA returns the sha256 in the newest signed block of src when that block verifies.
-func latestVerifiedSHA(v *verifier, src Source, files map[string][]byte) (string, bool) {
+// latestVerified returns the fields of the newest signed block of src when that block verifies.
+func latestVerified(v *verifier, src Source, files map[string][]byte) (map[string]string, bool) {
 	blocks := reviewBlocks(parseDoc(src.Path, string(files[src.Path])))
 	if len(blocks) == 0 {
-		return "", false
+		return nil, false
 	}
 	text, errMsg := v.verify(blocks[0].text)
 	if errMsg != "" {
-		return "", false
+		return nil, false
 	}
 	fields := parseMessage(text)
-	if fields == nil {
-		return "", false
+	return fields, fields != nil
+}
+
+// signedOther reports whether a verified block covers other evidence than the source holds now:
+// other raw bytes for a source with raw and sha256, other url or accessed for a URL-only source.
+func signedOther(src Source, fields map[string]string, files map[string][]byte) bool {
+	if src.Raw != "" && src.SHA256 != "" {
+		sum := sha256.Sum256(files[src.Raw])
+		return fields["sha256"] != hex.EncodeToString(sum[:])
 	}
-	return fields["sha256"], true
+	return fields["url"] != src.URL || fields["accessed"] != src.Accessed
 }
 
 // Counts returns the number of error findings (codes E_*) and warning findings (all others).

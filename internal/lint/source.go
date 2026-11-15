@@ -72,12 +72,21 @@ func checkSourceEvidence(d *Page, add adder) {
 }
 
 // Source is a valid source note as review sees it. ID is the file name stem.
+// A source has raw with SHA256, or URL with Accessed (YYYY-MM-DD), or both.
 type Source struct {
-	ID, Title, Path, Raw, SHA256, Review string
+	ID, Title, Path, Raw, SHA256, URL, Accessed, Review string
+}
+
+// dateStr returns a date frontmatter value as YYYY-MM-DD. YAML reads an unquoted date as a time.
+func (d *Page) dateStr(key string) string {
+	if t, ok := d.fm[key].(time.Time); ok {
+		return t.Format("2006-01-02")
+	}
+	return d.str(key)
 }
 
 // ParseSource reads a source note. It fails when the note has no valid frontmatter,
-// is not kind source, or lacks a string raw or sha256.
+// is not kind source, or has neither raw with sha256 nor url with accessed.
 func ParseSource(p, text string) (Source, error) {
 	d := parseDoc(p, text)
 	if d.err != "" {
@@ -87,15 +96,18 @@ func ParseSource(p, text string) (Source, error) {
 		return Source{}, errors.New("kind is not source")
 	}
 	s := Source{
-		ID:     d.ID(),
-		Title:  d.Title(),
-		Path:   p,
-		Raw:    d.str("raw"),
-		SHA256: d.str("sha256"),
-		Review: d.Review(),
+		ID:       d.ID(),
+		Title:    d.Title(),
+		Path:     p,
+		Raw:      d.str("raw"),
+		SHA256:   d.str("sha256"),
+		URL:      d.str("url"),
+		Accessed: d.dateStr("accessed"),
+		Review:   d.Review(),
 	}
-	if s.Raw == "" || s.SHA256 == "" {
-		return Source{}, errors.New("source needs raw and sha256 (strings)")
+	hasRaw, hasURL := s.Raw != "" && s.SHA256 != "", s.URL != "" && s.Accessed != ""
+	if !hasRaw && !hasURL {
+		return Source{}, errors.New("source needs raw with sha256, or url with accessed (strings)")
 	}
 	return s, nil
 }

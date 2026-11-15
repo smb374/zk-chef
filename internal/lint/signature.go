@@ -7,14 +7,15 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strings"
 )
 
 const signedBegin = "-----BEGIN PGP SIGNED MESSAGE-----"
 
-// messageKeys are the fields every signed review message must carry.
-var messageKeys = []string{"path", "sha256", "verdict", "date"}
+// messageForms are the field sets a signed review message may carry: the raw form and the URL-only form.
+var messageForms = [][]string{{"path", "sha256", "verdict", "date"}, {"url", "accessed", "verdict", "date"}}
 
 // NormFpr strips spaces and upper-cases a fingerprint.
 func NormFpr(s string) string {
@@ -139,10 +140,10 @@ func reviewBlocks(d *Page) []reviewBlock {
 	return blocks
 }
 
-// parseMessage returns the fields of a vault-review v1 message, or nil.
+// parseMessage returns the fields of a vault-review v2 message, or nil.
 func parseMessage(text string) map[string]string {
 	lines := strings.Split(strings.TrimSpace(text), "\n")
-	if lines[0] != "vault-review v1" {
+	if lines[0] != "vault-review v2" {
 		return nil
 	}
 	fields := map[string]string{}
@@ -151,12 +152,12 @@ func parseMessage(text string) map[string]string {
 			fields[k] = v
 		}
 	}
-	for _, k := range messageKeys {
-		if _, ok := fields[k]; !ok {
-			return nil
+	for _, form := range messageForms {
+		if !slices.ContainsFunc(form, func(k string) bool { _, ok := fields[k]; return !ok }) {
+			return fields
 		}
 	}
-	return fields
+	return nil
 }
 
 // checkReview verifies every signed block of a source note, then compares the latest one with the note.
@@ -168,7 +169,7 @@ func checkReview(d *Page, files map[string][]byte, v *verifier, add adder) {
 		if errMsg == "" {
 			fields = parseMessage(text)
 			if fields == nil {
-				errMsg = "signed text is not a vault-review v1 message"
+				errMsg = "signed text is not a vault-review v2 message"
 			}
 		}
 		if errMsg != "" {
@@ -188,8 +189,12 @@ func checkReview(d *Page, files map[string][]byte, v *verifier, add adder) {
 	if latest == nil {
 		return // a bad latest block is already E_SIGNATURE
 	}
-	raw := d.str("raw")
-	want := [][2]string{{"path", raw}, {"sha256", d.str("sha256")}, {"verdict", review}}
+	// A note with raw and sha256 is signed in the raw form, even when it has a url too.
+	raw, sha := d.str("raw"), d.str("sha256")
+	want := [][2]string{{"url", d.str("url")}, {"accessed", d.dateStr("accessed")}, {"verdict", review}}
+	if raw != "" && sha != "" {
+		want = [][2]string{{"path", raw}, {"sha256", sha}, {"verdict", review}}
+	}
 	for _, kv := range want {
 		if latest[kv[0]] != kv[1] {
 			add("E_REVIEW_MISMATCH", d.path, 1, fmt.Sprintf("latest block %s %s differs from note %s", kv[0], pyRepr(latest[kv[0]]), pyRepr(kv[1])))

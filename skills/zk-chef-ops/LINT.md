@@ -15,8 +15,8 @@
 | `E_CITATION` | An `[n]` without entry n, an entry never cited, numbering with gaps or out of first-use order, or `## References` not the last H2 | Renumber and fix the entries (`zettel-writing`, "Citations") |
 | `E_RAW_ORPHAN` | A file in `raw/` that no source note names in `raw:` | Ingest it, or remove it |
 | `E_SHA256` | The source names a raw file that is missing, or its hash differs from `sha256:` | Update `sha256:` after a deliberate raw update; restore the file otherwise |
-| `E_SIGNATURE` | A signed block does not verify, or its signer is not pinned | Leave the block as it is and tell the human |
-| `E_REVIEW_MISMATCH` | The `review:` tag is `reviewed` or `disputed` but the latest block's path, sha256 or verdict differs from the note or the file | After a raw update set the tag `review:unreviewed`; otherwise tell the human |
+| `E_SIGNATURE` | A signed block does not verify, its signer is not pinned, or its text is not a `vault-review v2` message (a `vault-review v1` block is no longer valid) | Leave the block as it is and tell the human |
+| `E_REVIEW_MISMATCH` | The `review:` tag is `reviewed` or `disputed` but the latest block differs from the note. A `vault-review v2` message has `verdict` and `date`, and `path` and `sha256` for a source with `raw`, or `url` and `accessed` for a source with no `raw`. A source with both signs the raw form. The block's verdict, path and sha256 (or url and accessed) must equal the note's, and the sha256 must equal the raw file | After a raw update, or a change of `url` or `accessed`, set the tag `review:unreviewed`; otherwise tell the human |
 
 ## Warnings (never block)
 

@@ -71,7 +71,7 @@ func gitRun(inv *invocation, root string, args ...string) error {
 	return nil
 }
 
-// signSource signs a verdict on the raw file of notes/<id>.md and records it in the note.
+// signSource signs a verdict on the raw file of notes/<id>.md, or on its URL when it has no raw file, and records it in the note.
 func signSource(inv *invocation, root, id, verdict string) error {
 	rel := lint.NotesDir + "/" + id + ".md"
 	notePath := filepath.Join(root, rel)
@@ -83,14 +83,19 @@ func signSource(inv *invocation, root, id, verdict string) error {
 	if err != nil {
 		return fmt.Errorf("%s is not a valid source note: %w", rel, err)
 	}
-	raw, err := os.ReadFile(filepath.Join(root, src.Raw))
-	if err != nil {
-		return err
-	}
-	sum := sha256.Sum256(raw)
-	sha := hex.EncodeToString(sum[:])
-	if sha != src.SHA256 {
-		return errRawChanged
+	// A source with raw and sha256 signs the raw form, even when it has a url too.
+	evidence := "url: " + src.URL + "\naccessed: " + src.Accessed
+	if src.Raw != "" && src.SHA256 != "" {
+		raw, err := os.ReadFile(filepath.Join(root, src.Raw))
+		if err != nil {
+			return err
+		}
+		sum := sha256.Sum256(raw)
+		sha := hex.EncodeToString(sum[:])
+		if sha != src.SHA256 {
+			return errRawChanged
+		}
+		evidence = "path: " + src.Raw + "\nsha256: " + sha
 	}
 	cfg, err := readConfig(root)
 	if err != nil {
@@ -107,7 +112,7 @@ func signSource(inv *invocation, root, id, verdict string) error {
 	if len(pins) == 1 {
 		key = pins[0]
 	}
-	message := fmt.Sprintf("vault-review v1\npath: %s\nsha256: %s\nverdict: %s\ndate: %s\n", src.Raw, sha, verdict, time.Now().UTC().Format("2006-01-02"))
+	message := fmt.Sprintf("vault-review v2\n%s\nverdict: %s\ndate: %s\n", evidence, verdict, time.Now().UTC().Format("2006-01-02"))
 	signed, err := clearsign(inv, key, message)
 	if err != nil {
 		return err
@@ -140,10 +145,15 @@ queue:
 		if src.Review != "unreviewed" {
 			continue
 		}
-		fmt.Fprintf(inv.stdout, "%s: %s\nraw: %s\n", src.ID, src.Title, src.Raw)
+		// The queue shows the evidence that review signs: the raw file, else the URL.
+		shown, open := "url: "+src.URL+" (accessed "+src.Accessed+")", src.URL
+		if src.Raw != "" && src.SHA256 != "" {
+			shown, open = "raw: "+src.Raw, filepath.Join(root, src.Raw)
+		}
+		fmt.Fprintf(inv.stdout, "%s: %s\n%s\n", src.ID, src.Title, shown)
 	prompt:
 		for {
-			fmt.Fprintln(inv.stdout, "y reviewed, d disputed, s skip, o raw path, q quit?")
+			fmt.Fprintln(inv.stdout, "y reviewed, d disputed, s skip, o raw path or url, q quit?")
 			line, readErr := in.ReadString('\n')
 			if line == "" && readErr != nil {
 				break queue // EOF ends the queue like q
@@ -151,7 +161,7 @@ queue:
 			key := strings.ToLower(strings.TrimSpace(line))
 			switch verdict := verdicts[key]; {
 			case key == "o":
-				fmt.Fprintln(inv.stdout, filepath.Join(root, src.Raw))
+				fmt.Fprintln(inv.stdout, open)
 			case key == "q":
 				break queue
 			case key == "s":

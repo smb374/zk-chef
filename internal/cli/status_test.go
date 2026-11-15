@@ -92,6 +92,36 @@ func TestStatusNewVersusReReview(t *testing.T) {
 	}
 }
 
+// TestStatusURLOnlyNewVersusReReview: for a URL-only source the url and accessed fields of the verified block decide.
+//   - srcu01: signed, then only the note was reset to unreviewed; url and accessed still match: new
+//   - srcu02: signed, then accessed changed and the note was reset: re-review
+//   - srcu03: signed, then url changed and the note was reset: re-review
+//   - srcu04: never signed: new
+//   - srcu05: signed and unchanged: not listed
+func TestStatusURLOnlyNewVersusReReview(t *testing.T) {
+	s := newSigner(t)
+	changes := map[string]string{}
+	for _, id := range []string{"srcu01", "srcu02", "srcu03", "srcu04", "srcu05"} {
+		maps.Copy(changes, urlSource(id, "unreviewed"))
+	}
+	env := reviewVault(t, s, changes)
+	for _, id := range []string{"srcu01", "srcu02", "srcu03", "srcu05"} {
+		mustReview(t, env, id, "reviewed")
+	}
+	for _, id := range []string{"srcu01", "srcu02", "srcu03"} {
+		replaceInFile(t, "notes/"+id+".md", "review:reviewed", "review:unreviewed")
+	}
+	replaceInFile(t, "notes/srcu02.md", "accessed: 2026-01-03", "accessed: 2026-02-04")
+	replaceInFile(t, "notes/srcu03.md", "url: https://example.com/srcu03", "url: https://example.com/moved")
+
+	r := statusJSON(t, env)
+	wantNew := []statusSource{{"src001", "notes/src001.md"}, {"srcu01", "notes/srcu01.md"}, {"srcu04", "notes/srcu04.md"}}
+	wantRe := []statusSource{{"srcu02", "notes/srcu02.md"}, {"srcu03", "notes/srcu03.md"}}
+	if !r.OK || !slices.Equal(r.New, wantNew) || !slices.Equal(r.ReReview, wantRe) {
+		t.Errorf("status %+v, want new %v and re_review %v", r, wantNew, wantRe)
+	}
+}
+
 // TestStatusDisputedCited: only live notes count; a superseded note and a source's own text do not.
 func TestStatusDisputedCited(t *testing.T) {
 	s := newSigner(t)
