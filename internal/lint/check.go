@@ -8,7 +8,8 @@ import (
 	"strings"
 )
 
-var reviews = []string{"unreviewed", "reviewed", "disputed"}
+// Reviews are the values of the review: tag.
+var Reviews = []string{"unreviewed", "reviewed", "disputed"}
 
 // adder records one finding.
 type adder func(code, path string, line int, msg string)
@@ -52,7 +53,7 @@ func tagKnown(tag, kind string) bool {
 	case "kind":
 		return slices.Contains(kindValues, v)
 	case "review":
-		return kind == "source" && slices.Contains(reviews, v)
+		return kind == "source" && slices.Contains(Reviews, v)
 	case "status":
 		return v == "superseded"
 	case "topic":
@@ -156,8 +157,8 @@ func checkFrontmatter(d *Page, add adder) {
 	}
 	if kind == "source" {
 		checkSourceEvidence(d, add)
-		if r := d.tagValues("review"); len(r) != 1 || !slices.Contains(reviews, r[0]) {
-			add("E_FRONTMATTER", d.path, 1, "source needs exactly one review: tag, one of "+strings.Join(reviews, ", "))
+		if r := d.tagValues("review"); len(r) != 1 || !slices.Contains(Reviews, r[0]) {
+			add("E_FRONTMATTER", d.path, 1, "source needs exactly one review: tag, one of "+strings.Join(Reviews, ", "))
 		}
 	} else if kind != "" && len(d.tagValues("review")) > 0 {
 		add("E_FRONTMATTER", d.path, 1, "only a source has a review: tag")

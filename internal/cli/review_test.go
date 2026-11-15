@@ -92,6 +92,34 @@ func TestReviewSignsURLOnlySource(t *testing.T) {
 	}
 }
 
+// TestReviewRewritesOnlyTheReviewTag: a title or url that holds "review:unreviewed" stays unchanged, for inline and block tag lists.
+func TestReviewRewritesOnlyTheReviewTag(t *testing.T) {
+	inline := "tags: [kind:source, review:unreviewed]\n"
+	block := "tags:\n  - kind:source\n  - review:unreviewed\n"
+	for _, tc := range []struct{ name, title, url, tags, want string }{
+		{"title inline", "Note review:unreviewed", "https://example.com/a", inline, "tags: [kind:source, review:reviewed]\n"},
+		{"title block", "Note review:unreviewed", "https://example.com/a", block, "tags:\n  - kind:source\n  - review:reviewed\n"},
+		{"url inline", "Plain", "https://example.com/?q=review:unreviewed", inline, "tags: [kind:source, review:reviewed]\n"},
+		{"url block", "Plain", "https://example.com/?q=review:unreviewed", block, "tags:\n  - kind:source\n  - review:reviewed\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newSigner(t)
+			note := "---\ntitle: " + tc.title + "\ndate: 2026-01-02T03:04:05Z\nurl: " + tc.url + "\naccessed: 2026-01-03\n" + tc.tags + "---\n" + sourceHubs + "## Review\n\n"
+			env := reviewVault(t, s, map[string]string{"notes/srcurl.md": note})
+			if got := run(env, "review", "srcurl", "reviewed", "--no-commit"); got.code != 0 {
+				t.Fatalf("code %d stderr %q, want 0", got.code, got.stderr)
+			}
+			out := readFile(t, "notes/srcurl.md")
+			if !strings.Contains(out, "title: "+tc.title+"\n") || !strings.Contains(out, "url: "+tc.url+"\n") || !strings.Contains(out, tc.want) {
+				t.Errorf("note %q, want title and url unchanged and %q", out, tc.want)
+			}
+			if lint := run(env, "lint"); lint.code != 0 || lint.stdout != "0 errors, 0 warnings\n" {
+				t.Errorf("lint after review: code %d stdout %q, want clean", lint.code, lint.stdout)
+			}
+		})
+	}
+}
+
 func readNote(t *testing.T) string { return readFile(t, "notes/src001.md") }
 
 func TestReviewSignsAndCommits(t *testing.T) {
