@@ -54,8 +54,8 @@ func baseVault(t *testing.T) map[string]string {
 	}
 	files["notes/src001.md"] = doc("Source one", "source",
 		"Hubs: [[hubsrc|Sources]]\n\nWhy.\n\n## Review",
-		kv{"raw", "raw/src001-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})
-	files["raw/src001-a.bin"] = rawBytes
+		kv{"raw", "raw/src001.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})
+	files["raw/src001.bin"] = rawBytes
 	files["notes/not001.md"] = doc("Leaders are unique", "note",
 		hubLine+"\n\nOne leader per term [1, p. 4].\n\n## References\n\n1. [[src001|Source one]]")
 	return files
@@ -234,12 +234,96 @@ func TestLintErrors(t *testing.T) {
 		{name: "E_CITATION", want: "E_CITATION", changes: map[string]string{
 			"notes/not002.md": n(hubLine + "\n\nClaim [2].\n\n## References\n\n1. [[src001|Source one]]")}},
 		{name: "E_RAW_ORPHAN", want: "E_RAW_ORPHAN", changes: map[string]string{"raw/stray.txt": "x"}},
-		{name: "E_SHA256", want: "E_SHA256", changes: map[string]string{"raw/src001-a.bin": "changed"}},
+		{name: "E_SHA256", want: "E_SHA256", changes: map[string]string{"raw/src001.bin": "changed"}},
 		{name: "a Hubs line that links a non-hub is E_HUBS_LINE", want: "E_HUBS_LINE", changes: map[string]string{
 			"notes/not002.md": n("Hubs: [[not001|Leaders are unique]]\n\n[[not001|x]]")}},
-		{name: "E_REVIEW_HEADING", want: "E_REVIEW_HEADING", changes: map[string]string{"notes/src001.md": doc("Source one", "source", "Hubs: [[hubsrc|Sources]]\n\nWhy.", kv{"raw", "raw/src001-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})}},
-		{name: "a URL source without citation is E_FRONTMATTER", want: "E_FRONTMATTER", changes: map[string]string{"notes/src001.md": doc("Source one", "source", "Hubs: [[hubsrc|Sources]]\n\n## Review", kv{"raw", "raw/src001-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"}, kv{"url", "https://example.com/x"})}},
+		{name: "E_REVIEW_HEADING", want: "E_REVIEW_HEADING", changes: map[string]string{"notes/src001.md": doc("Source one", "source", "Hubs: [[hubsrc|Sources]]\n\nWhy.", kv{"raw", "raw/src001.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})}},
 	})
+}
+
+// srcTwo builds notes/src002.md: a source with the review tag, a Review heading and the given extra frontmatter.
+func srcTwo(extra ...kv) string {
+	return doc("Source two", "source", "Hubs: [[hubsrc|Sources]]\n\n## Review", append(extra, kv{"review", "unreviewed"})...)
+}
+
+// TestLintSourceEvidenceAccepted covers the source evidence rule: url with accessed, raw with sha256, or both; authors and published are optional.
+func TestLintSourceEvidenceAccepted(t *testing.T) {
+	url, accessed := kv{"url", "https://example.com/y"}, kv{"accessed", "2026-01-03"}
+	raw, sha := kv{"raw", "raw/src002.pdf"}, kv{"sha256", rawSHA}
+	tests := []struct {
+		name  string
+		extra []kv
+		raws  map[string]string
+	}{
+		{"url and accessed", []kv{url, accessed}, nil},
+		{"quoted accessed", []kv{url, {"accessed", `"2026-01-03"`}}, nil},
+		{"raw and sha256 with extension", []kv{raw, sha}, map[string]string{"raw/src002.pdf": rawBytes}},
+		{"raw and sha256 without extension", []kv{{"raw", "raw/src002"}, sha}, map[string]string{"raw/src002": rawBytes}},
+		{"both", []kv{url, accessed, raw, sha}, map[string]string{"raw/src002.pdf": rawBytes}},
+		{"authors and a date published", []kv{url, accessed, {"authors", "[Doe, Roe]"}, {"published", "2026-01-02"}}, nil},
+		{"year published", []kv{url, accessed, {"published", "2026"}}, nil},
+		{"quoted date published", []kv{url, accessed, {"published", `"2026-01-02"`}}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			changes := map[string]string{"notes/src002.md": srcTwo(tt.extra...)}
+			maps.Copy(changes, tt.raws)
+			if got := findingsOf(t, with_(t, changes)); len(got) != 0 {
+				t.Errorf("findings %+v, want none", got)
+			}
+		})
+	}
+}
+
+// TestLintSourceEvidenceRejected covers what the source evidence rule refuses.
+func TestLintSourceEvidenceRejected(t *testing.T) {
+	url, accessed := kv{"url", "https://example.com/y"}, kv{"accessed", "2026-01-03"}
+	tests := []struct {
+		name  string
+		extra []kv
+		want  string // part of the E_FRONTMATTER message
+	}{
+		{"neither url nor raw", nil, "source needs url with accessed, or raw with sha256"},
+		{"url without accessed", []kv{url}, "url needs accessed"},
+		{"accessed without url", []kv{accessed}, "accessed needs url"},
+		{"raw without sha256", []kv{{"raw", "raw/src002"}}, "raw needs sha256"},
+		{"sha256 without raw", []kv{{"sha256", rawSHA}}, "sha256 needs raw"},
+		{"bad accessed", []kv{url, {"accessed", "2026-13-01"}}, "accessed must be YYYY-MM-DD"},
+		{"published with one digit month", []kv{url, accessed, {"published", `"2026-1-2"`}}, "published must be YYYY or YYYY-MM-DD"},
+		{"published not a date", []kv{url, accessed, {"published", "2026-13-01"}}, "published must be YYYY or YYYY-MM-DD"},
+		{"published two digit year", []kv{url, accessed, {"published", "26"}}, "published must be YYYY or YYYY-MM-DD"},
+		{"published text", []kv{url, accessed, {"published", "last spring"}}, "published must be YYYY or YYYY-MM-DD"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			found := false
+			for _, f := range findingsOf(t, with_(t, map[string]string{"notes/src002.md": srcTwo(tt.extra...)})) {
+				found = found || (f.Code == "E_FRONTMATTER" && f.Path == "notes/src002.md" && strings.Contains(f.Msg, tt.want))
+			}
+			if !found {
+				t.Errorf("no E_FRONTMATTER on notes/src002.md containing %q", tt.want)
+			}
+		})
+	}
+}
+
+// TestLintSourceRawName covers the name of a raw copy: raw/<stem> with an optional .<ext>.
+func TestLintSourceRawName(t *testing.T) {
+	for _, raw := range []string{"raw/src002-a.bin", "raw/other.bin", "raw/src002.", "raw/src0021.bin", "raw/sub/src002.bin", "src002.bin"} {
+		t.Run(raw, func(t *testing.T) {
+			files := with_(t, map[string]string{
+				"notes/src002.md": srcTwo(kv{"raw", raw}, kv{"sha256", rawSHA}),
+				raw:               rawBytes,
+			})
+			found := false
+			for _, f := range findingsOf(t, files) {
+				found = found || (f.Code == "E_FRONTMATTER" && f.Path == "notes/src002.md" && strings.Contains(f.Msg, "raw must be raw/src002 or raw/src002.<ext>"))
+			}
+			if !found {
+				t.Errorf("no E_FRONTMATTER on notes/src002.md that names the raw/src002 form")
+			}
+		})
+	}
 }
 
 // findingsOf runs lint --json over files and returns the findings.
@@ -374,7 +458,7 @@ func TestLintWarnings(t *testing.T) {
 	t.Run("Extract and code fences are not scanned", func(t *testing.T) {
 		src := doc("Source one", "source",
 			"Hubs: [[hubsrc|Sources]]\n\n## Extract\n\nTODO: [[x]] [3]\n\n```\nGAP: [[y]]\n```\n\n## Review",
-			kv{"raw", "raw/src001-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})
+			kv{"raw", "raw/src001.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})
 		got := runIn(t, "dev", with_(t, map[string]string{"notes/src001.md": src}), "lint")
 		if got.code != 0 || got.stdout != "0 errors, 0 warnings\n" {
 			t.Errorf("got code %d stdout %q, want 0 \"0 errors, 0 warnings\\n\"", got.code, got.stdout)
@@ -443,7 +527,7 @@ func TestFixProseOfOtherKinds(t *testing.T) {
 		"notes/hub001.md": doc("H1", "hub", prose("Old title")),
 		"notes/log001.md": doc("P1", "log", prose("Old title")),
 		"notes/src001.md": doc("Source one", "source", prose("Old title")+"\n\n## Review",
-			kv{"raw", "raw/src001-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"}),
+			kv{"raw", "raw/src001.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"}),
 	})
 	got := runIn(t, "dev", files, "fix")
 	if got.code != 0 || got.stdout != "fixed notes/hub001.md\nfixed notes/log001.md\nfixed notes/src001.md\n" {

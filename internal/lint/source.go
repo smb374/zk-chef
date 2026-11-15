@@ -2,9 +2,74 @@ package lint
 
 import (
 	"errors"
+	"regexp"
 	"slices"
 	"strings"
+	"time"
 )
+
+var (
+	yearRe = regexp.MustCompile(`\A\d{4}\z`)
+	extRe  = regexp.MustCompile(`\A\.[A-Za-z0-9]+\z`)
+)
+
+// rawNameOK reports whether raw is raw/<stem> with an optional .<ext>.
+func rawNameOK(raw, stem string) bool {
+	rest, ok := strings.CutPrefix(raw, "raw/"+stem)
+	return ok && (rest == "" || extRe.MatchString(rest))
+}
+
+// validDate reports whether a frontmatter value is a YYYY-MM-DD date, or a YYYY year when year is set.
+// YAML reads an unquoted date as a time, and an unquoted year as an int.
+func validDate(v any, year bool) bool {
+	switch x := v.(type) {
+	case time.Time:
+		return x.Hour() == 0 && x.Minute() == 0 && x.Second() == 0 && x.Nanosecond() == 0
+	case int:
+		return year && x >= 1000 && x <= 9999
+	case string:
+		if year && yearRe.MatchString(x) {
+			return true
+		}
+		_, err := time.Parse("2006-01-02", x)
+		return err == nil
+	}
+	return false
+}
+
+// checkSourceEvidence applies the source evidence rule: url with accessed, or raw with sha256, or both;
+// published is a year or a date when present.
+func checkSourceEvidence(d *Page, add adder) {
+	fail := func(msg string) { add("E_FRONTMATTER", d.path, 1, msg) }
+	has := func(key string) bool { v := d.fm[key]; return v != nil && v != "" }
+	for _, key := range []string{"url", "raw", "sha256"} {
+		if has(key) && d.str(key) == "" {
+			fail(key + " must be a string")
+		}
+	}
+	url, accessed, raw, sha := has("url"), has("accessed"), has("raw"), has("sha256")
+	if !url && !accessed && !raw && !sha {
+		fail("source needs url with accessed, or raw with sha256")
+	}
+	if url && !accessed {
+		fail("url needs accessed (YYYY-MM-DD)")
+	}
+	if accessed && !url {
+		fail("accessed needs url")
+	}
+	if raw && !sha {
+		fail("raw needs sha256")
+	}
+	if sha && !raw {
+		fail("sha256 needs raw")
+	}
+	if accessed && !validDate(d.fm["accessed"], false) {
+		fail("accessed must be YYYY-MM-DD")
+	}
+	if has("published") && !validDate(d.fm["published"], true) {
+		fail("published must be YYYY or YYYY-MM-DD")
+	}
+}
 
 // Source is a valid source note as review sees it. ID is the file name stem.
 type Source struct {

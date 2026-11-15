@@ -77,8 +77,8 @@ func TestStatusNewVersusReReview(t *testing.T) {
 	replaceInFile(t, "notes/src003.md", "review:reviewed", "review:unreviewed")
 	replaceInFile(t, "notes/src004.md", "review:reviewed", "review:unreviewed")
 	newRaw := "new edition\n"
-	writeFile(t, "raw/src001-a.bin", newRaw)
-	if err := os.Chtimes("raw/src001-a.bin", time.Unix(1e9, 0), time.Unix(1e9, 0)); err != nil {
+	writeFile(t, "raw/src001.bin", newRaw)
+	if err := os.Chtimes("raw/src001.bin", time.Unix(1e9, 0), time.Unix(1e9, 0)); err != nil {
 		t.Fatal(err)
 	}
 	replaceInFile(t, "notes/src001.md", "sha256: "+rawSHA, fmt.Sprintf("sha256: %x", sha256.Sum256([]byte(newRaw))))

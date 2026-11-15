@@ -7,14 +7,14 @@
 | Code | Cause | Fix |
 | --- | --- | --- |
 | `E_BROKEN_LINK` | A `[[ID\|Title]]` names an ID that does not exist | Correct the ID or remove the link |
-| `E_FRONTMATTER` | A required field or tag is missing or invalid. `title` is a quoted string, `date` is UTC (`2026-01-02T03:04:05Z`), `tags` is a list. A page has exactly one `kind:` tag (`note`, `hub`, `source` or `log`). The file stem is 6 lowercase letters and digits (`index` for the root `index.md` only), and `notes/` has no subfolder. A source needs `raw` (`raw/<stem>-<name>`), `sha256`, exactly one `review:` tag, and `citation` when it has `url`; only a source has a `review:` tag. The `status:superseded` tag needs `superseded_by` with an existing stem, and a hub or log cannot be superseded | Set the field or tag the message names |
+| `E_FRONTMATTER` | A required field or tag is missing or invalid. `title` is a quoted string, `date` is UTC (`2026-01-02T03:04:05Z`), `tags` is a list. A page has exactly one `kind:` tag (`note`, `hub`, `source` or `log`). The file stem is 6 lowercase letters and digits (`index` for the root `index.md` only), and `notes/` has no subfolder. A source needs evidence: `url` with `accessed` (`YYYY-MM-DD`), or `raw` with `sha256`, or both. `raw` is `raw/<stem>` or `raw/<stem>.<ext>`. `authors` and `published` (`YYYY` or `YYYY-MM-DD`) are optional, and there is no `citation:` field. A source also needs exactly one `review:` tag; only a source has a `review:` tag. The `status:superseded` tag needs `superseded_by` with an existing stem, and a hub or log cannot be superseded | Set the field or tag the message names |
 | `E_REVIEW_HEADING` | A source note has no `## Review` heading | Add an empty `## Review` heading at the end |
 | `E_DUPLICATE_ID` | Two files share a stem (for example `notes/ab12cd.md` and `notes/sub/ab12cd.md`) | Rename one file, or remove it |
 | `E_HUBS_LINE` | The first body line is not `Hubs: [[ID\|Hub]], [[ID\|Hub]]` (links joined with `, `; the v0.2 ` · ` is wrong), or it links a note that is not another hub | Write the line with real hubs |
 | `E_UNREACHABLE` | The note does not reach the Index hub through Hubs lines | Link a hub that sits under Index |
 | `E_CITATION` | An `[n]` without entry n, an entry never cited, numbering with gaps or out of first-use order, or `## References` not the last H2 | Renumber and fix the entries (`zettel-writing`, "Citations") |
-| `E_RAW_ORPHAN` | A file in `raw/` that no source note names | Ingest it, or remove it |
-| `E_SHA256` | The raw file is missing, or its hash differs from `sha256:` | Update `sha256:` after a deliberate raw update; restore the file otherwise |
+| `E_RAW_ORPHAN` | A file in `raw/` that no source note names in `raw:` | Ingest it, or remove it |
+| `E_SHA256` | The source names a raw file that is missing, or its hash differs from `sha256:` | Update `sha256:` after a deliberate raw update; restore the file otherwise |
 | `E_SIGNATURE` | A signed block does not verify, or its signer is not pinned | Leave the block as it is and tell the human |
 | `E_REVIEW_MISMATCH` | The `review:` tag is `reviewed` or `disputed` but the latest block's path, sha256 or verdict differs from the note or the file | After a raw update set the tag `review:unreviewed`; otherwise tell the human |
 

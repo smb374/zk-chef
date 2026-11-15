@@ -146,7 +146,7 @@ func TestUpgradeLeavesHumanFilesAlone(t *testing.T) {
 		"notes/hubidx.md":       "my own hub\n",
 		"notes/not001.md":       "a note\n",
 		"notes/src001.md":       "a source\n",
-		"raw/src001-a.bin":      "raw",
+		"raw/src001.bin":        "raw",
 		"keys/me.asc":           "a key\n",
 		".zk/templates/mine.md": "my own template, not in the scaffold\n",
 	} {

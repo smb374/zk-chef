@@ -77,7 +77,7 @@ func TestReviewSignsAndCommits(t *testing.T) {
 func TestReviewRefusesChangedRaw(t *testing.T) {
 	s := newSigner(t)
 	env := reviewVault(t, s, nil)
-	writeFile(t, "raw/src001-a.bin", "changed bytes\n")
+	writeFile(t, "raw/src001.bin", "changed bytes\n")
 	before := readNote(t)
 	head := gitOut(t, "rev-parse", "HEAD")
 	// an unusable GNUPGHOME makes any gpg call fail with a different message
@@ -171,12 +171,12 @@ func runStdin(env []string, stdin string, args ...string) result {
 	return result{code, stdout.String(), stderr.String()}
 }
 
-// extraSource returns the files of notes/<id>.md with raw/<id>-a.bin, in the given review state.
+// extraSource returns the files of notes/<id>.md with raw/<id>.bin, in the given review state.
 func extraSource(id, review string) map[string]string {
 	raw := "raw of " + id + "\n"
 	return map[string]string{
-		"notes/" + id + ".md":  doc("Title "+id, "source", sourceHubs+"## Review\n\n", kv{"raw", "raw/" + id + "-a.bin"}, kv{"sha256", fmt.Sprintf("%x", sha256.Sum256([]byte(raw)))}, kv{"review", review}),
-		"raw/" + id + "-a.bin": raw,
+		"notes/" + id + ".md": doc("Title "+id, "source", sourceHubs+"## Review\n\n", kv{"raw", "raw/" + id + ".bin"}, kv{"sha256", fmt.Sprintf("%x", sha256.Sum256([]byte(raw)))}, kv{"review", review}),
+		"raw/" + id + ".bin":  raw,
 	}
 }
 
@@ -194,13 +194,13 @@ func queueVault(t *testing.T, s signer) []string {
 func TestReviewQueueKeys(t *testing.T) {
 	s := newSigner(t)
 	env := queueVault(t, s)
-	abs, _ := filepath.Abs("raw/src004-a.bin")
+	abs, _ := filepath.Abs("raw/src004.bin")
 	// src001 y, src002 d, src003 s, src004 o then unknown x then y, src005 q
 	got := runStdin(env, "y\nd\ns\no\nx\ny\nq\n", "review")
 	if got.code != 0 {
 		t.Fatalf("code %d stdout %q stderr %q, want 0", got.code, got.stdout, got.stderr)
 	}
-	for _, want := range []string{"src001: Source one\n", "raw: raw/src001-a.bin\n", "src002: Title src002\n", "signed src002: disputed\n", "\n" + abs + "\n", "reviewed 2, disputed 1, skipped 1\n"} {
+	for _, want := range []string{"src001: Source one\n", "raw: raw/src001.bin\n", "src002: Title src002\n", "signed src002: disputed\n", "\n" + abs + "\n", "reviewed 2, disputed 1, skipped 1\n"} {
 		if !strings.Contains(got.stdout, want) {
 			t.Errorf("stdout %q, want it to contain %q", got.stdout, want)
 		}
@@ -239,7 +239,7 @@ func TestReviewQueueEOFEndsLikeQuit(t *testing.T) {
 func TestReviewQueueHashMismatchSkips(t *testing.T) {
 	s := newSigner(t)
 	env := queueVault(t, s)
-	writeFile(t, "raw/src001-a.bin", "tampered\n")
+	writeFile(t, "raw/src001.bin", "tampered\n")
 	got := runStdin(env, "y\ny\nq\n", "review")
 	if got.code != 0 || !strings.HasSuffix(got.stdout, "reviewed 1, disputed 0, skipped 1\n") {
 		t.Errorf("got code %d stdout %q, want 0 and reviewed 1, disputed 0, skipped 1", got.code, got.stdout)

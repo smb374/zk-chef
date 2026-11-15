@@ -42,7 +42,7 @@ var exportFolders = []string{lint.NotesDir}
 const exportManifest = ".zk-chef-export.json"
 
 // exportSourceKeys are the fields an export keeps from the frontmatter of a source page, after the keys it unpacks from the tags.
-var exportSourceKeys = []string{"url", "citation", "accessed", "authors", "published"}
+var exportSourceKeys = []string{"url", "accessed", "authors", "published"}
 
 // exportHugoKeys maps the exported keys that Hugo reserves to the names a Hugo export writes instead.
 var exportHugoKeys = map[string]string{"kind": "zk_kind", "url": "source_url", "published": "source_published"}

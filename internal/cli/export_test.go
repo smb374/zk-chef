@@ -48,7 +48,7 @@ func exportVault(t *testing.T) map[string]string {
 	return with_(t, map[string]string{
 		"notes/src001.md": doc("Source one", "source",
 			"Hubs: [[hubsrc|Sources]]\n\nWhy.\n\n## Review",
-			kv{"raw", "raw/src001-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"},
+			kv{"raw", "raw/src001.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"},
 			kv{"url", "https://example.com/x"}, kv{"citation", "Doe 2026"}, kv{"accessed", "2026-01-03"}, kv{"authors", "[Doe, Roe]"}, kv{"published", "2026-01-02"}),
 		"notes/log001.md":      doc("Project one", "log", hubLine+"\n\nDecision."),
 		"AGENTS.md":            "agent rules",
@@ -68,7 +68,7 @@ func TestExportCleanVaultLayout(t *testing.T) {
 	tree := withoutManifest(readTree(t, out))
 	want := map[string]string{
 		"notes/not001.md": "---\ntitle: Leaders are unique\ndate: 2026-01-02T03:04:05Z\nkind: note\n---\nHubs: [Index](../index.md)\n\nOne leader per term [1, p. 4].\n\n## References\n\n1. [Source one](src001.md)\n",
-		"notes/src001.md": "---\ntitle: Source one\ndate: 2026-01-02T03:04:05Z\nkind: source\nreview: unreviewed\nurl: https://example.com/x\ncitation: Doe 2026\naccessed: 2026-01-03\nauthors: [Doe, Roe]\npublished: 2026-01-02\n---\nHubs: [Sources](hubsrc.md)\n\nWhy.\n\n## Review\n\n## Backlinks\n\n- [Leaders are unique](not001.md)\n",
+		"notes/src001.md": "---\ntitle: Source one\ndate: 2026-01-02T03:04:05Z\nkind: source\nreview: unreviewed\nurl: https://example.com/x\naccessed: 2026-01-03\nauthors: [Doe, Roe]\npublished: 2026-01-02\n---\nHubs: [Sources](hubsrc.md)\n\nWhy.\n\n## Review\n\n## Backlinks\n\n- [Leaders are unique](not001.md)\n",
 		"notes/log001.md": "---\ntitle: Project one\ndate: 2026-01-02T03:04:05Z\nkind: log\n---\nHubs: [Index](../index.md)\n\nDecision.\n",
 	}
 	for p, w := range want {
@@ -235,7 +235,7 @@ func TestExportLinksLeaveExcludedPlaces(t *testing.T) {
 			hubLine+"\n\nLive [[src001|Reading]]. Claim [1, p. 4].\n\n```\nfenced [[src001]]\n```\n\n## Extract\n\nquoted [[src001]]\n\n## References\n\n1. [[src001|Source one]]"),
 		"notes/src001.md": doc("Source one", "source",
 			"Hubs: [[hubsrc|Sources]]\n\nWhy.\n\n## Review\n\nreviewed [[not001]]",
-			kv{"raw", "raw/src001-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"}),
+			kv{"raw", "raw/src001.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"}),
 	}))
 	var left []string
 	for p, page := range tree {
@@ -293,7 +293,7 @@ func TestExportBacklinksSkipSelfFenceExtractAndReview(t *testing.T) {
 			hubLine+"\n\nLive [[src001]].\n\n```\nfenced [[not001]]\n```\n\n## Extract\n\nquoted [[not001]]"),
 		"notes/src001.md": doc("Source one", "source",
 			"Hubs: [[hubsrc|Sources]]\n\nWhy.\n\n## Review\n\nreviewed [[not001]]",
-			kv{"raw", "raw/src001-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"}),
+			kv{"raw", "raw/src001.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"}),
 	}))
 	if page := tree["notes/not001.md"]; strings.Contains(page, "## Backlinks") {
 		t.Errorf("notes/not001.md = %q, want no Backlinks section", page)
@@ -367,7 +367,7 @@ func TestExportMembersOnlyForHubsWithMembers(t *testing.T) {
 // extractSource is a source whose body holds paraphrases, an Extract section and a Review block.
 func extractSource(body string) map[string]string {
 	return map[string]string{"notes/src001.md": doc("Source one", "source", body,
-		kv{"raw", "raw/src001-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})}
+		kv{"raw", "raw/src001.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"})}
 }
 
 func TestExportExtractStripsSectionKeepsReviewAndParaphrases(t *testing.T) {
@@ -610,7 +610,7 @@ func TestExportHugoUnknownGeneratorWritesNothing(t *testing.T) {
 func TestExportHugoRenamesReservedSourceKeys(t *testing.T) {
 	tree := exportHugoOK(t, exportVault(t))
 	got := tree["content/notes/src001.md"]
-	want := "---\ntitle: Source one\ndate: 2026-01-02T03:04:05Z\nzk_kind: source\nreview: unreviewed\nsource_url: https://example.com/x\ncitation: Doe 2026\naccessed: 2026-01-03\nauthors: [Doe, Roe]\nsource_published: 2026-01-02\n"
+	want := "---\ntitle: Source one\ndate: 2026-01-02T03:04:05Z\nzk_kind: source\nreview: unreviewed\nsource_url: https://example.com/x\naccessed: 2026-01-03\nauthors: [Doe, Roe]\nsource_published: 2026-01-02\n"
 	if !strings.HasPrefix(got, want) {
 		t.Errorf("content/notes/src001.md = %q, want it to start with %q", got, want)
 	}

@@ -39,7 +39,7 @@ A v0.3 binary reads v0.3 vaults only. Every verb except `doctor` and `self-updat
 
 ### Vault layout
 
-Every page is a Markdown file in the flat `notes/` folder, or the root `index.md`. The file stem is the ID: 6 lowercase letters and digits (`index` for the root page). There is no `id:` field, and links are `[[stem|Title]]`. A page has `title`, `date` (UTC, with `Z`) and `tags` in its frontmatter. The kind is exactly one tag, `kind:note`, `kind:hub`, `kind:source` or `kind:log`. A source also has one `review:unreviewed`, `review:reviewed` or `review:disputed` tag, and a superseded page has `status:superseded` and `superseded_by: <stem>`. The Hubs line joins hub links with `, `: `Hubs: [[abc123|Hub]], [[def456|Other]]`. `raw/` holds the source copies and is not indexed by zk. The zk config has the aliases `zk note`, `zk source`, `zk hub` and `zk log`; each takes `--title` and makes a page of that kind.
+Every page is a Markdown file in the flat `notes/` folder, or the root `index.md`. The file stem is the ID: 6 lowercase letters and digits (`index` for the root page). There is no `id:` field, and links are `[[stem|Title]]`. A page has `title`, `date` (UTC, with `Z`) and `tags` in its frontmatter. The kind is exactly one tag, `kind:note`, `kind:hub`, `kind:source` or `kind:log`. A source also has one `review:unreviewed`, `review:reviewed` or `review:disputed` tag, and a superseded page has `status:superseded` and `superseded_by: <stem>`. The Hubs line joins hub links with `, `: `Hubs: [[abc123|Hub]], [[def456|Other]]`. `raw/` holds the source copies and is not indexed by zk. A source needs evidence: `url` with `accessed` (`YYYY-MM-DD`), or `raw` with `sha256`, or both. `raw` is `raw/<stem>` or `raw/<stem>.<ext>`. `authors` and `published` (`YYYY` or `YYYY-MM-DD`) are optional. There is no `citation:` field. A source note keeps a `## Review` heading; `## Extract` is optional. The zk config has the aliases `zk note`, `zk source`, `zk hub` and `zk log`; each takes `--title` and makes a page of that kind.
 
 It prints `kept your …` for files that differ from the scaffold. Run `zk-chef doctor` to check the setup.
 
@@ -67,7 +67,7 @@ Every verb accepts `--json` and `--help`. Verbs that work on a vault pick it in 
 | `zk-chef upgrade [-y]` | human | Shows and applies scaffold changes (zk config, templates, hook, `AGENTS.md` block, new config keys) after a binary update |
 | `zk-chef doctor` | human | Checks zk, git, gpg, hooks, pinned key, skills, PATH, `min_version` and hugo. The hugo check never fails: it warns when hugo is older than 0.169.0 and passes when hugo is not installed |
 | `zk-chef key add [FPR] \| list \| rm FPR` | human | Manages pinned signing keys |
-| `zk-chef ingest PATH\|URL --title T --hub ID [--hub ID]...` | agent | Copies a file or URL into `raw/` and creates its source note in `notes/`, tagged `kind:source` and `review:unreviewed`. `-t` is short for `--title`. `--hub ID` is required and repeatable: each hub goes on the note's Hubs line. Without `--hub`, an unknown ID or a non-hub ID, ingest exits with code 2 and writes nothing |
+| `zk-chef ingest PATH\|URL --title T --hub ID [--hub ID]... [--no-raw]` | agent | Creates a source note in `notes/`, tagged `kind:source` and `review:unreviewed`. `ingest PATH` copies the file to `raw/` and sets `raw` and `sha256`. `ingest URL` downloads the page to `raw/` and sets `url`, `accessed` (today, UTC), `raw` and `sha256`. `ingest URL --no-raw` downloads nothing and sets only `url` and `accessed`; `--no-raw` with a PATH exits with code 2. The raw file is `raw/<stem>` plus an extension: from the original name (lowercased), else from the response Content-Type, else none. `-t` is short for `--title`. `--hub ID` is required and repeatable: each hub goes on the note's Hubs line. Without `--hub`, an unknown ID or a non-hub ID, ingest exits with code 2 and writes nothing. When `zk new` returns a note that already exists, ingest tries again, up to 3 times in all, then exits with code 1 and leaves that note as it was |
 | `zk-chef lint [--staged]` | agent, hook | Runs every check; errors give exit code 1 |
 | `zk-chef fix` | agent | Rewrites stale link aliases to the targets' current titles; leaves aliases in note prose alone |
 | `zk-chef review [SRC-ID reviewed\|disputed] [--no-commit]` | human only | Shows the raw file, asks you to confirm, signs the verdict and commits. Without arguments it walks the queue |
@@ -90,7 +90,7 @@ What it writes:
 
 - the root `index.md` and the pages in `notes/`, with the same paths (`index.md` and `notes/<stem>.md`);
 - `[[ID|Title]]` links as relative Markdown links, such as `[Title](other.md)` from one page in `notes/` to another;
-- only these frontmatter fields: `title`, `date` (from the field), `kind`, `status` and `review` (unpacked from the `kind:`, `status:superseded` and `review:` tags), `superseded_by`, `tags` (only the `topic:` and `type:` tags), and for sources `url`, `citation`, `accessed`, `authors`, `published`. `aliases` is not exported;
+- only these frontmatter fields: `title`, `date` (from the field), `kind`, `status` and `review` (unpacked from the `kind:`, `status:superseded` and `review:` tags), `superseded_by`, `tags` (only the `topic:` and `type:` tags), and for sources `url`, `accessed`, `authors`, `published`. `aliases` is not exported;
 - a `Superseded by` line at the top of a superseded note;
 - a `## Backlinks` section on a page that other pages link to, and a `## Members` section on a hub that other pages name in their `Hubs:` line. Both are sorted by title. A parent hub is a backlink, not a member.
 
@@ -123,8 +123,8 @@ The Hugo export differs from the generic export in these ways:
 
 `--style` (`-s`) picks the Style of the site. It needs `--generator hugo`.
 
-- `plain` is a bare site. The layouts have no stylesheet. A source page shows its review state in one plain line. `plain` deletes `static/vendored/tufte/`.
-- `tufte` uses the Tufte style ([Tufte CSS](https://github.com/edwardtufte/tufte-css) and the ET Book fonts), vendored in `static/vendored/tufte/`. Source pages show their review state and citation (URLs in the citation are links). A source without a citation shows its URL, authors and published date. A superseded page shows a banner.
+- `plain` is a bare site. The layouts have no stylesheet. A source page shows its review state, URL, authors, published date and accessed date, one plain line each. `plain` deletes `static/vendored/tufte/`.
+- `tufte` uses the Tufte style ([Tufte CSS](https://github.com/edwardtufte/tufte-css) and the ET Book fonts), vendored in `static/vendored/tufte/`. Source pages show their review state, URL (a link), authors, published date and accessed date, from the frontmatter fields. A superseded page shows a banner.
 
 The export writes the Style to `DIR/.zk-chef-site.json` as `{"style": "<name>"}`. Without `--style`, it uses that file. When the file is missing, the Style is `tufte` if `DIR/static/vendored/tufte/` exists, and `plain` for a new site. An unknown Style, `--style` without `--generator hugo`, or a corrupt `.zk-chef-site.json` stops the export with exit code 2 and writes nothing.
 

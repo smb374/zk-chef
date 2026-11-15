@@ -213,7 +213,7 @@ func TestKeyRmJSON(t *testing.T) {
 }
 func TestKeyAddMakesSignedSourceLintClean(t *testing.T) {
 	s := newSigner(t)
-	good := s.review(t, "raw/src001-a.bin", rawSHA, "reviewed")
+	good := s.review(t, "raw/src001.bin", rawSHA, "reviewed")
 	env := keyVault(t, s, map[string]string{"notes/src001.md": source("reviewed", rawSHA, good)})
 	if !codesOf(t, run(env, "lint", "--json"))["E_SIGNATURE"] {
 		t.Fatal("lint before key add has no E_SIGNATURE, want one")

@@ -30,6 +30,7 @@ type invocation struct {
 	noCommit       bool     // --no-commit, for review
 	title          string   // --title, for ingest
 	hubs           []string // --hub, for ingest
+	noRaw          bool     // --no-raw, for ingest
 	generator      string   // --generator, for export
 	style          string   // --style, for export
 }
@@ -70,6 +71,7 @@ var verbs = []verb{
 			return []cli.Flag{
 				&cli.StringFlag{Name: "title", Aliases: []string{"t"}, Usage: "note title (required)"},
 				&cli.StringSliceFlag{Name: "hub", Usage: "ID of a hub the source joins besides Sources (repeatable)"},
+				boolFlag("no-raw", "URL only: record url and accessed, download nothing"),
 			}
 		}},
 	{name: "lint", usage: "check the vault against the rules", root: true, run: lintVerb,
@@ -138,6 +140,7 @@ func (v verb) command(base invocation, code *int) *cli.Command {
 			inv.generator = cmd.String("generator")
 			inv.style = cmd.String("style")
 			inv.hubs = cmd.StringSlice("hub")
+			inv.noRaw = cmd.Bool("no-raw")
 			if v.root {
 				inv.root = cmd.String("root")
 				if inv.root == "" {

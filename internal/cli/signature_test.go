@@ -74,7 +74,7 @@ const sourceHubs = "Hubs: [[hubsrc|Sources]]\n\nWhy.\n\n## Extract\n\ntext\n\n"
 func source(reviewState, sha string, blocks ...string) string {
 	body := sourceHubs
 	body += "## Review\n\n" + strings.Join(blocks, "")
-	return doc("Source one", "source", body, kv{"raw", "raw/src001-a.bin"}, kv{"sha256", sha}, kv{"review", reviewState})
+	return doc("Source one", "source", body, kv{"raw", "raw/src001.bin"}, kv{"sha256", sha}, kv{"review", reviewState})
 }
 
 // signedVault is the base vault with keys/me.asc, the signer pinned, and extra changes applied.
@@ -112,7 +112,7 @@ func fenceLine(text string, nth int) int {
 
 func TestReviewSignatures(t *testing.T) {
 	s := newSigner(t)
-	const raw = "raw/src001-a.bin"
+	const raw = "raw/src001.bin"
 	newSHA := fmt.Sprintf("%x", sha256.Sum256([]byte("new"))) // hash of the updated raw file
 	good := s.review(t, raw, rawSHA, "reviewed")
 	disputed := s.review(t, raw, rawSHA, "disputed")
@@ -148,7 +148,7 @@ func TestReviewSignatures(t *testing.T) {
 			want:    []string{"E_REVIEW_MISMATCH"}, wantLine: 1, wantMsg: "latest block verdict 'reviewed' differs from note 'disputed'"},
 		{name: "block path differs from note",
 			changes: map[string]string{"notes/src001.md": source("reviewed", rawSHA, s.review(t, "raw/src001-other.bin", rawSHA, "reviewed"))},
-			want:    []string{"E_REVIEW_MISMATCH"}, wantLine: 1, wantMsg: "latest block path 'raw/src001-other.bin' differs from note 'raw/src001-a.bin'"},
+			want:    []string{"E_REVIEW_MISMATCH"}, wantLine: 1, wantMsg: "latest block path 'raw/src001-other.bin' differs from note 'raw/src001.bin'"},
 		{name: "block sha256 differs from note",
 			changes: map[string]string{"notes/src001.md": source("reviewed", rawSHA, s.review(t, raw, newSHA, "reviewed"))},
 			want:    []string{"E_REVIEW_MISMATCH"}, wantLine: 1, wantMsg: "latest block sha256 '" + newSHA + "' differs from note '" + rawSHA + "'"},
@@ -222,7 +222,7 @@ func writeFile(t *testing.T, path, content string) {
 // TestReviewSignaturesStaged: the commit hook runs lint --staged, so the staged note must be checked, not the worktree.
 func TestReviewSignaturesStaged(t *testing.T) {
 	s := newSigner(t)
-	good := s.review(t, "raw/src001-a.bin", rawSHA, "reviewed")
+	good := s.review(t, "raw/src001.bin", rawSHA, "reviewed")
 	tampered := strings.Replace(good, "verdict: reviewed", "verdict: disputed", 1)
 	env := setupVault(t, "dev", signedVault(t, s, s.fpr, map[string]string{"notes/src001.md": source("reviewed", rawSHA, tampered)}))
 	for _, args := range [][]string{{"init", "-q"}, {"add", "."}} {
@@ -249,7 +249,7 @@ func TestReviewSignaturesStaged(t *testing.T) {
 
 func TestReviewSignaturesGPGMissing(t *testing.T) {
 	s := newSigner(t)
-	good := s.review(t, "raw/src001-a.bin", rawSHA, "reviewed")
+	good := s.review(t, "raw/src001.bin", rawSHA, "reviewed")
 	files := signedVault(t, s, s.fpr, map[string]string{"notes/src001.md": source("reviewed", rawSHA, good)})
 	t.Setenv("PATH", t.TempDir())
 	got := runIn(t, "dev", files, "lint")
@@ -262,7 +262,7 @@ func TestReviewSignaturesGPGMissing(t *testing.T) {
 // TestReviewSignaturesIgnoresUserKeyring: a key in the caller's GNUPGHOME does not count; only keys/ does.
 func TestReviewSignaturesIgnoresUserKeyring(t *testing.T) {
 	s := newSigner(t)
-	good := s.review(t, "raw/src001-a.bin", rawSHA, "reviewed")
+	good := s.review(t, "raw/src001.bin", rawSHA, "reviewed")
 	files := signedVault(t, s, s.fpr, map[string]string{"notes/src001.md": source("reviewed", rawSHA, good), "keys/me.asc": "\x00delete"})
 	env := setupVault(t, "dev", files)
 	t.Setenv("GNUPGHOME", s.home)
@@ -275,7 +275,7 @@ func TestReviewSignaturesIgnoresUserKeyring(t *testing.T) {
 // TestReviewSignaturesRemovesTempHome: the temporary GNUPGHOME is gone after the run.
 func TestReviewSignaturesRemovesTempHome(t *testing.T) {
 	s := newSigner(t)
-	good := s.review(t, "raw/src001-a.bin", rawSHA, "reviewed")
+	good := s.review(t, "raw/src001.bin", rawSHA, "reviewed")
 	files := signedVault(t, s, s.fpr, map[string]string{"notes/src001.md": source("reviewed", rawSHA, good)})
 	env := setupVault(t, "dev", files)
 	tmp := t.TempDir()

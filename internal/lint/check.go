@@ -82,14 +82,7 @@ func checkFrontmatter(d *Page, add adder) {
 		}
 	}
 	if kind == "source" {
-		for _, key := range []string{"raw", "sha256"} {
-			if d.str(key) == "" {
-				add("E_FRONTMATTER", d.path, 1, "source needs "+key+" (a string)")
-			}
-		}
-		if d.str("url") != "" && d.str("citation") == "" {
-			add("E_FRONTMATTER", d.path, 1, "source with url needs citation (IEEE form)")
-		}
+		checkSourceEvidence(d, add)
 		if r := d.tagValues("review"); len(r) != 1 || !slices.Contains(reviews, r[0]) {
 			add("E_FRONTMATTER", d.path, 1, "source needs exactly one review: tag, one of "+strings.Join(reviews, ", "))
 		}

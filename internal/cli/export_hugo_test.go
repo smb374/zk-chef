@@ -45,11 +45,24 @@ func TestExportHugoScaffoldFreshOut(t *testing.T) {
 		"layouts/baseof.html": {`this site needs Hugo 0.169.0 or newer, found`, "<style>", `href="{{ "/" | relURL }}"`, `{{ "vendored/tufte/tufte.css" | relURL }}`, "#members", "#backlinks", ".status-superseded", "article > p { width: 55%", "{{ block \"main\" . }}"},
 		"layouts/home.html":   {"{{ .Title }}", "{{ .Content }}", "range .Pages", "<article", "<section>"},
 		"layouts/list.html":   {"{{ .Title }}", "{{ .Content }}", "range .Pages", "<article", "<section>"},
-		"layouts/single.html": {"{{ .Title }}", "{{ with .Date }}", "{{ with .Params.source_url }}", "{{ .Content }}", "<article", "<section>", ".Params.review", ".Params.citation", ".Params.authors", ".Params.source_published", "status-"},
+		"layouts/single.html": {"{{ .Title }}", "{{ with .Date }}", "{{ with .Params.source_url }}", "{{ .Content }}", "<article", "<section>", ".Params.review", ".Params.accessed", ".Params.authors", ".Params.source_published", "status-"},
 	} {
 		for _, want := range wants {
 			if !strings.Contains(tree[p], want) {
 				t.Errorf("%s = %q, want it to contain %q", p, tree[p], want)
+			}
+		}
+	}
+}
+
+// No layout of any Style reads citation: a source shows its URL, authors, published and accessed fields.
+func TestExportHugoLayoutsDoNotReadCitation(t *testing.T) {
+	files := baseVault(t)
+	for _, style := range []string{"tufte", "plain"} {
+		tree := exportHugoOK(t, files, "--style", style)
+		for p, b := range tree {
+			if strings.HasPrefix(p, "layouts/") && strings.Contains(b, "citation") {
+				t.Errorf("%s style: %s mentions citation", style, p)
 			}
 		}
 	}
@@ -413,8 +426,11 @@ func TestExportHugoSiteBuilds(t *testing.T) {
 	files["notes/not009.md"] = doc("Old claim", "note", hubLine+"\n\nOld.", kv{"status", "superseded"}, kv{"superseded_by", "not001"})
 	files["notes/src001.md"] = doc("Source one", "source",
 		"Hubs: [[hubsrc|Sources]]\n\nWhy.\n\n## Review",
-		kv{"raw", "raw/src001-a.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"},
-		kv{"url", "https://example.com/x"}, kv{"citation", "Doe 2026, https://example.com/paper (see https://example.org/b?x=1&y=2)."}, kv{"authors", "[Doe, Roe]"}, kv{"published", "2026-01-02"})
+		kv{"raw", "raw/src001.bin"}, kv{"sha256", rawSHA}, kv{"review", "unreviewed"},
+		kv{"url", "https://example.com/x"}, kv{"accessed", "2026-01-03"}, kv{"authors", "[Doe, Roe]"}, kv{"published", "2026-01-02"})
+	// A source with only a URL: no authors, no published, no raw file.
+	files["notes/src003.md"] = doc("No authors", "source", "Hubs: [[hubsrc|Sources]]\n\n## Review",
+		kv{"url", "https://example.com/z"}, kv{"accessed", "2026-01-04"}, kv{"review", "unreviewed"})
 	for _, style := range []string{"tufte", "plain"} {
 		t.Run(style, func(t *testing.T) { testExportHugoSiteBuilds(t, hugoBin, style, files) })
 	}
@@ -426,11 +442,6 @@ func testExportHugoSiteBuilds(t *testing.T, hugoBin, style string, files map[str
 	out := t.TempDir()
 	if got := runIn(t, "dev", files, "export", "--generator", "hugo", "--style", style, out); got.code != 0 {
 		t.Fatalf("export: code %d stderr %q, want 0", got.code, got.stderr)
-	}
-	// Lint rejects a URL source without a citation, so write the page by hand.
-	noCitation := "---\ntitle: No citation\nzk_kind: source\nreview: unreviewed\nsource_url: https://example.com/z\nauthors: [Doe, Roe]\nsource_published: 2026-01-02\n---\nBody.\n"
-	if err := os.WriteFile(filepath.Join(out, "content", "notes", "src003.md"), []byte(noCitation), 0o644); err != nil {
-		t.Fatal(err)
 	}
 	public := t.TempDir()
 	cmd := exec.Command(hugoBin, "--source", out, "--destination", public)
@@ -458,23 +469,23 @@ func testExportHugoSiteBuilds(t *testing.T, hugoBin, style string, files map[str
 		"index.html":              {"<h1>", "<ul>"},
 		"notes/not001/index.html": {"<h1>"},
 		"notes/hubsrc/index.html": {`id="members"`, `id="backlinks"`},
-		"notes/src001/index.html": {"<p>review: unreviewed</p>", `<p><a href="https://example.com/x">https://example.com/x</a></p>`},
-		"notes/src003/index.html": {"<p>review: unreviewed</p>"},
+		"notes/src001/index.html": {"<p>review: unreviewed</p>", `<p><a href="https://example.com/x">https://example.com/x</a></p>`, "<p>authors: Doe, Roe</p>", "<p>published: 2026-01-02</p>", "<p>accessed: 2026-01-03</p>"},
+		"notes/src003/index.html": {"<p>review: unreviewed</p>", `<p><a href="https://example.com/z">https://example.com/z</a></p>`, "<p>accessed: 2026-01-04</p>"},
 		"notes/not009/index.html": {"<p>Superseded by "},
 	}
-	denies := map[string][]string{"index.html": {"tufte.css", "<article"}, "notes/src001/index.html": {"source-meta"}}
+	denies := map[string][]string{"index.html": {"tufte.css", "<article"}, "notes/src001/index.html": {"source-meta", "citation"}, "notes/src003/index.html": {"authors:", "published:", "citation"}}
 	if tufte {
 		wants = map[string][]string{
 			"index.html":              {`href="/vendored/tufte/tufte.css"`, "<article>", "<section>"},
 			"notes/not001/index.html": {`href="/vendored/tufte/tufte.css"`, "<article", "<section>"},
 			"notes/hubsrc/index.html": {`id="members"`, `id="backlinks"`},
-			"notes/src001/index.html": {`<p class="source-meta">`, `<span class="review review-unreviewed">unreviewed</span>`, `<p class="citation">Doe 2026, <a href="https://example.com/paper">https://example.com/paper</a> (see <a href="https://example.org/b?x=1&amp;y=2">https://example.org/b?x=1&amp;y=2</a>).</p>`},
-			"notes/src003/index.html": {`<p><a href="https://example.com/z">https://example.com/z</a></p>`, `<span class="authors">Doe, Roe</span>`, `<span class="published">2026-01-02</span>`},
+			"notes/src001/index.html": {`<p class="source-meta">`, `<span class="review review-unreviewed">unreviewed</span>`, `<a class="source-url" href="https://example.com/x">https://example.com/x</a>`, `<span class="authors">Doe, Roe</span>`, `<span class="published">2026-01-02</span>`, `<span class="accessed">2026-01-03</span>`},
+			"notes/src003/index.html": {`<a class="source-url" href="https://example.com/z">https://example.com/z</a>`, `<span class="accessed">2026-01-04</span>`},
 			"notes/not009/index.html": {`<article class="status-superseded">`, "<p>Superseded by "},
 		}
 		denies = map[string][]string{
-			"notes/src001/index.html": {`<p><a href="https://example.com/x">`, `href="https://example.com/x"`, `class="authors"`, `class="published"`},
-			"notes/src003/index.html": {`class="citation"`},
+			"notes/src001/index.html": {"citation"},
+			"notes/src003/index.html": {`class="authors"`, `class="published"`, "citation"},
 		}
 	}
 	for p, ss := range wants {

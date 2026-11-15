@@ -206,17 +206,21 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 			continue
 		}
 		raw, want := d.str("raw"), d.str("sha256")
-		rawPaths[raw] = true
+		if raw != "" {
+			rawPaths[raw] = true
+		}
 		if !slices.ContainsFunc(d.lines, func(l line) bool { return l.section == "Review" }) {
 			add("E_REVIEW_HEADING", d.path, 1, "source needs a ## Review heading")
 		}
-		if !strings.HasPrefix(raw, "raw/"+d.ID()+"-") {
-			add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("raw must be raw/%s-<name>", d.ID()))
-		}
-		if b, found := files[raw]; !found {
-			add("E_SHA256", d.path, 1, fmt.Sprintf("raw file %s is missing", raw))
-		} else if sum := sha256.Sum256(b); hex.EncodeToString(sum[:]) != want {
-			add("E_SHA256", d.path, 1, raw+" does not match sha256 in the note")
+		if raw != "" {
+			if !rawNameOK(raw, d.ID()) {
+				add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("raw must be raw/%s or raw/%s.<ext>", d.ID(), d.ID()))
+			}
+			if b, found := files[raw]; !found {
+				add("E_SHA256", d.path, 1, fmt.Sprintf("raw file %s is missing", raw))
+			} else if sum := sha256.Sum256(b); hex.EncodeToString(sum[:]) != want {
+				add("E_SHA256", d.path, 1, raw+" does not match sha256 in the note")
+			}
 		}
 		checkReview(d, files, v, add)
 	}
