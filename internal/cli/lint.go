@@ -34,6 +34,9 @@ func lintVerb(inv *invocation) int {
 	if err != nil {
 		return fail(inv, "zk-chef lint: "+err.Error())
 	}
+	if inv.fix && (inv.staged || inv.children != "") {
+		return fail(inv, "zk-chef lint: --fix does not combine with --staged or --children")
+	}
 	load := lint.LoadWorktree
 	if inv.staged {
 		load = lint.LoadStaged

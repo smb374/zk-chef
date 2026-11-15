@@ -92,7 +92,7 @@ func latestVerified(v *verifier, src Source, files map[string][]byte) (map[strin
 // signedOther reports whether a verified block covers other evidence than the source holds now:
 // other raw bytes for a source with raw and sha256, other url or accessed for a URL-only source.
 func signedOther(src Source, fields map[string]string, files map[string][]byte) bool {
-	if src.Raw != "" && src.SHA256 != "" {
+	if src.HasRaw() {
 		sum := sha256.Sum256(files[src.Raw])
 		return fields["sha256"] != hex.EncodeToString(sum[:])
 	}

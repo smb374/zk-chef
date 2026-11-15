@@ -24,9 +24,9 @@ type Finding struct {
 }
 
 var (
-	linkRe     = regexp.MustCompile(`\[\[([^\]|]+)(?:\|([^\]]*))?\]\]`)
-	markerRe   = regexp.MustCompile(`\b(?:TODO|CONTRADICTION):`)
-	linkFullRe = regexp.MustCompile(`\A` + linkRe.String() + `\z`)
+	linkRe   = regexp.MustCompile(`\[\[([^\]|]+)(?:\|([^\]]*))?\]\]`)
+	markerRe = regexp.MustCompile(`\b(?:TODO|CONTRADICTION):`)
+	hubsRe   = regexp.MustCompile(`\AHubs: ` + linkRe.String() + `(?:, ` + linkRe.String() + `)*\z`)
 )
 
 type config struct {
@@ -154,19 +154,8 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 		}
 		first := d.lines[0]
 		text := strings.TrimRightFunc(first.text, unicode.IsSpace)
-		var hubs [][]string
-		ok := strings.HasPrefix(text, "Hubs: ")
-		if ok {
-			for _, part := range strings.Split(text[len("Hubs: "):], ", ") {
-				m := linkFullRe.FindStringSubmatch(part)
-				if m == nil {
-					ok = false
-					break
-				}
-				hubs = append(hubs, m)
-			}
-		}
-		if !ok {
+		hubs := linkRe.FindAllStringSubmatch(text, -1)
+		if !hubsRe.MatchString(text) {
 			add("E_HUBS_LINE", d.path, first.n, "first body line must be: Hubs: [[ID|Hub]], [[ID|Hub]]")
 			continue
 		}

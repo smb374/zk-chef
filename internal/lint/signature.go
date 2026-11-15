@@ -148,12 +148,14 @@ func parseMessage(text string) map[string]string {
 	}
 	fields := map[string]string{}
 	for _, ln := range lines[1:] {
-		if k, v, ok := strings.Cut(strings.TrimRight(ln, "\r"), ": "); ok {
-			fields[k] = v
+		k, v, ok := strings.Cut(strings.TrimRight(ln, "\r"), ": ")
+		if _, dup := fields[k]; !ok || dup {
+			return nil
 		}
+		fields[k] = v
 	}
 	for _, form := range messageForms {
-		if !slices.ContainsFunc(form, func(k string) bool { _, ok := fields[k]; return !ok }) {
+		if len(fields) == len(form) && !slices.ContainsFunc(form, func(k string) bool { _, ok := fields[k]; return !ok }) {
 			return fields
 		}
 	}

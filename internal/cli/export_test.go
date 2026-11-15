@@ -578,7 +578,7 @@ func TestExportHugoRootPageIsUnderscoreIndex(t *testing.T) {
 		t.Errorf("manifest %q (%v), want it to list content/_index.md and not index.md", tree[exportManifestName], err)
 	}
 	for p := range tree {
-		if strings.HasPrefix(p, "notes/") || strings.HasPrefix(p, "notes/") || strings.HasPrefix(p, "notes/") || strings.HasPrefix(p, "notes/") {
+		if strings.HasPrefix(p, "notes/") {
 			t.Errorf("OUT has %s, want pages only under content/", p)
 		}
 	}

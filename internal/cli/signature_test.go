@@ -263,6 +263,12 @@ func TestReviewSignaturesURLOnly(t *testing.T) {
 		{name: "raw and url note signs the raw form and ignores url changes",
 			changes: map[string]string{"notes/src001.md": doc("Source one", "source", sourceHubs+"## Review\n\n"+s.review(t, "raw/src001.bin", rawSHA, "reviewed"),
 				kv{"raw", "raw/src001.bin"}, kv{"sha256", rawSHA}, kv{"url", "https://example.com/moved"}, kv{"accessed", "2026-02-04"}, kv{"review", "reviewed"})}},
+		{name: "duplicate key in the signed message",
+			changes: with(urlNote("reviewed", url, accessed, s.fenced(t, "vault-review v2\nurl: "+url+"\nurl: https://evil.example\naccessed: "+accessed+"\nverdict: reviewed\ndate: 2026-01-02\n"))),
+			want:    "E_SIGNATURE", wantMsg: "not a vault-review v2 message"},
+		{name: "mixed forms in the signed message",
+			changes: with(urlNote("reviewed", url, accessed, s.fenced(t, "vault-review v2\nurl: "+url+"\naccessed: "+accessed+"\npath: raw/src001.bin\nverdict: reviewed\ndate: 2026-01-02\n"))),
+			want:    "E_SIGNATURE", wantMsg: "not a vault-review v2 message"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

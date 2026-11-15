@@ -293,6 +293,7 @@ func TestLintSourceEvidenceRejected(t *testing.T) {
 		{"published not a date", []kv{url, accessed, {"published", "2026-13-01"}}, "published must be YYYY or YYYY-MM-DD"},
 		{"published two digit year", []kv{url, accessed, {"published", "26"}}, "published must be YYYY or YYYY-MM-DD"},
 		{"published text", []kv{url, accessed, {"published", "last spring"}}, "published must be YYYY or YYYY-MM-DD"},
+		{"url with a newline", []kv{{"url", `"https://example.com/y\npath: raw/x"`}, accessed}, "url must not contain control characters"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -389,6 +390,16 @@ func TestLintPageFormat(t *testing.T) {
 	}
 }
 
+// TestLintFixRefusesStagedAndChildren: --fix with --staged or --children is a usage error.
+func TestLintFixRefusesStagedAndChildren(t *testing.T) {
+	vault := baseVault(t)
+	for _, flag := range [][]string{{"--staged"}, {"--children", "hubsrc"}} {
+		if got := runIn(t, "dev", vault, append([]string{"lint", "--fix"}, flag...)...); got.code != 2 {
+			t.Errorf("lint --fix %v: code %d stderr %q, want 2", flag, got.code, got.stderr)
+		}
+	}
+}
+
 // TestLintHubsLineSeparator: the Hubs line joins links with ", "; the v0.2 " · " is E_HUBS_LINE.
 func TestLintHubsLineSeparator(t *testing.T) {
 	page := func(hubs string) map[string]string {
@@ -397,6 +408,13 @@ func TestLintHubsLineSeparator(t *testing.T) {
 	t.Run("comma separator is clean", func(t *testing.T) {
 		if got := findingsOf(t, with_(t, page("Hubs: [[hubsrc|Sources]], [[hubprj|Projects]]"))); len(got) != 0 {
 			t.Errorf("findings %+v, want none", got)
+		}
+	})
+	t.Run("a comma inside a hub title is clean", func(t *testing.T) {
+		for _, f := range findingsOf(t, with_(t, page("Hubs: [[hubsrc|Parsing, lexing]], [[hubprj|Projects]]"))) {
+			if f.Code == "E_HUBS_LINE" {
+				t.Errorf("finding %+v, want no E_HUBS_LINE", f)
+			}
 		}
 	})
 	t.Run("middle dot separator is E_HUBS_LINE", func(t *testing.T) {

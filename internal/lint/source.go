@@ -6,7 +6,14 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 )
+
+// hasControl reports whether s has a control character, such as a newline.
+func hasControl(s string) bool { return strings.ContainsFunc(s, unicode.IsControl) }
+
+// HasRaw reports whether the source has a raw file with its hash.
+func (s Source) HasRaw() bool { return s.Raw != "" && s.SHA256 != "" }
 
 var (
 	yearRe = regexp.MustCompile(`\A\d{4}\z`)
@@ -57,6 +64,11 @@ func checkSourceEvidence(d *Page, add adder) {
 	if accessed && !url {
 		fail("accessed needs url")
 	}
+	for _, key := range []string{"url", "accessed"} {
+		if hasControl(d.str(key)) || hasControl(d.dateStr(key)) {
+			fail(key + " must not contain control characters")
+		}
+	}
 	if raw && !sha {
 		fail("raw needs sha256")
 	}
@@ -105,7 +117,10 @@ func ParseSource(p, text string) (Source, error) {
 		Accessed: d.dateStr("accessed"),
 		Review:   d.Review(),
 	}
-	hasRaw, hasURL := s.Raw != "" && s.SHA256 != "", s.URL != "" && s.Accessed != ""
+	hasRaw, hasURL := s.HasRaw(), s.URL != "" && s.Accessed != ""
+	if hasControl(s.URL) || hasControl(s.Accessed) {
+		return Source{}, errors.New("url and accessed must not contain control characters")
+	}
 	if !hasRaw && !hasURL {
 		return Source{}, errors.New("source needs raw with sha256, or url with accessed (strings)")
 	}

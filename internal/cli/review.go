@@ -31,7 +31,7 @@ var (
 	reviewHeadRe = regexp.MustCompile(`(?m)^## Review[ \t]*\n\n?`)
 )
 
-// withReview sets the note's review: tag and puts block first in ## Review, as v1 does.
+// withReview sets the note's review: tag and puts block first in ## Review, as the earlier Python build did.
 func withReview(text, verdict, block string) string {
 	if _, body, ok := lint.SplitFrontmatter(text); ok {
 		head := text[:len(text)-len(body)]
@@ -85,7 +85,7 @@ func signSource(inv *invocation, root, id, verdict string) error {
 	}
 	// A source with raw and sha256 signs the raw form, even when it has a url too.
 	evidence := "url: " + src.URL + "\naccessed: " + src.Accessed
-	if src.Raw != "" && src.SHA256 != "" {
+	if src.HasRaw() {
 		raw, err := os.ReadFile(filepath.Join(root, src.Raw))
 		if err != nil {
 			return err
@@ -147,7 +147,7 @@ queue:
 		}
 		// The queue shows the evidence that review signs: the raw file, else the URL.
 		shown, open := "url: "+src.URL+" (accessed "+src.Accessed+")", src.URL
-		if src.Raw != "" && src.SHA256 != "" {
+		if src.HasRaw() {
 			shown, open = "raw: "+src.Raw, filepath.Join(root, src.Raw)
 		}
 		fmt.Fprintf(inv.stdout, "%s: %s\n%s\n", src.ID, src.Title, shown)

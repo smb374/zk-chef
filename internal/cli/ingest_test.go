@@ -283,7 +283,7 @@ func TestIngestNoRawWithPathIsUsageError(t *testing.T) {
 	}
 }
 
-// fakeZk puts a zk on PATH that counts its calls in the file COUNT_FILE. Its first clashes calls print the path of notes/old001.md, which already exists;
+// fakeZk puts a zk on PATH that counts its calls in the file COUNT_FILE. Its first calls that clash print the path of notes/old001.md, which already exists;
 // the next call writes notes/new001.md and prints that path. It returns the count file.
 func fakeZk(t *testing.T, clashes int) string {
 	t.Helper()
