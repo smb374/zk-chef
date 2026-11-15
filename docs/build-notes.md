@@ -44,7 +44,7 @@ Layout change: `export --generator hugo DIR` now makes `DIR` the site root. It w
 
 `zk-chef export -g hugo` replaces a scaffold file only when its bytes equal a version zk-chef shipped (ADR 0001). The list is in `internal/cli/scaffold_hashes.go`. Before you tag a release that changes a scaffold file, append the hashes of the files as they are in the release:
 
-1. For each changed layout, run `sha256sum layouts/<file>` in `export-scaffold/hugo`. Append the hash to that file's list in `scaffoldHashes`, with the version in a comment. A file the release adds gets a new entry.
+1. For each changed layout, run `sha256sum layouts/<file>` in the tree of its Style: `export-scaffold/hugo` (Style `tufte`) or `export-scaffold/hugo-plain` (Style `plain`). Append the hash to the list of that path in `scaffoldHashes`, with the version in a comment. The list for a path holds every shipped version of every Style. A file the release adds gets a new entry.
 2. If `hugo.toml.tmpl` changed, append its full text to `hugoTomlTemplates`.
 3. Do not list `static/vendored/` files. zk-chef overwrites them.
 

@@ -551,11 +551,11 @@ func TestExportManifestCorruptStopsWithoutDeleting(t *testing.T) {
 	}
 }
 
-// exportHugoOK exports files with --generator hugo to a fresh OUT and returns the exported tree.
-func exportHugoOK(t *testing.T, files map[string]string) map[string]string {
+// exportHugoOK exports files with --generator hugo, and the flags in extra, to a fresh OUT and returns the exported tree.
+func exportHugoOK(t *testing.T, files map[string]string, extra ...string) map[string]string {
 	t.Helper()
 	out := t.TempDir()
-	got := runIn(t, "dev", files, "export", "--generator", "hugo", out)
+	got := runIn(t, "dev", files, append([]string{"export", "--generator", "hugo"}, append(extra, out)...)...)
 	if got.code != 0 {
 		t.Fatalf("got code %d stdout %q stderr %q, want 0", got.code, got.stdout, got.stderr)
 	}

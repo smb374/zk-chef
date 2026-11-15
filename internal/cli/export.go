@@ -262,7 +262,7 @@ func exportClean(out string) ([]string, error) {
 	return deleted, nil
 }
 
-// exportScaffoldDir is the embedded tree of Hugo site files: hugo.toml.tmpl, layouts/ and static/.
+// exportScaffoldDir is the embedded tree of Hugo site files: hugo.toml.tmpl, which every Style shares, and the layouts/ and static/ of the Style tufte. exportStyleDirs names the tree of each Style.
 const exportScaffoldDir = "export-scaffold/hugo"
 
 // exportRootTitle returns the title of the root page, or "zk-chef vault" when it has none.
@@ -324,6 +324,9 @@ func exportVerb(inv *invocation) int {
 		return fail(inv, "zk-chef export: unknown generator "+inv.generator+"; use hugo or omit --generator")
 	}
 	hugo := inv.generator == "hugo"
+	if inv.style != "" && !hugo {
+		return fail(inv, "zk-chef export: --style needs --generator hugo")
+	}
 	out, err := filepath.Abs(inv.args[0])
 	if err != nil {
 		return fail(inv, "zk-chef export: "+err.Error())
@@ -359,6 +362,12 @@ func exportVerb(inv *invocation) int {
 		}
 		if inside {
 			return fail(inv, "zk-chef export: "+dst+" is the vault or inside it ("+realRoot+"); pick a directory outside it")
+		}
+	}
+	style := ""
+	if hugo {
+		if style, err = resolveStyle(out, inv.style); err != nil {
+			return fail(inv, "zk-chef export: "+err.Error())
 		}
 	}
 	files, err := lint.LoadWorktree(root)
@@ -430,7 +439,10 @@ func exportVerb(inv *invocation) int {
 		if v, ok := installedHugo(); ok && hugoBelowFloor(v) {
 			fmt.Fprintf(inv.stderr, "zk-chef export: warning: the hugo on PATH is %s; the site needs Hugo %s or newer\n", v, hugoFloor)
 		}
-		if scaffold, err = exportScaffoldHugo(out, exportRootTitle(files)); err != nil {
+		if scaffold, err = exportScaffoldHugo(out, exportRootTitle(files), style); err != nil {
+			return fail(inv, "zk-chef export: "+err.Error())
+		}
+		if err := writeStyle(out, style); err != nil {
 			return fail(inv, "zk-chef export: "+err.Error())
 		}
 	}

@@ -66,7 +66,7 @@ Every verb accepts `--json` and `--help`. Verbs that work on a vault pick it in 
 | `zk-chef fix` | agent | Rewrites stale link aliases to the targets' current titles; leaves aliases in note prose alone |
 | `zk-chef review [SRC-ID reviewed\|disputed] [--no-commit]` | human only | Shows the raw file, asks you to confirm, signs the verdict and commits. Without arguments it walks the queue |
 | `zk-chef status` | agent | Lists new and re-review sources, disputed sources still cited, and lint counts |
-| `zk-chef export DIR [--generator hugo]` | agent | Writes the notes, hubs, sources and projects pages to `DIR` as Markdown, with frontmatter cut to a safe set of fields. `--generator hugo` (`-g hugo`) shapes the output for Hugo. With it, `DIR` is a Hugo site root. The pages go to `DIR/content/`. The export also creates and updates a scaffold (see Hugo below). Lint errors stop it with exit code 1. It never changes the vault. `DIR` must be outside the vault |
+| `zk-chef export DIR [--generator hugo [--style plain\|tufte]]` | agent | Writes the notes, hubs, sources and projects pages to `DIR` as Markdown, with frontmatter cut to a safe set of fields. `--generator hugo` (`-g hugo`) shapes the output for Hugo. With it, `DIR` is a Hugo site root. The pages go to `DIR/content/`. The export also creates and updates a scaffold in one of two Styles (see Hugo below). Lint errors stop it with exit code 1. It never changes the vault. `DIR` must be outside the vault |
 
 Lint codes and fixes are in `skills/zk-chef-ops/LINT.md`.
 
@@ -112,12 +112,23 @@ The Hugo export differs from the generic export in these ways:
 - `kind`, `url` and `published` are written as `zk_kind`, `source_url` and `source_published`. Hugo reserves `kind` (it accepts only page kinds, so a value such as `hub` fails the build in Hugo 0.123 and newer), and `url` would change the page's URL;
 - each page gets a `date` from the first 12 digits of its ID (UTC). A page whose ID is not a date gets no `date`;
 - shortcode calls such as `{{< x >}}` in the text are escaped, so Hugo shows them as text;
-- the export creates a minimal site in `DIR`: `hugo.toml` and the layouts `layouts/baseof.html`, `home.html`, `list.html` and `single.html`. The layouts use the Tufte style ([Tufte CSS](https://github.com/edwardtufte/tufte-css) and the ET Book fonts), vendored in `static/vendored/tufte/`. Source pages show their review state and citation (URLs in the citation are links). A source without a citation shows its URL, authors and published date. A superseded page shows a banner.
+- the export creates a minimal site in `DIR`: `hugo.toml` and the layouts `layouts/baseof.html`, `home.html`, `list.html` and `single.html`. The Style decides what the layouts look like (see Styles below).
+
+#### Styles
+
+`--style` (`-s`) picks the Style of the site. It needs `--generator hugo`.
+
+- `plain` is a bare site. The layouts have no stylesheet. A source page shows its review state in one plain line. `plain` deletes `static/vendored/tufte/`.
+- `tufte` uses the Tufte style ([Tufte CSS](https://github.com/edwardtufte/tufte-css) and the ET Book fonts), vendored in `static/vendored/tufte/`. Source pages show their review state and citation (URLs in the citation are links). A source without a citation shows its URL, authors and published date. A superseded page shows a banner.
+
+The export writes the Style to `DIR/.zk-chef-site.json` as `{"style": "<name>"}`. Without `--style`, it uses that file. When the file is missing, the Style is `tufte` if `DIR/static/vendored/tufte/` exists, and `plain` for a new site. An unknown Style, `--style` without `--generator hugo`, or a corrupt `.zk-chef-site.json` stops the export with exit code 2 and writes nothing.
+
+A Style switch follows the rule below: a layout that you did not edit is replaced with the layout of the new Style. A layout that you edited is kept, and the export prints `kept your <path>` and a diff.
 
 The export updates the scaffold by this rule. It looks at each scaffold file in `DIR`:
 
 - A missing file is created. To get a file back, delete it and run the export again.
-- A file that is byte for byte a version that zk-chef shipped is replaced with the current version.
+- A file that is byte for byte a version that zk-chef shipped, in any Style, is replaced with the current version.
 - Any other file counts as your edit and is kept. The export prints `kept your <path>` and a unified diff of your file against the current version, so you can merge changes by hand.
 - `static/vendored/` belongs to zk-chef. The export creates its files and overwrites them when they differ. Your edits there are lost. Use your own stylesheet.
 - `hugo.toml` is not created when `DIR` already has a Hugo config. A Hugo config is one of these: `hugo.{toml,yaml,yml,json}`, `config.{toml,yaml,yml,json}` or a `config/` folder. An existing `hugo.toml` is replaced only when it equals a shipped template rendered with the title of the root page now. If you change that title or edit the file, it counts as your edit.

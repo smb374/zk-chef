@@ -344,6 +344,8 @@ func TestGoInstallCarriesEmbeddedFiles(t *testing.T) {
 		"scaffold/.zk/config.toml",
 		"skills/zk-chef-ops/SKILL.md",
 		"skills/zettel-writing/SKILL.md",
+		"export-scaffold/hugo-plain/layouts/baseof.html",
+		"export-scaffold/hugo-plain/layouts/single.html",
 		"export-scaffold/hugo/static/vendored/tufte/tufte.css",
 		"export-scaffold/hugo/static/vendored/tufte/LICENSE-tufte-css",
 		"export-scaffold/hugo/static/vendored/tufte/LICENSE-et-book",

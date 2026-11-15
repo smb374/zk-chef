@@ -31,6 +31,7 @@ type invocation struct {
 	title          string   // --title, for ingest
 	hubs           []string // --hub, for ingest
 	generator      string   // --generator, for export
+	style          string   // --style, for export
 }
 
 // verb describes one verb: its help text, its flags and its code.
@@ -81,7 +82,10 @@ var verbs = []verb{
 	{name: "status", usage: "summarize the vault", root: true, run: statusVerb},
 	{name: "export", usage: "write a copy of the vault for a static site generator", argsUsage: "DIR", root: true, run: exportVerb,
 		flags: func() []cli.Flag {
-			return []cli.Flag{&cli.StringFlag{Name: "generator", Aliases: []string{"g"}, Usage: "shape the output for a site generator: hugo (default: generic)"}}
+			return []cli.Flag{
+				&cli.StringFlag{Name: "generator", Aliases: []string{"g"}, Usage: "shape the output for a site generator: hugo (default: generic)"},
+				&cli.StringFlag{Name: "style", Aliases: []string{"s"}, Usage: "with --generator hugo, the site style: plain or tufte (default: the one in .zk-chef-site.json, else tufte when static/vendored/tufte/ exists, else plain)"},
+			}
 		}},
 }
 
@@ -132,6 +136,7 @@ func (v verb) command(base invocation, code *int) *cli.Command {
 			inv.noCommit = cmd.Bool("no-commit")
 			inv.title = cmd.String("title")
 			inv.generator = cmd.String("generator")
+			inv.style = cmd.String("style")
 			inv.hubs = cmd.StringSlice("hub")
 			if v.root {
 				inv.root = cmd.String("root")
