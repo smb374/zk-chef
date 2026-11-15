@@ -78,14 +78,6 @@ func exportFrontmatter(fm string, source, hugo bool) (string, error) {
 // exportTarget is where a page goes in the export and the title its links show.
 type exportTarget struct{ path, title string }
 
-// exportHead is the frontmatter an export reads from each page.
-type exportHead struct {
-	Title        string
-	Kind         string
-	Status       string
-	SupersededBy string `yaml:"superseded_by"`
-}
-
 // exportLinkText escapes the characters that end or start Markdown link text.
 var exportLinkText = strings.NewReplacer(`\`, `\\`, "[", `\[`, "]", `\]`)
 
@@ -121,11 +113,10 @@ func exportSection(name, from string, set map[string]bool, targets map[string]ex
 	return "\n## " + name + "\n\n" + sb.String(), nil
 }
 
-// exportSourcePage is a vault page that goes to the export: its text, the frontmatter fields the export reads, and its id (the file stem).
+// exportSourcePage is a vault page that goes to the export: its text and its page model.
 type exportSourcePage struct {
 	text string
-	head exportHead
-	id   string
+	page *lint.Page
 }
 
 // exportPages maps each page's path under the export to its exported text. Lint has passed, so every page parses. hugo selects the Hugo output: pages go under content/ and the root page is content/_index.md.
@@ -137,17 +128,12 @@ func exportPages(files map[string][]byte, hugo bool) (map[string]string, error) 
 		if p != lint.IndexPath && !(slices.Contains(exportFolders, folder) && strings.HasSuffix(name, ".md") && !strings.Contains(name, "/")) {
 			continue
 		}
-		fm, _, ok := lint.SplitFrontmatter(string(b))
-		if !ok {
-			return nil, fmt.Errorf("%s: missing frontmatter", p)
-		}
-		var head exportHead
-		if err := yaml.Unmarshal([]byte(fm), &head); err != nil {
+		page := lint.ParsePage(p, string(b))
+		if err := page.Err(); err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
 		}
-		id := strings.TrimSuffix(path.Base(p), ".md")
-		src[p] = exportSourcePage{string(b), head, id}
-		targets[id] = exportTarget{p, head.Title}
+		src[p] = exportSourcePage{string(b), page}
+		targets[page.ID()] = exportTarget{p, page.Title()}
 	}
 	// members[id] and linkedBy[id] hold the ids of the pages that name id in their Hubs line or link it elsewhere.
 	members, linkedBy := map[string]map[string]bool{}, map[string]map[string]bool{}
@@ -158,12 +144,12 @@ func exportPages(files map[string][]byte, hugo bool) (map[string]string, error) 
 		into[to][from] = true
 	}
 	for _, s := range src {
-		hubs, others := lint.BodyLinks(s.text)
+		hubs, others := s.page.Links()
 		for _, id := range hubs {
-			addEdge(members, id, s.id)
+			addEdge(members, id, s.page.ID())
 		}
 		for _, id := range others {
-			addEdge(linkedBy, id, s.id)
+			addEdge(linkedBy, id, s.page.ID())
 		}
 	}
 	pages := map[string]string{}
@@ -181,22 +167,22 @@ func exportPages(files map[string][]byte, hugo bool) (map[string]string, error) 
 		if err != nil {
 			return nil, err
 		}
-		if s.head.Kind == "source" {
+		if s.page.Kind() == "source" {
 			text = lint.StripExtract(text)
 		}
 		fm, body, _ := lint.SplitFrontmatter(text)
-		kept, err := exportFrontmatter(fm, s.head.Kind == "source", hugo)
+		kept, err := exportFrontmatter(fm, s.page.Kind() == "source", hugo)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
 		}
-		if hugo && len(s.id) >= 12 {
+		if hugo && len(s.page.ID()) >= 12 {
 			// The first 12 digits of an ID are its UTC minute; a stem that is not a valid date has no date.
-			if d, err := time.Parse("200601021504", s.id[:12]); err == nil {
+			if d, err := time.Parse("200601021504", s.page.ID()[:12]); err == nil {
 				kept += "date: " + d.Format("2006-01-02T15:04:00Z") + "\n"
 			}
 		}
-		if s.head.Status == "superseded" {
-			t := targets[s.head.SupersededBy]
+		if s.page.Superseded() {
+			t := targets[s.page.SupersededBy()]
 			link, err := exportLink(p, t, t.title)
 			if err != nil {
 				return nil, fmt.Errorf("%s: %w", p, err)
@@ -204,12 +190,12 @@ func exportPages(files map[string][]byte, hugo bool) (map[string]string, error) 
 			body = "Superseded by " + link + ".\n\n" + body
 		}
 		backlinks := map[string]bool{}
-		for id := range linkedBy[s.id] {
-			if id != s.id && !members[s.id][id] {
+		for id := range linkedBy[s.page.ID()] {
+			if id != s.page.ID() && !members[s.page.ID()][id] {
 				backlinks[id] = true
 			}
 		}
-		membersText, err := exportSection("Members", p, members[s.id], targets)
+		membersText, err := exportSection("Members", p, members[s.page.ID()], targets)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
 		}
@@ -281,12 +267,11 @@ const exportScaffoldDir = "export-scaffold/hugo"
 
 // exportRootTitle returns the title of the root page, or "zk-chef vault" when it has none.
 func exportRootTitle(files map[string][]byte) string {
-	fm, _, _ := lint.SplitFrontmatter(string(files[lint.IndexPath]))
-	var head exportHead
-	if yaml.Unmarshal([]byte(fm), &head) != nil || strings.TrimSpace(head.Title) == "" {
+	page := lint.ParsePage(lint.IndexPath, string(files[lint.IndexPath]))
+	if page.Err() != nil || strings.TrimSpace(page.Title()) == "" {
 		return "zk-chef vault"
 	}
-	return head.Title
+	return page.Title()
 }
 
 // tomlString returns s as a TOML string: a literal string when it can be one, else a basic string.

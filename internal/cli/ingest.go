@@ -49,16 +49,16 @@ func ingestVerb(inv *invocation) int {
 		}
 		name = unsafeNameRe.ReplaceAllString(filepath.Base(src), "-")
 	}
-	var heads map[string]lint.Head
+	var pages map[string]*lint.Page
 	if len(inv.hubs) > 0 { // loading the vault reads raw/ too, so skip it without --hub
 		files, err := lint.LoadWorktree(root)
 		if err != nil {
 			return failCode(inv, 1, "zk-chef ingest: "+err.Error())
 		}
-		heads = lint.Heads(files)
+		pages = lint.Pages(files)
 	}
 	for _, id := range inv.hubs {
-		if h, ok := heads[id]; !ok || h.Kind != "hub" {
+		if p, ok := pages[id]; !ok || p.Kind() != "hub" {
 			return fail(inv, "zk-chef ingest: --hub "+id+": no hub with that ID")
 		}
 	}
@@ -112,7 +112,7 @@ func ingestVerb(inv *invocation) int {
 		os.Remove(notePath)
 		return failCode(inv, 1, "zk-chef ingest: "+err.Error())
 	}
-	if edited, err = addHubs(edited, inv.hubs, heads); err != nil {
+	if edited, err = addHubs(edited, inv.hubs, pages); err != nil {
 		os.Remove(notePath)
 		return failCode(inv, 1, "zk-chef ingest: "+err.Error())
 	}
@@ -206,12 +206,12 @@ func stage(in io.Reader, dir string) (path, sum string, err error) {
 }
 
 // addHubs appends a link to each hub in ids, in order, to the Hubs line of text. A hub the line already links is skipped.
-func addHubs(text string, ids []string, heads map[string]lint.Head) (string, error) {
+func addHubs(text string, ids []string, pages map[string]*lint.Page) (string, error) {
 	_, body, ok := lint.SplitFrontmatter(text)
 	if !ok || !strings.HasPrefix(body, "Hubs: ") {
 		return "", errors.New("note has no Hubs line")
 	}
-	named, _ := lint.BodyLinks(text)
+	named, _ := lint.ParsePage("", text).Links()
 	end := strings.IndexByte(body, '\n')
 	if end < 0 {
 		end = len(body)
@@ -220,7 +220,7 @@ func addHubs(text string, ids []string, heads map[string]lint.Head) (string, err
 	for _, id := range ids {
 		if !slices.Contains(named, id) {
 			named = append(named, id)
-			add.WriteString(" · [[" + id + "|" + heads[id].Title + "]]")
+			add.WriteString(" · [[" + id + "|" + pages[id].Title() + "]]")
 		}
 	}
 	at := len(text) - len(body) + end

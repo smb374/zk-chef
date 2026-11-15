@@ -113,7 +113,7 @@ type reviewBlock struct {
 }
 
 // reviewBlocks returns the signed blocks of the ## Review section, newest (first) first.
-func reviewBlocks(d *doc) []reviewBlock {
+func reviewBlocks(d *Page) []reviewBlock {
 	var blocks []reviewBlock
 	open := false
 	var cur reviewBlock
@@ -160,7 +160,7 @@ func parseMessage(text string) map[string]string {
 }
 
 // checkReview verifies every signed block of a source note, then compares the latest one with the note.
-func checkReview(d *doc, files map[string][]byte, v *verifier, add adder) {
+func checkReview(d *Page, files map[string][]byte, v *verifier, add adder) {
 	var messages []map[string]string
 	for _, b := range reviewBlocks(d) {
 		var fields map[string]string
@@ -176,7 +176,7 @@ func checkReview(d *doc, files map[string][]byte, v *verifier, add adder) {
 		}
 		messages = append(messages, fields)
 	}
-	review := d.str("review")
+	review := d.Review()
 	if review == "unreviewed" {
 		return // older blocks may cover older hashes
 	}

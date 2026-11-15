@@ -22,8 +22,9 @@ type line struct {
 	section string
 }
 
-// doc is one markdown file: frontmatter plus body lines.
-type doc struct {
+// Page is one markdown file: frontmatter plus body lines. It is the one model every verb reads
+// a page's ID, kind, title, review state, supersede state and Hubs-line links through.
+type Page struct {
 	path  string
 	fm    map[string]any
 	err   string
@@ -39,8 +40,8 @@ type doc struct {
 //   - a duplicate key is an error in yaml.v3, while PyYAML keeps the last value.
 //
 // A mapping with non-string keys is accepted, with the keys printed as text.
-func parseDoc(path, text string) *doc {
-	d := &doc{path: path}
+func parseDoc(path, text string) *Page {
+	d := &Page{path: path}
 	m := frontmatterRe.FindStringSubmatchIndex(text)
 	if m == nil {
 		d.err = "missing frontmatter"
@@ -110,7 +111,7 @@ func contains(list []string, s string) bool {
 }
 
 // scanned returns the lines checks may read.
-func (d *doc) scanned() []line {
+func (d *Page) scanned() []line {
 	var out []line
 	for _, l := range d.lines {
 		if l.scan {
@@ -123,8 +124,8 @@ func (d *doc) scanned() []line {
 // aliasChecked reports whether l, a scanned line, is one where a stale Alias is fixed and warned about.
 // In a note the Hubs line (first body line) and the References section qualify; the rest is Prose,
 // where the writer's wording stays. Every other kind is checked on all scanned lines.
-func (d *doc) aliasChecked(l line) bool {
-	return d.str("kind") != "note" || l.n == d.lines[0].n || l.section == "References"
+func (d *Page) aliasChecked(l line) bool {
+	return d.Kind() != "note" || l.n == d.lines[0].n || l.section == "References"
 }
 
 // RewriteLinks replaces each [[ID]] or [[ID|alias]] in the lines lint scans, so links in code fences,
@@ -157,35 +158,4 @@ func RewriteLinks(text string, repl func(id, alias string, aliased bool) (string
 		lines[i] = out.String()
 	}
 	return text[:len(text)-len(body)] + strings.Join(lines, "\n"), nil
-}
-
-// BodyLinks returns the trimmed IDs of the links in the lines lint scans. IDs on a first body line
-// that starts with "Hubs: " are in hubs; every other ID is in others.
-func BodyLinks(text string) (hubs, others []string) {
-	d := parseDoc("", text)
-	for _, l := range d.scanned() {
-		for _, m := range linkRe.FindAllStringSubmatch(l.text, -1) {
-			id := strings.TrimSpace(m[1])
-			if l.n == d.lines[0].n && strings.HasPrefix(l.text, "Hubs: ") {
-				hubs = append(hubs, id)
-			} else {
-				others = append(others, id)
-			}
-		}
-	}
-	return hubs, others
-}
-
-// Head is the kind and title of one note.
-type Head struct{ Kind, Title string }
-
-// Heads maps the id of each parsable note in files to its kind and title.
-func Heads(files map[string][]byte) map[string]Head {
-	out := map[string]Head{}
-	for _, d := range parseDocs(files) {
-		if d.err == "" {
-			out[d.str("id")] = Head{d.str("kind"), d.str("title")}
-		}
-	}
-	return out
 }

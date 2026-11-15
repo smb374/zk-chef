@@ -17,7 +17,7 @@ var (
 type adder func(code, path string, line int, msg string)
 
 // str returns the string value of a frontmatter key, or "" when it is absent or not a string.
-func (d *doc) str(key string) string {
+func (d *Page) str(key string) string {
 	s, _ := d.fm[key].(string)
 	return s
 }
@@ -36,18 +36,18 @@ func pyRepr(v any) string {
 	return fmt.Sprint(v)
 }
 
-func checkFrontmatter(d *doc, add adder) {
+func checkFrontmatter(d *Page, add adder) {
 	fm := d.fm
 	folder, _, _ := strings.Cut(d.path, "/")
 	if d.path == IndexPath {
 		folder = "hubs"
 	}
-	for _, key := range []string{"id", "title", "kind"} {
-		if s, ok := fm[key].(string); !ok || strings.TrimSpace(s) == "" {
-			add("E_FRONTMATTER", d.path, 1, key+" must be a non-empty string (quote it in YAML)")
+	for _, f := range []struct{ key, val string }{{"id", d.ID()}, {"title", d.Title()}, {"kind", d.Kind()}} {
+		if strings.TrimSpace(f.val) == "" {
+			add("E_FRONTMATTER", d.path, 1, f.key+" must be a non-empty string (quote it in YAML)")
 		}
 	}
-	kind := d.str("kind")
+	kind := d.Kind()
 	switch {
 	case !slices.Contains(kindValues(), kind):
 		add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("kind %s is not note, hub, source or log", pyRepr(fm["kind"])))
@@ -57,7 +57,7 @@ func checkFrontmatter(d *doc, add adder) {
 	if _, has := fm["status"]; has {
 		if kind == "hub" || kind == "log" {
 			add("E_FRONTMATTER", d.path, 1, kind+" must not have status")
-		} else if _, ok := fm["superseded_by"].(string); fm["status"] != "superseded" || !ok {
+		} else if _, ok := fm["superseded_by"].(string); !d.Superseded() || !ok {
 			add("E_FRONTMATTER", d.path, 1, "status must be 'superseded' with superseded_by: ID")
 		}
 	}
@@ -70,7 +70,7 @@ func checkFrontmatter(d *doc, add adder) {
 		if d.str("url") != "" && d.str("citation") == "" {
 			add("E_FRONTMATTER", d.path, 1, "source with url needs citation (IEEE form)")
 		}
-		if !slices.Contains(reviews, d.str("review")) {
+		if !slices.Contains(reviews, d.Review()) {
 			add("E_FRONTMATTER", d.path, 1, "review must be one of "+strings.Join(reviews, ", "))
 		}
 	}
@@ -89,7 +89,7 @@ func kindValues() []string {
 
 // hubMapMissing reports a hub whose members link each other but whose map holds neither an
 // ordered walk (1. ...) nor a GAP: line.
-func hubMapMissing(d *doc, members []string, linked map[string][]string) bool {
+func hubMapMissing(d *Page, members []string, linked map[string][]string) bool {
 	in := map[string]bool{}
 	for _, m := range members {
 		in[m] = true
@@ -139,7 +139,7 @@ func citations(s string) []int {
 }
 
 // checkCitations covers claim notes only: hubs make no claims, sources paraphrase, logs are exempt.
-func checkCitations(d *doc, add adder) {
+func checkCitations(d *Page, add adder) {
 	type cite struct{ n, k int }
 	var (
 		refLines       []int

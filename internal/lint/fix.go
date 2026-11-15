@@ -14,16 +14,14 @@ func Fix(root string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var docs []*doc
+	var docs []*Page
 	titles := map[string]string{}
 	for _, d := range parseDocs(files) {
 		if d.err != "" {
 			continue
 		}
 		docs = append(docs, d)
-		id, idOK := d.fm["id"].(string)
-		title, titleOK := d.fm["title"].(string)
-		if idOK && titleOK {
+		if id, title := d.ID(), d.Title(); id != "" && title != "" {
 			titles[id] = title
 		}
 	}

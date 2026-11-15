@@ -55,7 +55,7 @@ func ComputeStatus(files map[string][]byte) (Status, error) {
 		}
 	}
 	for _, d := range parseDocs(files) {
-		if folder, _, _ := strings.Cut(d.path, "/"); d.err != "" || folder == "sources" || d.fm["status"] == "superseded" {
+		if folder, _, _ := strings.Cut(d.path, "/"); d.err != "" || folder == "sources" || d.Superseded() {
 			continue
 		}
 		seen := map[string]bool{}

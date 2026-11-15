@@ -19,16 +19,16 @@ func ParseSource(p, text string) (Source, error) {
 	if d.err != "" {
 		return Source{}, errors.New(d.err)
 	}
-	if d.str("kind") != "source" {
+	if d.Kind() != "source" {
 		return Source{}, errors.New("kind is not source")
 	}
 	s := Source{
 		ID:     strings.TrimSuffix(path.Base(p), ".md"),
-		Title:  d.str("title"),
+		Title:  d.Title(),
 		Path:   p,
 		Raw:    d.str("raw"),
 		SHA256: d.str("sha256"),
-		Review: d.str("review"),
+		Review: d.Review(),
 	}
 	if s.Raw == "" || s.SHA256 == "" {
 		return Source{}, errors.New("source needs raw and sha256 (strings)")
