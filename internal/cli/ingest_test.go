@@ -530,6 +530,18 @@ func TestIngestHub(t *testing.T) {
 	}
 }
 
+// TestIngestHubTitleWithComma: a hub title with a comma leaves the Hubs line lint-clean.
+func TestIngestHubTitleWithComma(t *testing.T) {
+	env := ingestVault(t)
+	writeFile(t, "notes/hubprs.md", doc("Parsing, lexing", "hub", hubLine+"\n\nParsing."))
+	if got, want := ingestHubLine(t, env, "--hub", "hubprs", "--hub", "index"), "Hubs: [[hubprs|Parsing, lexing]], [[index|Index]]"; got != want {
+		t.Errorf("Hubs line %q, want %q", got, want)
+	}
+	if got := run(env, "lint"); strings.Contains(got.stdout, "E_HUBS_LINE") || strings.Contains(got.stdout, "W_STALE_ALIAS") {
+		t.Errorf("lint stdout %q, want no Hubs line finding", got.stdout)
+	}
+}
+
 func TestIngestHubRejected(t *testing.T) {
 	env := ingestVault(t)
 	writeFile(t, "notes/not001.md", doc("N", "note", hubLine))

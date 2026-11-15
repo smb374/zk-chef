@@ -294,6 +294,7 @@ func TestLintSourceEvidenceRejected(t *testing.T) {
 		{"published two digit year", []kv{url, accessed, {"published", "26"}}, "published must be YYYY or YYYY-MM-DD"},
 		{"published text", []kv{url, accessed, {"published", "last spring"}}, "published must be YYYY or YYYY-MM-DD"},
 		{"url with a newline", []kv{{"url", `"https://example.com/y\npath: raw/x"`}, accessed}, "url must not contain control characters"},
+		{"accessed with a control character", []kv{url, {"accessed", `"2026-01-03\u0007"`}}, "accessed must not contain control characters"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -553,6 +554,21 @@ func TestLintFixThenLints(t *testing.T) {
 	}
 	if b, err := os.ReadFile("notes/not002.md"); err != nil || !strings.Contains(string(b), "Hubs: [[index|Index]]\n") {
 		t.Errorf("notes/not002.md = %q (%v), want the Hubs alias fixed", b, err)
+	}
+}
+
+// TestLintFixHubTitleWithComma: --fix writes a hub title that has a comma into the Hubs line, and lint stays clean.
+func TestLintFixHubTitleWithComma(t *testing.T) {
+	files := with_(t, map[string]string{
+		"notes/hubprs.md": doc("Parsing, lexing", "hub", hubLine+"\n\nParsing."),
+		"notes/not002.md": doc("Two", "note", "Hubs: [[hubprs|Old hub]], [[index|Index]]\n\nBody."),
+	})
+	got := runIn(t, "dev", files, "lint", "--fix")
+	if got.code != 0 || !strings.HasPrefix(got.stdout, "fixed notes/not002.md\n") || strings.Contains(got.stdout, "not002.md:") {
+		t.Errorf("code %d stdout %q, want 0 and no finding on notes/not002.md", got.code, got.stdout)
+	}
+	if b, err := os.ReadFile("notes/not002.md"); err != nil || !strings.Contains(string(b), "Hubs: [[hubprs|Parsing, lexing]], [[index|Index]]\n") {
+		t.Errorf("notes/not002.md = %q (%v), want the comma title in the Hubs line", b, err)
 	}
 }
 

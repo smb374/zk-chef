@@ -333,3 +333,20 @@ func TestReviewQueueHashMismatchSkips(t *testing.T) {
 		t.Errorf("src002 not reviewed after the skip:\n%s", note)
 	}
 }
+
+// TestReviewRefusesControlCharURL: a source whose url has a newline is not signed and not committed.
+func TestReviewRefusesControlCharURL(t *testing.T) {
+	s := newSigner(t)
+	env := reviewVault(t, s, map[string]string{
+		"notes/srcbad.md": doc("Title srcbad", "source", sourceHubs+"## Review\n\n", kv{"url", `"https://example.com/a\nb"`}, kv{"accessed", "2026-01-03"}, kv{"review", "unreviewed"}),
+	})
+	before := readFile(t, "notes/srcbad.md")
+	head := gitOut(t, "rev-parse", "HEAD")
+	got := run(env, "review", "srcbad", "reviewed")
+	if got.code == 0 || got.stdout != "" {
+		t.Errorf("got code %d stdout %q, want non-zero and no stdout", got.code, got.stdout)
+	}
+	if readFile(t, "notes/srcbad.md") != before || gitOut(t, "rev-parse", "HEAD") != head {
+		t.Error("note or HEAD changed, want nothing signed")
+	}
+}

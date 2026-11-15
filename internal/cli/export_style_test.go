@@ -44,13 +44,13 @@ func TestExportHugoStyleStateFileIsReused(t *testing.T) {
 	if got := run(env, "export", "-g", "hugo", "-s", "tufte", out); got.code != 0 {
 		t.Fatalf("tufte: code %d stderr %q, want 0", got.code, got.stderr)
 	}
-	if got := readTree(t, out)[".zk-chef-site.json"]; got != "{\"style\": \"tufte\"}\n" {
+	if got := readTree(t, out)[siteStateFile]; got != "{\"style\": \"tufte\"}\n" {
 		t.Errorf(".zk-chef-site.json = %q, want the tufte style", got)
 	}
 	if got := run(env, "export", "-g", "hugo", out); got.code != 0 || strings.Contains(got.stdout, "kept") {
 		t.Fatalf("no style: code %d stdout %q stderr %q, want 0 and nothing kept", got.code, got.stdout, got.stderr)
 	}
-	if tree := readTree(t, out); !strings.Contains(tree["layouts/baseof.html"], "tufte.css") || tree[".zk-chef-site.json"] != "{\"style\": \"tufte\"}\n" {
+	if tree := readTree(t, out); !strings.Contains(tree["layouts/baseof.html"], "tufte.css") || tree[siteStateFile] != "{\"style\": \"tufte\"}\n" {
 		t.Errorf("tree %v, want the state file and the layouts to stay tufte", slices.Collect(maps.Keys(tree)))
 	}
 	if got := run(env, "export", "-g", "hugo", "-s", "plain", out); got.code != 0 {
@@ -60,7 +60,7 @@ func TestExportHugoStyleStateFileIsReused(t *testing.T) {
 		t.Fatalf("no style after plain: code %d stderr %q, want 0", got.code, got.stderr)
 	}
 	tree := readTree(t, out)
-	if tree[".zk-chef-site.json"] != "{\"style\": \"plain\"}\n" || strings.Contains(tree["layouts/baseof.html"], "tufte.css") {
+	if tree[siteStateFile] != "{\"style\": \"plain\"}\n" || strings.Contains(tree["layouts/baseof.html"], "tufte.css") {
 		t.Errorf("state %q baseof %q, want plain", tree[".zk-chef-site.json"], tree["layouts/baseof.html"])
 	}
 	for _, p := range hugoVendoredFiles {
@@ -82,7 +82,7 @@ func TestExportHugoStyleFallsBackWithoutStateFile(t *testing.T) {
 			t.Fatalf("%s: code %d stderr %q, want 0", want, got.code, got.stderr)
 		}
 		tree := readTree(t, out)
-		if tree[".zk-chef-site.json"] != "{\"style\": \""+want+"\"}\n" || strings.Contains(tree["layouts/baseof.html"], "tufte.css") != (want == "tufte") {
+		if tree[siteStateFile] != "{\"style\": \""+want+"\"}\n" || strings.Contains(tree["layouts/baseof.html"], "tufte.css") != (want == "tufte") {
 			t.Errorf("want %s: state %q baseof %q", want, tree[".zk-chef-site.json"], tree["layouts/baseof.html"])
 		}
 	}
@@ -133,7 +133,7 @@ func TestExportHugoStyleRefusalsWriteNothing(t *testing.T) {
 	} {
 		out := t.TempDir()
 		if c.state != "" {
-			writeFiles(t, out, map[string]string{".zk-chef-site.json": c.state})
+			writeFiles(t, out, map[string]string{siteStateFile: c.state})
 		}
 		before := readTree(t, out)
 		got := run(env, append(c.args, out)...)

@@ -19,7 +19,7 @@ func (d *Page) str(key string) string {
 	return s
 }
 
-// pyRepr prints a frontmatter value the way Python's repr does for the messages v1 printed.
+// pyRepr prints a frontmatter value the way Python's repr does for the messages the earlier Python build printed.
 func pyRepr(v any) string {
 	switch x := v.(type) {
 	case nil:

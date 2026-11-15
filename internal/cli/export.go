@@ -35,9 +35,6 @@ func escapeHugoShortcodes(body string) string {
 	return body
 }
 
-// exportFolders are the vault folders whose pages go to the export, one level deep.
-var exportFolders = []string{lint.NotesDir}
-
 // exportManifest is the file in OUT that lists, as slash paths relative to OUT, the files the last run wrote.
 const exportManifest = ".zk-chef-export.json"
 
@@ -154,7 +151,7 @@ func exportPages(files map[string][]byte, hugo bool) (map[string]string, error) 
 	targets := map[string]exportTarget{} // page id (the file stem) -> target
 	for p, b := range files {
 		folder, name, _ := strings.Cut(p, "/")
-		if p != lint.IndexPath && !(slices.Contains(exportFolders, folder) && strings.HasSuffix(name, ".md") && !strings.Contains(name, "/")) {
+		if p != lint.IndexPath && !(folder == lint.NotesDir && strings.HasSuffix(name, ".md") && !strings.Contains(name, "/")) {
 			continue
 		}
 		page := lint.ParsePage(p, string(b))
@@ -362,12 +359,10 @@ func exportVerb(inv *invocation) int {
 	dests := []string{""} // the paths in OUT that an export writes to or through
 	if hugo {
 		dests = append(dests, "content", "content/_index.md", "hugo.toml", "layouts", "static")
-		for _, folder := range exportFolders {
-			dests = append(dests, "content/"+folder)
-		}
+		dests = append(dests, "content/"+lint.NotesDir)
 	} else {
 		dests = append(dests, "index.md", "_index.md")
-		dests = append(dests, exportFolders...)
+		dests = append(dests, lint.NotesDir)
 	}
 	for _, dest := range dests {
 		dst := filepath.Join(out, filepath.FromSlash(dest))
