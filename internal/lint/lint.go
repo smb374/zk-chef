@@ -67,7 +67,7 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 	add := func(code, path string, line int, msg string) {
 		out = append(out, Finding{code, path, line, msg})
 	}
-	var good []*Page
+	var good, parsed []*Page // parsed: no parse error; good: parsed with valid frontmatter
 	pages := parsePages(files)
 	firstOf := map[string]*Page{}
 	for _, d := range pages {
@@ -82,6 +82,7 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 			add("E_FRONTMATTER", d.path, 1, d.err)
 			continue
 		}
+		parsed = append(parsed, d)
 		n := len(out)
 		checkFrontmatter(d, add)
 		if len(out) == n {
@@ -92,13 +93,15 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 		}
 	}
 	byID := map[string]*Page{}
-	for _, d := range good {
+	for _, d := range parsed {
 		if byID[d.ID()] == nil {
 			byID[d.ID()] = d
 		}
 	}
-	for _, d := range good {
+	for _, d := range parsed {
 		checkKeys(d, add)
+	}
+	for _, d := range good {
 		if v, has := d.fm["superseded_by"]; has {
 			if s, isStr := v.(string); !isStr || byID[s] == nil {
 				add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("superseded_by %v does not exist", v))
@@ -120,7 +123,7 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 	linked := map[string][]string{}            // page id -> ids its body links, past the Hubs line
 	type hubLink struct{ child, parent *Page } // a hub and one parent hub on its Hubs line
 	var hubLinks []hubLink
-	for _, d := range good {
+	for _, d := range parsed {
 		live := !d.Superseded()
 		words := 0
 		for _, l := range d.scanned() {
@@ -148,12 +151,13 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 				words += len(strings.Fields(l.text))
 			}
 		}
-		if d.Kind() == "note" {
+		valid := slices.Contains(good, d) // kind checks need valid frontmatter
+		if valid && d.Kind() == "note" {
 			checkCitations(d, add)
 			if words > cfg.WordCountWarn {
 				add("W_WORD_COUNT", d.path, d.lines[0].n, fmt.Sprintf("%d words", words))
 			}
-		} else if d.Kind() == "log" {
+		} else if valid && d.Kind() == "log" {
 			checkLog(d, add)
 		}
 		if d.ID() == indexStem {
@@ -204,14 +208,16 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 	}
 
 	rawPaths := map[string]bool{}
+	for _, d := range parsed {
+		if d.Kind() == "source" && d.source().HasRaw() {
+			rawPaths[d.str("raw")] = true
+		}
+	}
 	for _, d := range good {
 		if d.Kind() != "source" {
 			continue
 		}
 		raw, want, hasRaw := d.str("raw"), d.str("sha256"), d.source().HasRaw()
-		if hasRaw {
-			rawPaths[raw] = true
-		}
 		if !slices.ContainsFunc(d.lines, func(l line) bool { return l.section == "Review" }) {
 			add("E_REVIEW_HEADING", d.path, 1, "source needs a ## Review heading")
 		}

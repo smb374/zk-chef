@@ -816,7 +816,7 @@ func TestLintTagNamespaces(t *testing.T) {
 		{"type on a note", []string{"kind/note", "type/decision"}, "type", false},
 		{"a bare tag", []string{"kind/note", "custom"}, "", true},
 		{"an unknown namespace", []string{"kind/note", "foo/bar"}, "", true},
-		{"an old colon kind tag is no kind", []string{"kind:note"}, "kind", false},
+		{"an old colon kind tag is no kind", []string{"kind:note"}, "kind", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -928,6 +928,38 @@ func TestLintHubUnlisted(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestLintBadFrontmatterStillIndexed: a page with an E_FRONTMATTER finding still counts as a link target, a hub, and a raw file's source.
+func TestLintBadFrontmatterStillIndexed(t *testing.T) {
+	t.Run("hub with a bad tag", func(t *testing.T) {
+		files := with_(t, map[string]string{
+			"notes/hub001.md": taggedPage("H1", []string{"kind/hub", "topic/Bad Tag"}, "Hubs: [[hubprj|Projects]]\n\nSee [[not002|Two]]."),
+			"notes/hubprj.md": doc("Projects", "hub", "Hubs: [[index|Index]]\n\n[[hub001|H1]]"),
+			"notes/not002.md": doc("Two", "note", "Hubs: [[hub001|H1]]\n\nSee [[hub001|H1]]."),
+		})
+		for _, f := range findingsOf(t, files) {
+			switch {
+			case f.Path == "notes/hub001.md" && f.Code == "E_FRONTMATTER":
+			case f.Code == "E_BROKEN_LINK" || f.Code == "E_UNREACHABLE":
+				t.Errorf("unexpected %s on %s: %s", f.Code, f.Path, f.Msg)
+			}
+		}
+		if len(findingsWith(t, files, "E_FRONTMATTER")) != 1 {
+			t.Errorf("want exactly one E_FRONTMATTER, on notes/hub001.md")
+		}
+	})
+	t.Run("source with a bad published", func(t *testing.T) {
+		files := with_(t, map[string]string{"notes/src001.md": doc("Source one", "source",
+			"Hubs: [[hubsrc|Sources]]\n\nWhy.\n\n## Review",
+			kv{"raw", "raw/src001.bin"}, kv{"sha256", rawSHA}, kv{"published", "junk"}, kv{"review", "unreviewed"})})
+		if len(findingsWith(t, files, "E_FRONTMATTER")) == 0 {
+			t.Fatal("want E_FRONTMATTER for the bad published")
+		}
+		if got := findingsWith(t, files, "E_RAW_ORPHAN"); len(got) != 0 {
+			t.Errorf("E_RAW_ORPHAN %v, want none", got)
+		}
+	})
 }
 
 // TestLintLogHeading: a log needs ## Updates, whose ### headings are YYYY-MM-DD dates, newest first.

@@ -364,6 +364,30 @@ func TestIngestURLFailureLeavesNothing(t *testing.T) {
 		}
 	}
 }
+
+// TestIngestUnreadableNoteLeavesNothing: when the note zk made cannot be read, ingest removes it.
+func TestIngestUnreadableNoteLeavesNothing(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads any file")
+	}
+	env := ingestVault(t)
+	bin := t.TempDir()
+	script := "#!/bin/sh\ntouch notes/new001.md\nchmod 000 notes/new001.md\necho notes/new001.md\n"
+	if err := os.WriteFile(filepath.Join(bin, "zk"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	got := runIngest(env, "ingest", writeTemp(t, "a.txt", "x"), "--title", "T")
+	if got.code != 1 {
+		t.Fatalf("exit %d, stderr %q, want 1", got.code, got.stderr)
+	}
+	for _, dir := range []string{"notes", "raw"} {
+		if names := listDir(t, dir); len(names) != 0 {
+			t.Errorf("%s/ holds %q, want nothing", dir, names)
+		}
+	}
+}
+
 func TestIngestUsageErrors(t *testing.T) {
 	env := ingestVault(t)
 	src := writeTemp(t, "a.txt", "x")

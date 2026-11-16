@@ -113,6 +113,7 @@ func ingestVerb(inv *invocation) int {
 
 	text, err := os.ReadFile(notePath)
 	if err != nil {
+		os.Remove(notePath)
 		return failCode(inv, 1, "zk-chef ingest: "+err.Error())
 	}
 	accessed := ""

@@ -60,8 +60,8 @@ A hub is a **category**, like a wiki `Category:` page. Its title is a noun phras
 - **New hubs:** create one when a cluster forms, meaning several notes in one hub link each other on a subtopic.
 - **The map** is the hub's prose. It holds no claims; an overview that argues is a note that the map links.
   - New hub: one line stating the category's scope.
-  - When two members link each other: an ordered walk. Entry note first, then each member in reading order with a sentence relating it to the one before. Name tensions. Done when a reader can pick the right entry note from the map alone.
-- When a new member changes the reading order, update the map in the same commit.
+  - When members link each other: a short intro, then links to the important members. Do not list every member or order them as a walk. Name tensions. Done when a reader can pick the right entry note from the map alone.
+- When a new member is important, update the map in the same commit.
 
 ## Logs
 
