@@ -351,6 +351,35 @@ func TestIngestRetriesWhenZkReturnsExistingFile(t *testing.T) {
 	}
 }
 
+// A zk that prints the existing note through a symlinked directory is still a clash: the note stays as it was.
+func TestIngestClashSeenThroughSymlink(t *testing.T) {
+	const old = "---\ntitle: Old\n---\nold note\n"
+	env := ingestVault(t)
+	writeFile(t, "notes/old001.md", old)
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(filepath.Join(wd, "notes"), link); err != nil {
+		t.Skip("symlinks not available: " + err.Error())
+	}
+	bin := t.TempDir()
+	script := "#!/bin/sh\necho \"$LINK/old001.md\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "zk"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("LINK", link)
+	got := runIngest(env, "ingest", writeTemp(t, "a.txt", "x"), "--title", "T")
+	if got.code != 1 {
+		t.Fatalf("exit %d, stdout %q, stderr %q, want 1", got.code, got.stdout, got.stderr)
+	}
+	if b := readFile(t, "notes/old001.md"); b != old {
+		t.Errorf("notes/old001.md = %q, want it unchanged", b)
+	}
+}
+
 func TestIngestURLFailureLeavesNothing(t *testing.T) {
 	env := ingestVault(t)
 	fakeHTTP(t, 404, "not found", "")

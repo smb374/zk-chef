@@ -189,7 +189,7 @@ func zkNewSource(zk, root string, inv *invocation) (string, error) {
 		before := map[string]bool{}
 		if es, err := os.ReadDir(filepath.Join(root, lint.NotesDir)); err == nil {
 			for _, e := range es {
-				before[filepath.Join(root, lint.NotesDir, e.Name())] = true
+				before[resolved(filepath.Join(root, lint.NotesDir, e.Name()))] = true
 			}
 		}
 		cmd := exec.Command(zk, "new", lint.NotesDir, "--template", "source.md", "--title", inv.title, "--print-path", "--no-input")
@@ -204,7 +204,7 @@ func zkNewSource(zk, root string, inv *invocation) (string, error) {
 		if !filepath.IsAbs(notePath) {
 			notePath = filepath.Join(root, notePath)
 		}
-		if !before[filepath.Clean(notePath)] {
+		if !before[resolved(notePath)] {
 			return notePath, nil
 		}
 		clash = notePath
@@ -214,6 +214,14 @@ func zkNewSource(zk, root string, inv *invocation) (string, error) {
 		rel = clash
 	}
 	return "", fmt.Errorf("zk new returned the existing note %s 3 times; nothing written", filepath.ToSlash(rel))
+}
+
+// resolved returns p with symlinks followed, so two spellings of one file compare equal. zk may print a symlink-resolved path.
+func resolved(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return filepath.Clean(p)
 }
 
 // urlName is the raw file name for rawURL: its last path segment, or "download".
