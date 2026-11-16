@@ -588,3 +588,25 @@ func TestIngestShortTitle(t *testing.T) {
 		t.Errorf("note lacks the -t title:\n%s", note)
 	}
 }
+
+// TestIngestKeepsTemplateCommentsAndKeys: ingest sets url, accessed, raw and sha256 and keeps a comment and another key of the template.
+func TestIngestKeepsTemplateCommentsAndKeys(t *testing.T) {
+	env := ingestVault(t)
+	tmpl := ".zk/templates/source.md"
+	body := strings.Replace(readFile(t, tmpl), "tags: [kind/source", "# keep me\nextra: 7\ntags: [kind/source", 1)
+	if err := os.WriteFile(tmpl, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fakeHTTP(t, 200, "bytes\n", "")
+	got := runIngest(env, "ingest", "https://example.com/p.txt", "--title", "T")
+	m := notePathRe.FindStringSubmatch(got.stdout)
+	if got.code != 0 || m == nil {
+		t.Fatalf("exit %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
+	}
+	note := readFile(t, "notes/"+m[1]+".md")
+	for _, want := range []string{"# keep me\n", "extra: 7\n", "url: ", "accessed: ", "raw: raw/" + m[1] + ".txt\n", "sha256: "} {
+		if !strings.Contains(note, want) {
+			t.Errorf("note lacks %q:\n%s", want, note)
+		}
+	}
+}

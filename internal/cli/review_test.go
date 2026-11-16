@@ -120,6 +120,78 @@ func TestReviewRewritesOnlyTheReviewTag(t *testing.T) {
 	}
 }
 
+// TestReviewSetsTagInEveryListLayout: review sets review/reviewed for an inline list, an indented block list, a column-0 block list and a flow list split over lines.
+func TestReviewSetsTagInEveryListLayout(t *testing.T) {
+	for _, tc := range []struct{ name, tags string }{
+		{"inline", "tags: [kind/source, review/unreviewed]\n"},
+		{"indented block", "tags:\n  - kind/source\n  - review/unreviewed\n"},
+		{"column-0 block", "tags:\n- kind/source\n- review/unreviewed\n"},
+		{"split flow", "tags: [kind/source,\n  review/unreviewed]\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newSigner(t)
+			note := "---\ntitle: T\ndate: 2026-01-02T03:04:05Z\nurl: https://example.com/a\naccessed: 2026-01-03\n" + tc.tags + "---\n" + sourceHubs + "## Review\n\n"
+			env := reviewVault(t, s, map[string]string{"notes/srcurl.md": note})
+			if got := run(env, "review", "srcurl", "reviewed", "--no-commit"); got.code != 0 {
+				t.Fatalf("code %d stderr %q, want 0", got.code, got.stderr)
+			}
+			out := readFile(t, "notes/srcurl.md")
+			if !strings.Contains(out, "review/reviewed") || strings.Contains(out, "review/unreviewed") {
+				t.Errorf("note %q, want the tag review/reviewed", out)
+			}
+			if lint := run(env, "lint"); lint.code != 0 || lint.stdout != "0 errors, 0 warnings\n" {
+				t.Errorf("lint after review: code %d stdout %q, want clean", lint.code, lint.stdout)
+			}
+		})
+	}
+}
+
+// TestReviewKeepsNestedReviewTag: a tag such as topic/review/unreviewed stays as it is.
+func TestReviewKeepsNestedReviewTag(t *testing.T) {
+	s := newSigner(t)
+	note := "---\ntitle: T\ndate: 2026-01-02T03:04:05Z\nurl: https://example.com/a\naccessed: 2026-01-03\ntags: [topic/review/unreviewed, kind/source, review/unreviewed]\n---\n" + sourceHubs + "## Review\n\n"
+	env := reviewVault(t, s, map[string]string{"notes/srcurl.md": note})
+	if got := run(env, "review", "srcurl", "reviewed", "--no-commit"); got.code != 0 {
+		t.Fatalf("code %d stderr %q, want 0", got.code, got.stderr)
+	}
+	want := "tags: [topic/review/unreviewed, kind/source, review/reviewed]\n"
+	if out := readFile(t, "notes/srcurl.md"); !strings.Contains(out, want) {
+		t.Errorf("note %q, want %q", out, want)
+	}
+}
+
+// TestReviewFailsWhenTagStaysWrong: a note with no review tag cannot take the verdict; review fails before it signs or commits.
+func TestReviewFailsWhenTagStaysWrong(t *testing.T) {
+	s := newSigner(t)
+	note := "---\ntitle: T\ndate: 2026-01-02T03:04:05Z\nurl: https://example.com/a\naccessed: 2026-01-03\ntags: [kind/source]\n---\n" + sourceHubs + "## Review\n\n"
+	env := reviewVault(t, s, map[string]string{"notes/srcurl.md": note})
+	before := readFile(t, "notes/srcurl.md")
+	got := run(env, "review", "srcurl", "reviewed")
+	if got.code != 1 {
+		t.Fatalf("code %d stderr %q, want 1", got.code, got.stderr)
+	}
+	if out := readFile(t, "notes/srcurl.md"); out != before || strings.Contains(out, "BEGIN PGP") {
+		t.Errorf("note changed or signed:\n%s", out)
+	}
+	if subj := gitOut(t, "log", "-1", "--format=%s"); subj != "base" {
+		t.Errorf("commit subject %q, want base", subj)
+	}
+}
+
+// TestReviewLeavesInvalidYAMLUnchanged: a note with invalid YAML makes review fail with the file unchanged.
+func TestReviewLeavesInvalidYAMLUnchanged(t *testing.T) {
+	s := newSigner(t)
+	note := "---\ntitle: [T\ntags: [kind/source, review/unreviewed]\n---\n" + sourceHubs + "## Review\n\n"
+	env := reviewVault(t, s, map[string]string{"notes/srcurl.md": note})
+	got := run(env, "review", "srcurl", "reviewed", "--no-commit")
+	if got.code != 1 {
+		t.Fatalf("code %d stderr %q, want 1", got.code, got.stderr)
+	}
+	if out := readFile(t, "notes/srcurl.md"); out != note {
+		t.Errorf("note changed:\n%s", out)
+	}
+}
+
 func readNote(t *testing.T) string { return readFile(t, "notes/src001.md") }
 
 func TestReviewSignsAndCommits(t *testing.T) {

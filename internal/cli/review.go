@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/smb374/zk-chef/internal/lint"
+	"gopkg.in/yaml.v3"
 )
 
 // errRawChanged is the refusal when the raw file no longer matches the note's sha256.
@@ -26,39 +27,22 @@ func failCode(inv *invocation, code int, msg string) int {
 	return code
 }
 
-var (
-	reviewTagRe  = regexp.MustCompile(`\breview/(?:` + strings.Join(lint.Reviews, "|") + `)\b`)
-	reviewHeadRe = regexp.MustCompile(`(?m)^## Review[ \t]*\n\n?`)
-	tagsLineRe   = regexp.MustCompile(`^tags:(.*)$`)
-	tagItemRe    = regexp.MustCompile(`^\s+-\s`)
-)
+var reviewHeadRe = regexp.MustCompile(`(?m)^## Review[ \t]*\n\n?`)
 
-// setReviewTag replaces the review/ tag inside the tags value of head, an inline list or a block list.
-func setReviewTag(head, verdict string) string {
-	lines := strings.SplitAfter(head, "\n")
-	inTags := false
-	for i, l := range lines {
-		switch m := tagsLineRe.FindStringSubmatch(strings.TrimRight(l, "\n")); {
-		case m != nil:
-			inTags = strings.TrimSpace(m[1]) == ""
-			if !inTags {
-				lines[i] = reviewTagRe.ReplaceAllLiteralString(l, "review/"+verdict)
-			}
-		case inTags && tagItemRe.MatchString(l):
-			lines[i] = reviewTagRe.ReplaceAllLiteralString(l, "review/"+verdict)
-		default:
-			inTags = false
-		}
+// withReviewTag sets the note's review/ tag. It fails when the note then has another review state than verdict.
+func withReviewTag(text, verdict string) (string, error) {
+	text, err := lint.EditFrontmatter(text, func(m *yaml.Node) error { lint.SetReviewTag(m, verdict); return nil })
+	if err != nil {
+		return "", err
 	}
-	return strings.Join(lines, "")
+	if got := lint.ParsePage("", text).Review(); got != verdict {
+		return "", fmt.Errorf("review tag is %q after the edit, want %q", got, verdict)
+	}
+	return text, nil
 }
 
-// withReview sets the note's review: tag and puts block first in ## Review, as the earlier Python build did.
-func withReview(text, verdict, block string) string {
-	if _, body, ok := lint.SplitFrontmatter(text); ok {
-		head := text[:len(text)-len(body)]
-		text = setReviewTag(head, verdict) + body
-	}
+// withReviewBlock puts block first in ## Review, as the earlier Python build did.
+func withReviewBlock(text, block string) string {
 	if loc := reviewHeadRe.FindStringIndex(text); loc != nil {
 		return text[:loc[0]] + "## Review\n\n" + block + text[loc[1]:]
 	}
@@ -105,6 +89,10 @@ func signSource(inv *invocation, root, id, verdict string) error {
 	if err != nil {
 		return fmt.Errorf("%s is not a valid source note: %w", rel, err)
 	}
+	tagged, err := withReviewTag(string(b), verdict)
+	if err != nil {
+		return fmt.Errorf("%s: %w", rel, err)
+	}
 	// A source with raw and sha256 signs the raw form, even when it has a url too.
 	evidence := "url: " + src.URL + "\naccessed: " + src.Accessed
 	if src.HasRaw() {
@@ -140,7 +128,7 @@ func signSource(inv *invocation, root, id, verdict string) error {
 		return err
 	}
 	block := "```\n" + strings.TrimRight(signed, " \t\r\n") + "\n```\n\n"
-	if err := os.WriteFile(notePath, []byte(withReview(string(b), verdict, block)), 0o644); err != nil {
+	if err := os.WriteFile(notePath, []byte(withReviewBlock(tagged, block)), 0o644); err != nil {
 		return err
 	}
 	if inv.noCommit {

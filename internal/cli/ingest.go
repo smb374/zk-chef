@@ -15,11 +15,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/smb374/zk-chef/internal/lint"
+	"gopkg.in/yaml.v3"
 )
 
 // HTTPClient downloads ingest URLs. Tests replace it with a fake Transport.
@@ -115,19 +115,21 @@ func ingestVerb(inv *invocation) int {
 	if err != nil {
 		return failCode(inv, 1, "zk-chef ingest: "+err.Error())
 	}
-	fm := map[string]string{}
-	var order []string
 	accessed := ""
 	if isURL {
 		accessed = time.Now().UTC().Format("2006-01-02")
-		fm["url"], fm["accessed"] = strconv.Quote(src), accessed
-		order = append(order, "url", "accessed")
 	}
-	if !inv.noRaw {
-		fm["raw"], fm["sha256"] = raw, sum
-		order = append(order, "raw", "sha256")
-	}
-	edited, err := setFrontmatter(string(text), fm, order)
+	edited, err := lint.EditFrontmatter(string(text), func(m *yaml.Node) error {
+		if isURL {
+			lint.SetKey(m, "url", yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Style: yaml.DoubleQuotedStyle, Value: src})
+			lint.SetKey(m, "accessed", yaml.Node{Kind: yaml.ScalarNode, Tag: "!!timestamp", Value: accessed})
+		}
+		if !inv.noRaw {
+			lint.SetKey(m, "raw", yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: raw})
+			lint.SetKey(m, "sha256", yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: sum})
+		}
+		return nil
+	})
 	if err != nil {
 		os.Remove(notePath)
 		return failCode(inv, 1, "zk-chef ingest: "+err.Error())
@@ -310,39 +312,4 @@ func addHubs(text string, ids []string, pages map[string]*lint.Page) (string, er
 	}
 	at := len(text) - len(body) + end
 	return text[:at] + add.String() + text[at:], nil
-}
-
-// setFrontmatter replaces the line of each key in order that the frontmatter already has,
-// and adds the missing ones before the closing ---. Other lines stay as they are.
-func setFrontmatter(text string, values map[string]string, order []string) (string, error) {
-	lines := strings.Split(text, "\n")
-	if lines[0] != "---" {
-		return "", fmt.Errorf("note has no frontmatter")
-	}
-	end := -1
-	for i := 1; i < len(lines); i++ {
-		if lines[i] == "---" {
-			end = i
-			break
-		}
-	}
-	if end < 0 {
-		return "", fmt.Errorf("note frontmatter is not closed")
-	}
-	var add []string
-	for _, k := range order {
-		line := k + ": " + values[k]
-		found := false
-		for i := 1; i < end; i++ {
-			if strings.HasPrefix(lines[i], k+":") {
-				lines[i], found = line, true
-				break
-			}
-		}
-		if !found {
-			add = append(add, line)
-		}
-	}
-	out := append(append(append([]string{}, lines[:end]...), add...), lines[end:]...)
-	return strings.Join(out, "\n"), nil
 }
