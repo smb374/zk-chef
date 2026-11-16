@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -60,7 +61,7 @@ func SetReviewTag(m *yaml.Node, verdict string) {
 			continue
 		}
 		for _, item := range m.Content[i+1].Content {
-			if state, ok := strings.CutPrefix(item.Value, "review/"); ok && item.Kind == yaml.ScalarNode && contains(Reviews, state) {
+			if state, ok := strings.CutPrefix(item.Value, "review/"); ok && item.Kind == yaml.ScalarNode && slices.Contains(Reviews, state) {
 				item.Value = "review/" + verdict
 			}
 		}
@@ -82,11 +83,19 @@ func sameScalars(s string) string {
 	})
 }
 
+// frontmatterOf returns the frontmatter of text, or text itself when it has none. Only the frontmatter is compared, so body prose costs nothing.
+func frontmatterOf(text string) string {
+	if fm, _, ok := SplitFrontmatter(text); ok {
+		return fm
+	}
+	return text
+}
+
 // canonicalFrontmatter returns text with its frontmatter in the form EditFrontmatter writes. It returns text itself when the
 // frontmatter is invalid, or when it differs from the canonical form only in how double-quoted scalars are spelled.
 func canonicalFrontmatter(text string) string {
 	if next, err := EditFrontmatter(text, func(*yaml.Node) error { return nil }); err == nil {
-		if sameScalars(next) == sameScalars(text) {
+		if sameScalars(frontmatterOf(next)) == sameScalars(frontmatterOf(text)) {
 			return text
 		}
 		return next

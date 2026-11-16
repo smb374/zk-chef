@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -70,7 +71,7 @@ func LoadStaged(root string) (map[string][]byte, error) {
 	seen := map[string]bool{}
 	for n := range strings.SplitSeq(string(listing), "\x00") {
 		top, _, _ := strings.Cut(n, "/")
-		if (n == ConfigPath || contains(loaded, top)) && !seen[n] {
+		if (n == ConfigPath || slices.Contains(loaded, top)) && !seen[n] {
 			seen[n] = true
 			names = append(names, n)
 		}

@@ -77,9 +77,12 @@ func gitRun(inv *invocation, root string, args ...string) error {
 	return nil
 }
 
+// noteRel is the slash path of note id, relative to the vault root.
+func noteRel(id string) string { return lint.NotesDir + "/" + id + ".md" }
+
 // signSource signs a verdict on the raw file of notes/<id>.md, or on its URL when it has no raw file, and records it in the note.
 func signSource(inv *invocation, root, id, verdict string) error {
-	rel := lint.NotesDir + "/" + id + ".md"
+	rel := noteRel(id)
 	notePath := filepath.Join(root, rel)
 	b, err := os.ReadFile(notePath)
 	if err != nil {
@@ -226,7 +229,7 @@ func reviewVerb(inv *invocation) int {
 		return fail(inv, "zk-chef review: "+err.Error())
 	}
 	if _, err := os.Stat(filepath.Join(root, lint.NotesDir, id+".md")); err != nil {
-		return fail(inv, "zk-chef review: no source note "+lint.NotesDir+"/"+id+".md")
+		return fail(inv, "zk-chef review: no source note "+noteRel(id))
 	}
 	if err := signSource(inv, root, id, verdict); err != nil {
 		return failCode(inv, 1, "zk-chef review: "+err.Error())
@@ -238,7 +241,7 @@ func reviewVerb(inv *invocation) int {
 			Verdict   string `json:"verdict"`
 			Path      string `json:"path"`
 			Committed bool   `json:"committed"`
-		}{true, id, verdict, lint.NotesDir + "/" + id + ".md", !inv.noCommit})
+		}{true, id, verdict, noteRel(id), !inv.noCommit})
 		return 0
 	}
 	fmt.Fprintf(inv.stdout, "signed %s: %s\n", id, verdict)

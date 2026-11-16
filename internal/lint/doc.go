@@ -80,7 +80,7 @@ func ParsePage(path, text string) *Page {
 		if !fenced && strings.HasPrefix(l, "## ") {
 			section = strings.TrimSpace(l[3:])
 		}
-		scan := !fenced && !contains(skipSections, section)
+		scan := !fenced && !slices.Contains(skipSections, section)
 		d.lines = append(d.lines, line{start + i, l, scan, section})
 	}
 	return d
@@ -144,10 +144,6 @@ func StripExtract(text string) string {
 		}
 	}
 	return text[:m[1]] + strings.Join(kept, "\n")
-}
-
-func contains(list []string, s string) bool {
-	return slices.Contains(list, s)
 }
 
 // scanned returns the lines checks may read.
