@@ -82,7 +82,7 @@ func ingestVerb(inv *invocation) int {
 
 	var tmp, sum, contentType string
 	if !inv.noRaw {
-		rawDir := filepath.Join(root, "raw")
+		rawDir := filepath.Join(root, lint.RawDir)
 		if err := os.MkdirAll(rawDir, 0o755); err != nil {
 			return failCode(inv, 1, "zk-chef ingest: "+err.Error())
 		}
@@ -108,7 +108,7 @@ func ingestVerb(inv *invocation) int {
 		if ext == "" {
 			ext = contentTypeExt(contentType)
 		}
-		raw = "raw/" + id + ext
+		raw = lint.RawDir + "/" + id + ext
 	}
 
 	text, err := os.ReadFile(notePath)

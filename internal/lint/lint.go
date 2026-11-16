@@ -234,7 +234,7 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 		checkReview(d, files, v, add)
 	}
 	for p := range files {
-		if strings.HasPrefix(p, "raw/") && !strings.HasPrefix(path.Base(p), ".") && !rawPaths[p] {
+		if strings.HasPrefix(p, RawDir+"/") && !strings.HasPrefix(path.Base(p), ".") && !rawPaths[p] {
 			add("E_RAW_ORPHAN", p, 1, "no source note names this file")
 		}
 	}

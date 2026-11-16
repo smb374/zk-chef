@@ -193,10 +193,7 @@ func checkReview(d *Page, files map[string][]byte, v *verifier, add adder) {
 	}
 	// A note with raw and sha256 is signed in the raw form, even when it has a url too.
 	src := d.source()
-	want := [][2]string{{"url", src.URL}, {"accessed", src.Accessed}, {"verdict", review}}
-	if src.HasRaw() {
-		want = [][2]string{{"path", src.Raw}, {"sha256", src.SHA256}, {"verdict", review}}
-	}
+	want := append(src.Evidence(), [2]string{"verdict", review})
 	for _, kv := range want {
 		if latest[kv[0]] != kv[1] {
 			add("E_REVIEW_MISMATCH", d.path, 1, fmt.Sprintf("latest block %s %s differs from note %s", kv[0], pyRepr(latest[kv[0]]), pyRepr(kv[1])))

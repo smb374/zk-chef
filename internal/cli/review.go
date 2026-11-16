@@ -97,7 +97,6 @@ func signSource(inv *invocation, root, id, verdict string) error {
 		return fmt.Errorf("%s: %w", rel, err)
 	}
 	// A source with raw and sha256 signs the raw form, even when it has a url too.
-	evidence := "url: " + src.URL + "\naccessed: " + src.Accessed
 	if src.HasRaw() {
 		raw, err := os.ReadFile(filepath.Join(root, src.Raw))
 		if err != nil {
@@ -108,7 +107,10 @@ func signSource(inv *invocation, root, id, verdict string) error {
 		if sha != src.SHA256 {
 			return errRawChanged
 		}
-		evidence = "path: " + src.Raw + "\nsha256: " + sha
+	}
+	var evidence []string
+	for _, kv := range src.Evidence() {
+		evidence = append(evidence, kv[0]+": "+kv[1])
 	}
 	cfg, err := readConfig(root)
 	if err != nil {
@@ -125,7 +127,7 @@ func signSource(inv *invocation, root, id, verdict string) error {
 	if len(pins) == 1 {
 		key = pins[0]
 	}
-	message := fmt.Sprintf("vault-review v2\n%s\nverdict: %s\ndate: %s\n", evidence, verdict, time.Now().UTC().Format("2006-01-02"))
+	message := fmt.Sprintf("vault-review v2\n%s\nverdict: %s\ndate: %s\n", strings.Join(evidence, "\n"), verdict, time.Now().UTC().Format("2006-01-02"))
 	signed, err := clearsign(inv, key, message)
 	if err != nil {
 		return err

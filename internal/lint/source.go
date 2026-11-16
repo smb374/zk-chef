@@ -15,6 +15,15 @@ func hasControl(s string) bool { return strings.ContainsFunc(s, unicode.IsContro
 // HasRaw reports whether the source has a raw file with its hash.
 func (s Source) HasRaw() bool { return s.Raw != "" && s.SHA256 != "" }
 
+// Evidence returns the key and value pairs a review signs, and checkReview compares: path and sha256 when the source has a raw file
+// (even if it has a url too), else url and accessed.
+func (s Source) Evidence() [][2]string {
+	if s.HasRaw() {
+		return [][2]string{{"path", s.Raw}, {"sha256", s.SHA256}}
+	}
+	return [][2]string{{"url", s.URL}, {"accessed", s.Accessed}}
+}
+
 // hasURL reports whether the source has a URL with its access date.
 func (s Source) hasURL() bool { return s.URL != "" && s.Accessed != "" }
 
@@ -25,7 +34,7 @@ var (
 
 // rawNameOK reports whether raw is raw/<stem> with an optional .<ext>.
 func rawNameOK(raw, stem string) bool {
-	rest, ok := strings.CutPrefix(raw, "raw/"+stem)
+	rest, ok := strings.CutPrefix(raw, RawDir+"/"+stem)
 	return ok && (rest == "" || extRe.MatchString(rest))
 }
 

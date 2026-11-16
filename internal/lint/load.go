@@ -23,8 +23,14 @@ const indexStem = "index"
 // NotesDir is the one folder of notes; it is flat.
 const NotesDir = "notes"
 
+// RawDir holds the raw copies of sources.
+const RawDir = "raw"
+
+// KeysDir holds the pinned public keys.
+const KeysDir = "keys"
+
 // loaded lists every folder lint reads, plus the root index file; raw/ and keys/ are read as bytes only.
-var loaded = []string{IndexPath, NotesDir, "raw", "keys"}
+var loaded = []string{IndexPath, NotesDir, RawDir, KeysDir}
 
 // LoadWorktree reads the lint inputs under root into a map of slash paths to bytes.
 func LoadWorktree(root string) (map[string][]byte, error) {

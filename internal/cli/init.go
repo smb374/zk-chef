@@ -20,7 +20,7 @@ import (
 // Assets holds the embedded "scaffold", "skills" and "export-scaffold" trees; main sets it.
 var Assets fs.FS
 
-var vaultFolders = []string{"notes", "raw", "keys"}
+var vaultFolders = []string{lint.NotesDir, lint.RawDir, lint.KeysDir}
 
 // copyMissing copies files from src to dst without overwriting. It returns the created
 // paths and the paths whose existing file differs from the source, both slash-separated.
