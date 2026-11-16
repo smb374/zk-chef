@@ -44,7 +44,7 @@ A source note is a **reference note**, like a wiki `File:` page. `zk-chef ingest
 2. One line on why the file was ingested.
 3. Short paraphrases of what the file says, each with a locator.
 4. `## Extract` (optional): the text extracted from the raw file, for search, because zk does not index `raw/`. Demote its headings to H3 or lower (or plain bold) so they do not enter the note outline.
-5. `## Review`: the empty heading, which lint requires. The human's signed blocks go under it (leave them alone).
+5. `## Review`: the empty heading, which lint requires. The template writes it. Keep it last: add your lines above it. The human's signed blocks go under it (leave them alone).
 
 Add the frontmatter fields you know: `authors` (a list) and `published` (`YYYY` or `YYYY-MM-DD`). A source note has no `citation:` field: the work's description is in the title, the paraphrases and the fields above. Cite a source note in `## References` as `[[stem|Title]]`.
 

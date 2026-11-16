@@ -139,10 +139,21 @@ func signSource(inv *invocation, root, id, verdict string) error {
 	if inv.noCommit {
 		return nil
 	}
-	if err := gitRun(inv, root, "add", rel); err != nil {
+	// A failed commit must not leave the signed block in the note: a retry would add another.
+	undo := func(err error) error {
+		if werr := os.WriteFile(notePath, b, 0o644); werr != nil {
+			return errors.Join(err, werr)
+		}
+		_ = gitRun(inv, root, "reset", "-q", "--", rel)
 		return err
 	}
-	return gitRun(inv, root, "commit", "-m", "review: "+id+" "+verdict, "--", rel)
+	if err := gitRun(inv, root, "add", rel); err != nil {
+		return undo(err)
+	}
+	if err := gitRun(inv, root, "commit", "-m", "review: "+id+" "+verdict, "--", rel); err != nil {
+		return undo(err)
+	}
+	return nil
 }
 
 // reviewQueue walks the unreviewed sources by ID and signs the verdict the user types for each.

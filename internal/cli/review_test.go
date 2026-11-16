@@ -278,6 +278,28 @@ func TestReviewCommitsOnlyTheNote(t *testing.T) {
 	}
 }
 
+// TestReviewFailedCommitLeavesNoBlock: a commit that a hook refuses leaves the note as it was, and a retry adds no second block.
+func TestReviewFailedCommitLeavesNoBlock(t *testing.T) {
+	s := newSigner(t)
+	env := reviewVault(t, s, nil)
+	before := readNote(t)
+	writeFile(t, ".git/hooks/pre-commit", "#!/bin/sh\nexit 1\n")
+	if err := os.Chmod(".git/hooks/pre-commit", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if got := run(env, "review", "src001", "reviewed"); got.code != 1 {
+			t.Fatalf("code %d stderr %q, want 1", got.code, got.stderr)
+		}
+		if note := readNote(t); note != before {
+			t.Fatalf("note after a failed commit %q, want %q", note, before)
+		}
+	}
+	if staged := gitOut(t, "diff", "--cached", "--name-only"); staged != "" {
+		t.Errorf("still staged %q, want nothing", staged)
+	}
+}
+
 func TestReviewSecondVerdictGoesFirst(t *testing.T) {
 	s := newSigner(t)
 	env := reviewVault(t, s, nil)
