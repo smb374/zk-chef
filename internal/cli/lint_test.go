@@ -977,3 +977,77 @@ func TestInitSeedsLogUpdates(t *testing.T) {
 		t.Errorf("log template = %q, want a ## Updates section", b)
 	}
 }
+
+// TestLintFrontmatterFormat: frontmatter that is not in the canonical form of the shared writer is W_FRONTMATTER_FORMAT, a warning.
+func TestLintFrontmatterFormat(t *testing.T) {
+	const tail = "---\nHubs: [[index|Index]]\n\nSee [[not001|Leaders are unique]].\n"
+	const head = "---\ntitle: Two\ndate: 2026-01-02T03:04:05Z\n"
+	index, err := os.ReadFile(filepath.Join("..", "..", "scaffold", "index.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		name, page string
+		want       bool
+	}{
+		{"extra spaces after the colon", "---\ntitle:   Two\ndate: 2026-01-02T03:04:05Z\ntags: [kind/note]\n" + tail, true},
+		{"spaces inside a flow list", head + "tags: [ kind/note ,topic/a ]\n" + tail, true},
+		{"column-0 block list", head + "tags:\n- kind/note\n- topic/a\n" + tail, true},
+		{"canonical block list", head + "tags:\n  - kind/note\n  - topic/a\n" + tail, false},
+		{"note template page", "---\ntitle: \"Two\"\ndate: 2026-01-02T03:04:05Z\ntags: [kind/note]\n" + tail, false},
+		{"source template page", "---\ntitle: \"Two\"\ndate: 2026-01-02T03:04:05Z\ntags: [kind/source, review/unreviewed]\n" + tail, false},
+		{"hub template page", "---\ntitle: \"Two\"\ndate: 2026-01-02T03:04:05Z\ntags: [kind/hub]\n" + tail, false},
+		{"log template page", "---\ntitle: \"Two\"\ndate: 2026-01-02T03:04:05Z\ntags: [kind/log]\n" + tail, false},
+		{"scaffold index.md", string(index), false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			p := "notes/not002.md"
+			if tt.name == "scaffold index.md" {
+				p = "index.md"
+			}
+			got := runIn(t, "dev", with_(t, map[string]string{p: tt.page}), "lint", "--json")
+			if got.code != 0 && !strings.Contains(tt.name, "source") { // a bare source page has no evidence
+				t.Errorf("code %d stdout %q, want 0 (a warning does not fail lint)", got.code, got.stdout)
+			}
+			var r report
+			if err := json.Unmarshal([]byte(got.stdout), &r); err != nil {
+				t.Fatal(err)
+			}
+			has := slices.ContainsFunc(r.Findings, func(f finding) bool { return f.Code == "W_FRONTMATTER_FORMAT" && f.Path == p && f.Line == 1 })
+			if has != tt.want {
+				t.Errorf("W_FRONTMATTER_FORMAT on %s = %v, want %v; findings %+v", p, has, tt.want, r.Findings)
+			}
+		})
+	}
+}
+
+// TestLintFixFrontmatterFormat: --fix writes the canonical frontmatter, keeps comments and the body, and a second --fix changes nothing.
+func TestLintFixFrontmatterFormat(t *testing.T) {
+	const body = "---\nHubs: [[index|Index]]\n\nSee   [[not001|Leaders are unique]].  \n"
+	orig := "---\n# why\ntitle:   Two\ndate: 2026-01-02T03:04:05Z\ntags:\n- kind/note\n- topic/a # keep\n" + body
+	want := "---\n# why\ntitle: Two\ndate: 2026-01-02T03:04:05Z\ntags:\n  - kind/note\n  - topic/a # keep\n" + body
+	env := setupVault(t, "dev", with_(t, map[string]string{"notes/not002.md": orig}))
+	got := run(env, "lint", "--fix")
+	if got.code != 0 || got.stdout != "fixed notes/not002.md\n0 errors, 0 warnings\n" {
+		t.Errorf("first lint --fix: code %d stdout %q, want 0 and the page fixed", got.code, got.stdout)
+	}
+	if b, err := os.ReadFile("notes/not002.md"); err != nil || string(b) != want {
+		t.Errorf("notes/not002.md = %q (%v), want %q", b, err, want)
+	}
+	if got = run(env, "lint", "--fix"); got.code != 0 || got.stdout != "0 errors, 0 warnings\n" {
+		t.Errorf("second lint --fix: code %d stdout %q, want nothing fixed", got.code, got.stdout)
+	}
+}
+
+// TestLintFixKeepsInvalidYAML: --fix leaves a page with invalid YAML as it is, and lint reports E_FRONTMATTER.
+func TestLintFixKeepsInvalidYAML(t *testing.T) {
+	orig := "---\ntitle:   Two\ntags: [kind/note\n---\nHubs: [[index|Index]]\n"
+	env := setupVault(t, "dev", with_(t, map[string]string{"notes/not002.md": orig}))
+	got := run(env, "lint", "--fix")
+	if got.code != 1 || strings.Contains(got.stdout, "fixed") || !strings.Contains(got.stdout, "notes/not002.md:1: E_FRONTMATTER invalid YAML") {
+		t.Errorf("code %d stdout %q, want 1, no fixed line and E_FRONTMATTER", got.code, got.stdout)
+	}
+	if b, err := os.ReadFile("notes/not002.md"); err != nil || string(b) != orig {
+		t.Errorf("notes/not002.md = %q (%v), want it unchanged", b, err)
+	}
+}

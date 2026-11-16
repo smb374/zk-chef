@@ -87,6 +87,9 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 		if len(out) == n {
 			good = append(good, d)
 		}
+		if text := string(files[d.path]); canonicalFrontmatter(text) != text {
+			add("W_FRONTMATTER_FORMAT", d.path, 1, "frontmatter is not in canonical form; run zk-chef lint --fix")
+		}
 	}
 	byID := map[string]*Page{}
 	for _, d := range good {

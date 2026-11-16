@@ -42,7 +42,7 @@ func Fix(root string) ([]string, error) {
 				lines[l.n-1] = linkRe.ReplaceAllStringFunc(lines[l.n-1], current)
 			}
 		}
-		if next := strings.Join(lines, "\n"); next != text {
+		if next := canonicalFrontmatter(strings.Join(lines, "\n")); next != text {
 			if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(d.path)), []byte(next), 0o644); err != nil {
 				return changed, err
 			}

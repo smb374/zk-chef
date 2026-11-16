@@ -2,7 +2,7 @@
 
 `zk-chef lint` prints `path:line: CODE message`.
 
-Flags: `--staged` lints the git index. `--fix` first rewrites stale aliases (see `W_STALE_ALIAS`), then lints; `--fix` with `--staged` or `--children` exits with code 2. `--children HUB` prints the pages whose Hubs line names `HUB` and does not lint (`--json`: a list; an unknown or non-hub `HUB` exits with code 2).
+Flags: `--staged` lints the git index. `--fix` first rewrites stale aliases (see `W_STALE_ALIAS`) and non-canonical frontmatter (see `W_FRONTMATTER_FORMAT`), then lints; `--fix` with `--staged` or `--children` exits with code 2. `--children HUB` prints the pages whose Hubs line names `HUB` and does not lint (`--json`: a list; an unknown or non-hub `HUB` exits with code 2).
 
 ## Errors (block the commit)
 
@@ -25,6 +25,7 @@ Flags: `--staged` lints the git index. `--fix` first rewrites stale aliases (see
 | Code | Cause | Fix |
 | --- | --- | --- |
 | `W_STALE_ALIAS` | A link's alias differs from the target's title, on the Hubs line or in `## References` of a note, or on any line of a hub, source, log or the Index. An alias in note prose is not checked | `zk-chef lint --fix` |
+| `W_FRONTMATTER_FORMAT` | The frontmatter is valid YAML but is not in the writer's canonical form: extra spaces (`title:   x`, `[ a ,b ]`), or a block list at column 0 | `zk-chef lint --fix` |
 | `W_UNKNOWN_KEY` | A frontmatter key that the page's kind does not list. Every kind lists `title`, `date`, `tags`, `aliases`; note and source add `superseded_by`; source adds `url`, `accessed`, `authors`, `published`, `raw`, `sha256` | Fix the key name, or remove it |
 | `W_UNKNOWN_TAG` | A tag without `/`, or in a namespace other than `kind`, `review`, `status`, `topic` and `type` (an old `kind:note` tag is one). A bad value in those namespaces is `E_FRONTMATTER`: `topic/` is kebab segments joined by `/`, such as `topic/ml/rnn`; `type/` is one kebab segment, logs only | Fix or remove the tag |
 | `W_HUB_UNLISTED` | A hub names a parent hub (the Index counts) whose body, past its Hubs line, has no link to it | Link the hub from the parent's body |

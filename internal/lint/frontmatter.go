@@ -65,3 +65,11 @@ func SetReviewTag(m *yaml.Node, verdict string) {
 		}
 	}
 }
+
+// canonicalFrontmatter returns text with its frontmatter in the form EditFrontmatter writes. It returns text itself when the frontmatter is invalid.
+func canonicalFrontmatter(text string) string {
+	if next, err := EditFrontmatter(text, func(*yaml.Node) error { return nil }); err == nil {
+		return next
+	}
+	return text
+}
