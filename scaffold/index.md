@@ -1,9 +1,6 @@
 ---
-id: index
 title: Index
-kind: hub
+date: INIT_DATE_UTC
+tags: [kind/hub]
 ---
 Root of the vault. Every note reaches this hub through Hubs lines.
-
-- [[000000000000prj0|Projects]]
-- [[000000000000src0|Sources]]

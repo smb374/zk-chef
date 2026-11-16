@@ -7,7 +7,7 @@ import (
 	"github.com/smb374/zk-chef/internal/version"
 )
 
-// hugoFloor is the oldest Hugo the Export scaffold builds with. Keep it equal to the module minimum in export-scaffold/hugo/hugo.toml.tmpl and to the guard in layouts/baseof.html.
+// hugoFloor is the oldest Hugo the Export scaffold builds with. Keep it equal to the module minimum in export-scaffold/hugo/hugo.toml.tmpl and to the guard in layouts/baseof.html of both styles.
 const hugoFloor = "0.169.0"
 
 var hugoVersionOutput = regexp.MustCompile(`^hugo v(\d+\.\d+\.\d+)`)

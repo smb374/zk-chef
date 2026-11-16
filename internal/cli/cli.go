@@ -25,12 +25,16 @@ type invocation struct {
 	env            []string
 	root           string   // --root, for verbs that take it
 	staged         bool     // --staged, for lint
+	fix            bool     // --fix, for lint
+	children       string   // --children, for lint
 	yes            bool     // -y, for init, install and upgrade
 	skillsOnly     bool     // --skills-only, for install
 	noCommit       bool     // --no-commit, for review
 	title          string   // --title, for ingest
 	hubs           []string // --hub, for ingest
+	noRaw          bool     // --no-raw, for ingest
 	generator      string   // --generator, for export
+	style          string   // --style, for export
 }
 
 // verb describes one verb: its help text, its flags and its code.
@@ -68,20 +72,27 @@ var verbs = []verb{
 		flags: func() []cli.Flag {
 			return []cli.Flag{
 				&cli.StringFlag{Name: "title", Aliases: []string{"t"}, Usage: "note title (required)"},
-				&cli.StringSliceFlag{Name: "hub", Usage: "ID of a hub the source joins besides Sources (repeatable)"},
+				&cli.StringSliceFlag{Name: "hub", Usage: "ID of a hub the source joins (repeatable; at least one is required)"},
+				boolFlag("no-raw", "URL only: record url and accessed, download nothing"),
 			}
 		}},
 	{name: "lint", usage: "check the vault against the rules", root: true, run: lintVerb,
 		flags: func() []cli.Flag {
-			return []cli.Flag{boolFlag("staged", "check the git index instead of the worktree")}
+			return []cli.Flag{
+				boolFlag("staged", "check the git index instead of the worktree"),
+				boolFlag("fix", "first rewrite stale link aliases on a note's Hubs line and in its References, and on every line of other kinds"),
+				&cli.StringFlag{Name: "children", Usage: "HUB: print the pages whose Hubs line names HUB, and do not lint"},
+			}
 		}},
-	{name: "fix", usage: "rewrite stale link aliases on a note's Hubs line and in its References, and on every line of other kinds", root: true, run: fixVerb},
 	{name: "review", usage: "sign a source's review, or list the review queue", argsUsage: "[SRC-ID reviewed|disputed]", root: true, run: reviewVerb,
 		flags: func() []cli.Flag { return []cli.Flag{boolFlag("no-commit", "sign the note but do not commit")} }},
 	{name: "status", usage: "summarize the vault", root: true, run: statusVerb},
 	{name: "export", usage: "write a copy of the vault for a static site generator", argsUsage: "DIR", root: true, run: exportVerb,
 		flags: func() []cli.Flag {
-			return []cli.Flag{&cli.StringFlag{Name: "generator", Aliases: []string{"g"}, Usage: "shape the output for a site generator: hugo (default: generic)"}}
+			return []cli.Flag{
+				&cli.StringFlag{Name: "generator", Aliases: []string{"g"}, Usage: "shape the output for a site generator: hugo (default: generic)"},
+				&cli.StringFlag{Name: "style", Aliases: []string{"s"}, Usage: "with --generator hugo, the site style: plain or tufte (default: the one in .zk-chef-site.json, else tufte when static/vendored/tufte/ exists, else plain)"},
+			}
 		}},
 }
 
@@ -111,7 +122,7 @@ func (v verb) command(base invocation, code *int) *cli.Command {
 		flags = append(flags, v.flags()...)
 	}
 	if v.root {
-		flags = append(flags, &cli.StringFlag{Name: "root", Usage: "vault root (default: $" + rootEnv + ", else the current directory)"})
+		flags = append(flags, &cli.StringFlag{Name: "root", Aliases: []string{"r"}, Usage: "vault root (default: $" + rootEnv + ", else the current directory)"})
 	}
 	return &cli.Command{
 		Name:            v.name,
@@ -129,10 +140,14 @@ func (v verb) command(base invocation, code *int) *cli.Command {
 			inv.yes = cmd.Bool("y")
 			inv.skillsOnly = cmd.Bool("skills-only")
 			inv.staged = cmd.Bool("staged")
+			inv.fix = cmd.Bool("fix")
+			inv.children = cmd.String("children")
 			inv.noCommit = cmd.Bool("no-commit")
 			inv.title = cmd.String("title")
 			inv.generator = cmd.String("generator")
+			inv.style = cmd.String("style")
 			inv.hubs = cmd.StringSlice("hub")
+			inv.noRaw = cmd.Bool("no-raw")
 			if v.root {
 				inv.root = cmd.String("root")
 				if inv.root == "" {

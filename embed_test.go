@@ -14,6 +14,11 @@ func TestEmbedHasScaffoldAndSkills(t *testing.T) {
 		"scaffold/.zk-chef/config.toml",
 		"scaffold/.githooks/pre-commit",
 		"scaffold/.zk/config.toml",
+		"scaffold/.zk/templates/note.md",
+		"scaffold/.zk/templates/source.md",
+		"scaffold/.zk/templates/hub.md",
+		"scaffold/.zk/templates/log.md",
+		"scaffold/index.md",
 		"skills/zk-chef-ops/SKILL.md",
 		"skills/zettel-writing/SKILL.md",
 		"export-scaffold/hugo/hugo.toml.tmpl",
@@ -21,6 +26,10 @@ func TestEmbedHasScaffoldAndSkills(t *testing.T) {
 		"export-scaffold/hugo/layouts/home.html",
 		"export-scaffold/hugo/layouts/list.html",
 		"export-scaffold/hugo/layouts/single.html",
+		"export-scaffold/hugo-plain/layouts/baseof.html",
+		"export-scaffold/hugo-plain/layouts/home.html",
+		"export-scaffold/hugo-plain/layouts/list.html",
+		"export-scaffold/hugo-plain/layouts/single.html",
 		"export-scaffold/hugo/static/vendored/tufte/tufte.css",
 		"export-scaffold/hugo/static/vendored/tufte/LICENSE-tufte-css",
 		"export-scaffold/hugo/static/vendored/tufte/LICENSE-et-book",
@@ -92,9 +101,14 @@ func TestScaffoldConfigKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, k := range []string{"pinned_fingerprints", "word_count_warn", "index_id", "projects_id", "sources_id"} {
+	for _, k := range []string{"pinned_fingerprints", "word_count_warn"} {
 		if !strings.Contains(string(b), k) {
 			t.Errorf("config.toml lacks key %s", k)
+		}
+	}
+	for _, k := range []string{"index_id", "projects_id", "sources_id"} {
+		if strings.Contains(string(b), k) {
+			t.Errorf("config.toml has key %s, which v0.3 dropped", k)
 		}
 	}
 	if strings.Contains(string(b), "min_version") {

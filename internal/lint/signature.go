@@ -7,14 +7,15 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strings"
 )
 
 const signedBegin = "-----BEGIN PGP SIGNED MESSAGE-----"
 
-// messageKeys are the fields every signed review message must carry.
-var messageKeys = []string{"path", "sha256", "verdict", "date"}
+// messageForms are the field sets a signed review message may carry: the raw form and the URL-only form.
+var messageForms = [][]string{{"path", "sha256", "verdict", "date"}, {"url", "accessed", "verdict", "date"}}
 
 // NormFpr strips spaces and upper-cases a fingerprint.
 func NormFpr(s string) string {
@@ -113,7 +114,7 @@ type reviewBlock struct {
 }
 
 // reviewBlocks returns the signed blocks of the ## Review section, newest (first) first.
-func reviewBlocks(d *doc) []reviewBlock {
+func reviewBlocks(d *Page) []reviewBlock {
 	var blocks []reviewBlock
 	open := false
 	var cur reviewBlock
@@ -139,28 +140,30 @@ func reviewBlocks(d *doc) []reviewBlock {
 	return blocks
 }
 
-// parseMessage returns the fields of a vault-review v1 message, or nil.
+// parseMessage returns the fields of a vault-review v2 message, or nil.
 func parseMessage(text string) map[string]string {
 	lines := strings.Split(strings.TrimSpace(text), "\n")
-	if lines[0] != "vault-review v1" {
+	if lines[0] != "vault-review v2" {
 		return nil
 	}
 	fields := map[string]string{}
 	for _, ln := range lines[1:] {
-		if k, v, ok := strings.Cut(strings.TrimRight(ln, "\r"), ": "); ok {
-			fields[k] = v
-		}
-	}
-	for _, k := range messageKeys {
-		if _, ok := fields[k]; !ok {
+		k, v, ok := strings.Cut(strings.TrimRight(ln, "\r"), ": ")
+		if _, dup := fields[k]; !ok || dup {
 			return nil
 		}
+		fields[k] = v
 	}
-	return fields
+	for _, form := range messageForms {
+		if len(fields) == len(form) && !slices.ContainsFunc(form, func(k string) bool { _, ok := fields[k]; return !ok }) {
+			return fields
+		}
+	}
+	return nil
 }
 
 // checkReview verifies every signed block of a source note, then compares the latest one with the note.
-func checkReview(d *doc, files map[string][]byte, v *verifier, add adder) {
+func checkReview(d *Page, files map[string][]byte, v *verifier, add adder) {
 	var messages []map[string]string
 	for _, b := range reviewBlocks(d) {
 		var fields map[string]string
@@ -168,7 +171,7 @@ func checkReview(d *doc, files map[string][]byte, v *verifier, add adder) {
 		if errMsg == "" {
 			fields = parseMessage(text)
 			if fields == nil {
-				errMsg = "signed text is not a vault-review v1 message"
+				errMsg = "signed text is not a vault-review v2 message"
 			}
 		}
 		if errMsg != "" {
@@ -176,7 +179,7 @@ func checkReview(d *doc, files map[string][]byte, v *verifier, add adder) {
 		}
 		messages = append(messages, fields)
 	}
-	review := d.str("review")
+	review := d.Review()
 	if review == "unreviewed" {
 		return // older blocks may cover older hashes
 	}
@@ -188,14 +191,15 @@ func checkReview(d *doc, files map[string][]byte, v *verifier, add adder) {
 	if latest == nil {
 		return // a bad latest block is already E_SIGNATURE
 	}
-	raw := d.str("raw")
-	want := [][2]string{{"path", raw}, {"sha256", d.str("sha256")}, {"verdict", review}}
+	// A note with raw and sha256 is signed in the raw form, even when it has a url too.
+	src := d.source()
+	want := append(src.Evidence(), [2]string{"verdict", review})
 	for _, kv := range want {
 		if latest[kv[0]] != kv[1] {
 			add("E_REVIEW_MISMATCH", d.path, 1, fmt.Sprintf("latest block %s %s differs from note %s", kv[0], pyRepr(latest[kv[0]]), pyRepr(kv[1])))
 		}
 	}
-	if b, found := files[raw]; found {
+	if b, found := files[src.Raw]; found {
 		if sum := sha256.Sum256(b); latest["sha256"] != hex.EncodeToString(sum[:]) {
 			add("E_REVIEW_MISMATCH", d.path, 1, "latest block sha256 differs from the raw file")
 		}

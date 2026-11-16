@@ -2,6 +2,7 @@ package lint
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -22,15 +23,20 @@ type line struct {
 	section string
 }
 
-// doc is one markdown file: frontmatter plus body lines.
-type doc struct {
-	path  string
-	fm    map[string]any
-	err   string
-	lines []line
+// Page is one markdown file: frontmatter plus body lines. It is the one model every verb reads
+// a page's ID (the file stem), kind, title, review state, supersede state and Hubs-line links through.
+// The kind, the review state and the supersede state are tags.
+type Page struct {
+	path    string
+	stem    string
+	fm      map[string]any
+	tags    []string
+	tagsErr string // non-empty when the tags key is missing or is not a list of strings
+	err     string
+	lines   []line
 }
 
-// parseDoc splits text into frontmatter and body lines.
+// ParsePage parses one markdown file into frontmatter and body lines. Check Err before you trust the facts the page returns.
 //
 // yaml.v3 follows YAML 1.2, PyYAML follows YAML 1.1. Three differences matter here;
 // the cli test TestLintYAMLDifferences covers each:
@@ -39,8 +45,8 @@ type doc struct {
 //   - a duplicate key is an error in yaml.v3, while PyYAML keeps the last value.
 //
 // A mapping with non-string keys is accepted, with the keys printed as text.
-func parseDoc(path, text string) *doc {
-	d := &doc{path: path}
+func ParsePage(path, text string) *Page {
+	d := &Page{path: path, stem: strings.TrimSuffix(filepath.Base(path), ".md")}
 	m := frontmatterRe.FindStringSubmatchIndex(text)
 	if m == nil {
 		d.err = "missing frontmatter"
@@ -62,6 +68,7 @@ func parseDoc(path, text string) *doc {
 			d.err = "frontmatter is not a mapping"
 		}
 	}
+	d.readTags()
 	start := strings.Count(text[:m[1]], "\n") + 1
 	fenced, section := false, ""
 	for i, l := range strings.Split(text[m[1]:], "\n") {
@@ -73,10 +80,44 @@ func parseDoc(path, text string) *doc {
 		if !fenced && strings.HasPrefix(l, "## ") {
 			section = strings.TrimSpace(l[3:])
 		}
-		scan := !fenced && !contains(skipSections, section)
+		scan := !fenced && !slices.Contains(skipSections, section)
 		d.lines = append(d.lines, line{start + i, l, scan, section})
 	}
 	return d
+}
+
+// readTags fills tags from the tags key, or sets tagsErr.
+func (p *Page) readTags() {
+	raw, ok := p.fm["tags"]
+	if !ok {
+		p.tagsErr = "tags is required (a list such as [kind/note])"
+		return
+	}
+	list, isList := raw.([]any)
+	if !isList {
+		p.tagsErr = "tags must be a list of strings"
+		return
+	}
+	for _, v := range list {
+		s, isStr := v.(string)
+		if !isStr {
+			p.tagsErr = "tags must be a list of strings"
+			p.tags = nil
+			return
+		}
+		p.tags = append(p.tags, s)
+	}
+}
+
+// tagValues returns the values of the tags in namespace ns ("kind" gives "note" for kind/note), in file order.
+func (p *Page) tagValues(ns string) []string {
+	var out []string
+	for _, t := range p.tags {
+		if v, ok := strings.CutPrefix(t, ns+"/"); ok {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // SplitFrontmatter returns the YAML between the opening and closing --- lines and the body after them.
@@ -97,7 +138,7 @@ func StripExtract(text string) string {
 		return text
 	}
 	var kept []string
-	for _, l := range parseDoc("", text).lines {
+	for _, l := range ParsePage("", text).lines {
 		if l.section != "Extract" {
 			kept = append(kept, l.text)
 		}
@@ -105,14 +146,10 @@ func StripExtract(text string) string {
 	return text[:m[1]] + strings.Join(kept, "\n")
 }
 
-func contains(list []string, s string) bool {
-	return slices.Contains(list, s)
-}
-
 // scanned returns the lines checks may read.
-func (d *doc) scanned() []line {
+func (p *Page) scanned() []line {
 	var out []line
-	for _, l := range d.lines {
+	for _, l := range p.lines {
 		if l.scan {
 			out = append(out, l)
 		}
@@ -123,8 +160,8 @@ func (d *doc) scanned() []line {
 // aliasChecked reports whether l, a scanned line, is one where a stale Alias is fixed and warned about.
 // In a note the Hubs line (first body line) and the References section qualify; the rest is Prose,
 // where the writer's wording stays. Every other kind is checked on all scanned lines.
-func (d *doc) aliasChecked(l line) bool {
-	return d.str("kind") != "note" || l.n == d.lines[0].n || l.section == "References"
+func (p *Page) aliasChecked(l line) bool {
+	return p.Kind() != "note" || l.n == p.lines[0].n || l.section == "References"
 }
 
 // RewriteLinks replaces each [[ID]] or [[ID|alias]] in the lines lint scans, so links in code fences,
@@ -135,7 +172,7 @@ func RewriteLinks(text string, repl func(id, alias string, aliased bool) (string
 		return "", fmt.Errorf("missing frontmatter")
 	}
 	lines := strings.Split(body, "\n")
-	for i, l := range parseDoc("", text).lines {
+	for i, l := range ParsePage("", text).lines {
 		if !l.scan {
 			continue
 		}
@@ -157,35 +194,4 @@ func RewriteLinks(text string, repl func(id, alias string, aliased bool) (string
 		lines[i] = out.String()
 	}
 	return text[:len(text)-len(body)] + strings.Join(lines, "\n"), nil
-}
-
-// BodyLinks returns the trimmed IDs of the links in the lines lint scans. IDs on a first body line
-// that starts with "Hubs: " are in hubs; every other ID is in others.
-func BodyLinks(text string) (hubs, others []string) {
-	d := parseDoc("", text)
-	for _, l := range d.scanned() {
-		for _, m := range linkRe.FindAllStringSubmatch(l.text, -1) {
-			id := strings.TrimSpace(m[1])
-			if l.n == d.lines[0].n && strings.HasPrefix(l.text, "Hubs: ") {
-				hubs = append(hubs, id)
-			} else {
-				others = append(others, id)
-			}
-		}
-	}
-	return hubs, others
-}
-
-// Head is the kind and title of one note.
-type Head struct{ Kind, Title string }
-
-// Heads maps the id of each parsable note in files to its kind and title.
-func Heads(files map[string][]byte) map[string]Head {
-	out := map[string]Head{}
-	for _, d := range parseDocs(files) {
-		if d.err == "" {
-			out[d.str("id")] = Head{d.str("kind"), d.str("title")}
-		}
-	}
-	return out
 }

@@ -14,16 +14,14 @@ func Fix(root string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var docs []*doc
+	var pages []*Page
 	titles := map[string]string{}
-	for _, d := range parseDocs(files) {
-		if d.err != "" {
+	for _, p := range parsePages(files) {
+		if p.err != "" {
 			continue
 		}
-		docs = append(docs, d)
-		id, idOK := d.fm["id"].(string)
-		title, titleOK := d.fm["title"].(string)
-		if idOK && titleOK {
+		pages = append(pages, p)
+		if id, title := p.ID(), p.Title(); id != "" && title != "" {
 			titles[id] = title
 		}
 	}
@@ -36,19 +34,19 @@ func Fix(root string) ([]string, error) {
 		return "[[" + m[1] + "|" + title + "]]"
 	}
 	var changed []string
-	for _, d := range docs {
-		text := string(files[d.path])
+	for _, p := range pages {
+		text := string(files[p.path])
 		lines := strings.Split(text, "\n")
-		for _, l := range d.scanned() {
-			if d.aliasChecked(l) {
+		for _, l := range p.scanned() {
+			if p.aliasChecked(l) {
 				lines[l.n-1] = linkRe.ReplaceAllStringFunc(lines[l.n-1], current)
 			}
 		}
-		if next := strings.Join(lines, "\n"); next != text {
-			if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(d.path)), []byte(next), 0o644); err != nil {
+		if next := canonicalFrontmatter(strings.Join(lines, "\n")); next != text {
+			if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(p.path)), []byte(next), 0o644); err != nil {
 				return changed, err
 			}
-			changed = append(changed, d.path)
+			changed = append(changed, p.path)
 		}
 	}
 	return changed, nil

@@ -1,6 +1,6 @@
 ---
-id: "{{filename-stem}}"
 title: {{json title}}
-kind: hub
+date: {{sh 'date -u +%Y-%m-%dT%H:%M:%SZ'}}
+tags: [kind/hub]
 ---
 Hubs: [[index|Index]]

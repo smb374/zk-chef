@@ -34,6 +34,9 @@ func lintVerb(inv *invocation) int {
 	if err != nil {
 		return fail(inv, "zk-chef lint: "+err.Error())
 	}
+	if inv.fix && (inv.staged || inv.children != "") {
+		return fail(inv, "zk-chef lint: --fix does not combine with --staged or --children")
+	}
 	load := lint.LoadWorktree
 	if inv.staged {
 		load = lint.LoadStaged
@@ -44,6 +47,29 @@ func lintVerb(inv *invocation) int {
 	}
 	if _, ok := files[lint.ConfigPath]; !ok {
 		return fail(inv, root+": no "+lint.ConfigPath+"; run zk-chef init first")
+	}
+	if inv.children != "" {
+		paths, err := lint.Children(files, inv.children)
+		if err != nil {
+			return fail(inv, "zk-chef lint --children: "+err.Error())
+		}
+		if inv.json {
+			writeJSON(inv.stdout, paths)
+			return 0
+		}
+		for _, p := range paths {
+			fmt.Fprintln(inv.stdout, p)
+		}
+		return 0
+	}
+	var fixed []string
+	if inv.fix {
+		if fixed, err = lint.Fix(root); err != nil {
+			return fail(inv, "zk-chef lint --fix: "+err.Error())
+		}
+		if files, err = load(root); err != nil {
+			return fail(inv, "zk-chef lint: "+err.Error())
+		}
 	}
 	found, err := lint.Lint(files)
 	if err != nil {
@@ -60,13 +86,24 @@ func lintVerb(inv *invocation) int {
 		if found == nil {
 			found = []lint.Finding{}
 		}
-		writeJSON(inv.stdout, struct {
+		if fixed == nil {
+			fixed = []string{}
+		}
+		report := struct {
 			OK       bool           `json:"ok"`
 			Errors   int            `json:"errors"`
 			Warnings int            `json:"warnings"`
 			Findings []lint.Finding `json:"findings"`
-		}{errors == 0, errors, warnings, found})
+			Fixed    *[]string      `json:"fixed,omitempty"` // only with --fix
+		}{OK: errors == 0, Errors: errors, Warnings: warnings, Findings: found}
+		if inv.fix {
+			report.Fixed = &fixed
+		}
+		writeJSON(inv.stdout, report)
 	} else {
+		for _, p := range fixed {
+			fmt.Fprintf(inv.stdout, "fixed %s\n", p)
+		}
 		for _, f := range found {
 			fmt.Fprintf(inv.stdout, "%s:%d: %s %s\n", f.Path, f.Line, f.Code, f.Msg)
 		}

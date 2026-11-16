@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/smb374/zk-chef/internal/lint"
+	"gopkg.in/yaml.v3"
 )
 
 // errRawChanged is the refusal when the raw file no longer matches the note's sha256.
@@ -26,16 +27,22 @@ func failCode(inv *invocation, code int, msg string) int {
 	return code
 }
 
-var (
-	reviewLineRe = regexp.MustCompile(`(?m)^review:.*$`)
-	reviewHeadRe = regexp.MustCompile(`(?m)^## Review[ \t]*\n\n?`)
-)
+var reviewHeadRe = regexp.MustCompile(`(?m)^## Review[ \t]*\n\n?`)
 
-// withReview sets the note's review: line and puts block first in ## Review, as v1 does.
-func withReview(text, verdict, block string) string {
-	if loc := reviewLineRe.FindStringIndex(text); loc != nil {
-		text = text[:loc[0]] + "review: " + verdict + text[loc[1]:]
+// withReviewTag sets the note's review/ tag. It fails when the note then has another review state than verdict.
+func withReviewTag(text, verdict string) (string, error) {
+	text, err := lint.EditFrontmatter(text, func(m *yaml.Node) error { lint.SetReviewTag(m, verdict); return nil })
+	if err != nil {
+		return "", err
 	}
+	if got := lint.ParsePage("", text).Review(); got != verdict {
+		return "", fmt.Errorf("review tag is %q after the edit, want %q", got, verdict)
+	}
+	return text, nil
+}
+
+// withReviewBlock puts block first in ## Review, as the earlier Python build did.
+func withReviewBlock(text, block string) string {
 	if loc := reviewHeadRe.FindStringIndex(text); loc != nil {
 		return text[:loc[0]] + "## Review\n\n" + block + text[loc[1]:]
 	}
@@ -70,9 +77,12 @@ func gitRun(inv *invocation, root string, args ...string) error {
 	return nil
 }
 
-// signSource signs a verdict on the raw file of sources/<id>.md and records it in the note.
+// noteRel is the slash path of note id, relative to the vault root.
+func noteRel(id string) string { return lint.NotesDir + "/" + id + ".md" }
+
+// signSource signs a verdict on the raw file of notes/<id>.md, or on its URL when it has no raw file, and records it in the note.
 func signSource(inv *invocation, root, id, verdict string) error {
-	rel := "sources/" + id + ".md"
+	rel := noteRel(id)
 	notePath := filepath.Join(root, rel)
 	b, err := os.ReadFile(notePath)
 	if err != nil {
@@ -82,14 +92,25 @@ func signSource(inv *invocation, root, id, verdict string) error {
 	if err != nil {
 		return fmt.Errorf("%s is not a valid source note: %w", rel, err)
 	}
-	raw, err := os.ReadFile(filepath.Join(root, src.Raw))
+	tagged, err := withReviewTag(string(b), verdict)
 	if err != nil {
-		return err
+		return fmt.Errorf("%s: %w", rel, err)
 	}
-	sum := sha256.Sum256(raw)
-	sha := hex.EncodeToString(sum[:])
-	if sha != src.SHA256 {
-		return errRawChanged
+	// A source with raw and sha256 signs the raw form, even when it has a url too.
+	if src.HasRaw() {
+		raw, err := os.ReadFile(filepath.Join(root, src.Raw))
+		if err != nil {
+			return err
+		}
+		sum := sha256.Sum256(raw)
+		sha := hex.EncodeToString(sum[:])
+		if sha != src.SHA256 {
+			return errRawChanged
+		}
+	}
+	var evidence []string
+	for _, kv := range src.Evidence() {
+		evidence = append(evidence, kv[0]+": "+kv[1])
 	}
 	cfg, err := readConfig(root)
 	if err != nil {
@@ -106,22 +127,33 @@ func signSource(inv *invocation, root, id, verdict string) error {
 	if len(pins) == 1 {
 		key = pins[0]
 	}
-	message := fmt.Sprintf("vault-review v1\npath: %s\nsha256: %s\nverdict: %s\ndate: %s\n", src.Raw, sha, verdict, time.Now().UTC().Format("2006-01-02"))
+	message := fmt.Sprintf("vault-review v2\n%s\nverdict: %s\ndate: %s\n", strings.Join(evidence, "\n"), verdict, time.Now().UTC().Format("2006-01-02"))
 	signed, err := clearsign(inv, key, message)
 	if err != nil {
 		return err
 	}
 	block := "```\n" + strings.TrimRight(signed, " \t\r\n") + "\n```\n\n"
-	if err := os.WriteFile(notePath, []byte(withReview(string(b), verdict, block)), 0o644); err != nil {
+	if err := os.WriteFile(notePath, []byte(withReviewBlock(tagged, block)), 0o644); err != nil {
 		return err
 	}
 	if inv.noCommit {
 		return nil
 	}
-	if err := gitRun(inv, root, "add", rel); err != nil {
+	// A failed commit must not leave the signed block in the note: a retry would add another.
+	undo := func(err error) error {
+		if werr := os.WriteFile(notePath, b, 0o644); werr != nil {
+			return errors.Join(err, werr)
+		}
+		_ = gitRun(inv, root, "reset", "-q", "--", rel)
 		return err
 	}
-	return gitRun(inv, root, "commit", "-m", "review: "+id+" "+verdict, "--", rel)
+	if err := gitRun(inv, root, "add", rel); err != nil {
+		return undo(err)
+	}
+	if err := gitRun(inv, root, "commit", "-m", "review: "+id+" "+verdict, "--", rel); err != nil {
+		return undo(err)
+	}
+	return nil
 }
 
 // reviewQueue walks the unreviewed sources by ID and signs the verdict the user types for each.
@@ -139,10 +171,15 @@ queue:
 		if src.Review != "unreviewed" {
 			continue
 		}
-		fmt.Fprintf(inv.stdout, "%s: %s\nraw: %s\n", src.ID, src.Title, src.Raw)
+		// The queue shows the evidence that review signs: the raw file, else the URL.
+		shown, open := "url: "+src.URL+" (accessed "+src.Accessed+")", src.URL
+		if src.HasRaw() {
+			shown, open = "raw: "+src.Raw, filepath.Join(root, src.Raw)
+		}
+		fmt.Fprintf(inv.stdout, "%s: %s\n%s\n", src.ID, src.Title, shown)
 	prompt:
 		for {
-			fmt.Fprintln(inv.stdout, "y reviewed, d disputed, s skip, o raw path, q quit?")
+			fmt.Fprintln(inv.stdout, "y reviewed, d disputed, s skip, o raw path or url, q quit?")
 			line, readErr := in.ReadString('\n')
 			if line == "" && readErr != nil {
 				break queue // EOF ends the queue like q
@@ -150,7 +187,7 @@ queue:
 			key := strings.ToLower(strings.TrimSpace(line))
 			switch verdict := verdicts[key]; {
 			case key == "o":
-				fmt.Fprintln(inv.stdout, filepath.Join(root, src.Raw))
+				fmt.Fprintln(inv.stdout, open)
 			case key == "q":
 				break queue
 			case key == "s":
@@ -204,8 +241,8 @@ func reviewVerb(inv *invocation) int {
 	if err != nil {
 		return fail(inv, "zk-chef review: "+err.Error())
 	}
-	if _, err := os.Stat(filepath.Join(root, "sources", id+".md")); err != nil {
-		return fail(inv, "zk-chef review: no source note sources/"+id+".md")
+	if _, err := os.Stat(filepath.Join(root, lint.NotesDir, id+".md")); err != nil {
+		return fail(inv, "zk-chef review: no source note "+noteRel(id))
 	}
 	if err := signSource(inv, root, id, verdict); err != nil {
 		return failCode(inv, 1, "zk-chef review: "+err.Error())
@@ -217,7 +254,7 @@ func reviewVerb(inv *invocation) int {
 			Verdict   string `json:"verdict"`
 			Path      string `json:"path"`
 			Committed bool   `json:"committed"`
-		}{true, id, verdict, "sources/" + id + ".md", !inv.noCommit})
+		}{true, id, verdict, noteRel(id), !inv.noCommit})
 		return 0
 	}
 	fmt.Fprintf(inv.stdout, "signed %s: %s\n", id, verdict)

@@ -143,12 +143,12 @@ func TestUpgradeCreatesMissingOwnedFile(t *testing.T) {
 func TestUpgradeLeavesHumanFilesAlone(t *testing.T) {
 	env := upgradeVault(t)
 	for p, content := range map[string]string{
-		"hubs/000000000000idx0.md": "my own hub\n",
-		"notes/n1.md":              "a note\n",
-		"sources/s1.md":            "a source\n",
-		"raw/s1-a.bin":             "raw",
-		"keys/me.asc":              "a key\n",
-		".zk/templates/mine.md":    "my own template, not in the scaffold\n",
+		"notes/hubidx.md":       "my own hub\n",
+		"notes/not001.md":       "a note\n",
+		"notes/src001.md":       "a source\n",
+		"raw/src001.bin":        "raw",
+		"keys/me.asc":           "a key\n",
+		".zk/templates/mine.md": "my own template, not in the scaffold\n",
 	} {
 		writeFile(t, p, content)
 	}
@@ -223,7 +223,7 @@ func TestUpgradeAgentsMd(t *testing.T) {
 }
 
 func TestUpgradeConfig(t *testing.T) {
-	const old = "word_count_warn = 1\npinned_fingerprints = [\"AAAA\"]\nmin_version = \"1.0.0\"\n"
+	const old = "pinned_fingerprints = [\"AAAA\"]\nmin_version = \"1.0.0\"\n"
 	tests := []struct {
 		name, binVersion string
 		wantMin          string
@@ -246,12 +246,9 @@ func TestUpgradeConfig(t *testing.T) {
 				t.Fatal(err)
 			}
 			want := map[string]any{
-				"word_count_warn":     int64(1),
+				"word_count_warn":     int64(400), // the key the config lacked, added with the embedded default
 				"pinned_fingerprints": []any{"AAAA"},
 				"min_version":         tt.wantMin,
-				"index_id":            "index",
-				"projects_id":         "000000000000prj0",
-				"sources_id":          "000000000000src0",
 			}
 			if !reflect.DeepEqual(cfg, want) {
 				t.Errorf("config = %v, want %v", cfg, want)

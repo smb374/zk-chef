@@ -1,35 +1,28 @@
 [note]
 language = "en"
 default-title = "untitled"
-# UTC minute + 4 random lowercase alphanumerics. zk formats dates in local time, so call date.
-filename = "{{sh 'date -u +%Y%m%d%H%M'}}{{id}}"
+# The file stem is the note's ID: 6 random lowercase letters and digits.
+filename = "{{id}}"
 extension = "md"
 template = "note.md"
 id-charset = "alphanum"
-id-length = 4
+id-length = 6
 id-case = "lower"
+# raw/ holds source copies, not notes.
+exclude = ["raw"]
 
 [format.markdown]
-link-format = "[[{{metadata.id}}|{{title}}]]"
+link-format = "[[{{filename}}|{{title}}]]"
 hashtags = false
 colon-tags = false
 
-[group.notes]
-paths = ["notes"]
-[group.notes.note]
-template = "note.md"
+# zk passes the arguments to an alias only through "$@". Run aliases with sh, because fish and other login shells reject "$@".
+# Use: zk note --title "Title"
+[tool]
+shell = "/bin/sh"
 
-[group.hubs]
-paths = ["hubs"]
-[group.hubs.note]
-template = "hub.md"
-
-[group.sources]
-paths = ["sources"]
-[group.sources.note]
-template = "source.md"
-
-[group.projects]
-paths = ["projects"]
-[group.projects.note]
-template = "log.md"
+[alias]
+note = "zk new notes --template note.md --print-path --no-input \"$@\""
+source = "zk new notes --template source.md --print-path --no-input \"$@\""
+hub = "zk new notes --template hub.md --print-path --no-input \"$@\""
+log = "zk new notes --template log.md --print-path --no-input \"$@\""

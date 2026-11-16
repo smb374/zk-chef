@@ -29,17 +29,23 @@ zk-chef init /path/to/vault
 `init` is safe to run again. It does these things:
 
 - runs `git init` when needed;
-- copies the scaffold (zk config and templates, `.zk-chef/config.toml`, pre-commit hook, seed hubs, and the root `index.md` beside `AGENTS.md`) and never overwrites a file;
+- copies the scaffold (zk config, one template per kind, `.zk-chef/config.toml`, pre-commit hook, and the root `index.md` beside `AGENTS.md`, with the current UTC time as its `date`) and never overwrites a file;
 - adds a `<!-- zk-chef -->` block to `AGENTS.md`, or creates the file;
-- creates `notes/ hubs/ sources/ projects/ raw/ keys/`;
+- creates `notes/ raw/ keys/`;
 - sets `core.hooksPath` to `.githooks`;
 - records `min_version` in the vault config. An older binary then refuses to work on the vault.
+
+A v0.3 binary reads v0.3 vaults only. Every verb except `doctor` and `self-update`, `upgrade` included, exits with code 2 on a vault whose `min_version` is older than 0.3.0 (a v0.2.x vault) and tells you to run `zk-chef init` in a new directory. There is no migration.
+
+### Vault layout
+
+Every page is a Markdown file in the flat `notes/` folder, or the root `index.md`. The file stem is the ID: 6 lowercase letters and digits (`index` for the root page). There is no `id:` field, and links are `[[stem|Title]]`. A page has `title`, `date` (UTC, with `Z`) and `tags` in its frontmatter. The kind is exactly one tag, `kind/note`, `kind/hub`, `kind/source` or `kind/log`. A source also has one `review/unreviewed`, `review/reviewed` or `review/disputed` tag, and a superseded page has `status/superseded` and `superseded_by: <stem>`. The Hubs line joins hub links with `, `: `Hubs: [[abc123|Hub]], [[def456|Other]]`. `raw/` holds the source copies and is not indexed by zk. A source needs evidence: `url` with `accessed` (`YYYY-MM-DD`), or `raw` with `sha256`, or both. `raw` is `raw/<stem>` or `raw/<stem>.<ext>`. `authors` and `published` (`YYYY` or `YYYY-MM-DD`) are optional. There is no `citation:` field. A source note keeps a `## Review` heading; `## Extract` is optional. The zk config has the aliases `zk note`, `zk source`, `zk hub` and `zk log`; each takes `--title` and makes a page of that kind.
 
 It prints `kept your …` for files that differ from the scaffold. Run `zk-chef doctor` to check the setup.
 
 ## Set up your signing key (once, human)
 
-Source reviews need a pinned key.
+Source reviews need a pinned key. A review signs a `vault-review v2` message with `verdict` and `date`, and with `path` and `sha256` for a source with a raw file, or `url` and `accessed` for a source with no raw file. A source with both signs the raw form. A review of a URL-only source vouches for what you read at that URL on that date, not for bytes that the vault holds.
 
 ```sh
 zk-chef key add YOUR_FINGERPRINT
@@ -49,9 +55,9 @@ Without a fingerprint, it uses your first secret key. It exports the public key 
 
 ## Use
 
-The agent loads the skills from `AGENTS.md`. It creates notes with `zk new`, edits files and commits. The hook runs `zk-chef lint --staged` on every commit.
+The agent loads the skills from `AGENTS.md`. It creates pages with `zk note`, `zk hub` and `zk log` (each with `--title`), makes sources with `zk-chef ingest`, edits files and commits. The hook runs `zk-chef lint --staged` on every commit.
 
-Every verb accepts `--json` and `--help`. Verbs that work on a vault pick it in this order: `--root DIR`, the `ZK_CHEF_ROOT` env var, the current directory. There is no search up the directory tree. `zk-chef --help` lists the verbs.
+Every verb accepts `--json` and `--help`. Verbs that work on a vault pick it in this order: `--root DIR` (short form `-r DIR`), the `ZK_CHEF_ROOT` env var, the current directory. There is no search up the directory tree. `zk-chef --help` lists the verbs.
 
 | Command | Who | What it does |
 | --- | --- | --- |
@@ -61,12 +67,11 @@ Every verb accepts `--json` and `--help`. Verbs that work on a vault pick it in 
 | `zk-chef upgrade [-y]` | human | Shows and applies scaffold changes (zk config, templates, hook, `AGENTS.md` block, new config keys) after a binary update |
 | `zk-chef doctor` | human | Checks zk, git, gpg, hooks, pinned key, skills, PATH, `min_version` and hugo. The hugo check never fails: it warns when hugo is older than 0.169.0 and passes when hugo is not installed |
 | `zk-chef key add [FPR] \| list \| rm FPR` | human | Manages pinned signing keys |
-| `zk-chef ingest PATH\|URL --title T [--hub ID]...` | agent | Copies a file or URL into `raw/` and creates its `unreviewed` source note. `-t` is short for `--title`. Each `--hub ID` (repeatable) adds that hub to the note's Hubs line after Sources; an unknown ID or a non-hub ID exits with code 2 and writes nothing |
-| `zk-chef lint [--staged]` | agent, hook | Runs every check; errors give exit code 1 |
-| `zk-chef fix` | agent | Rewrites stale link aliases to the targets' current titles; leaves aliases in note prose alone |
-| `zk-chef review [SRC-ID reviewed\|disputed] [--no-commit]` | human only | Shows the raw file, asks you to confirm, signs the verdict and commits. Without arguments it walks the queue |
+| `zk-chef ingest PATH\|URL --title T --hub ID [--hub ID]... [--no-raw]` | agent | Creates a source note in `notes/`, tagged `kind/source` and `review/unreviewed`. `ingest PATH` copies the file to `raw/` and sets `raw` and `sha256`. `ingest URL` downloads the page to `raw/` and sets `url`, `accessed` (today, UTC), `raw` and `sha256`. `ingest URL --no-raw` downloads nothing and sets only `url` and `accessed`; `--no-raw` with a PATH exits with code 2. The raw file is `raw/<stem>` plus an extension: from the original name (lowercased), else from the response Content-Type, else none. `-t` is short for `--title`. `--hub ID` is required and repeatable: each hub goes on the note's Hubs line. Without `--hub`, an unknown ID or a non-hub ID, ingest exits with code 2 and writes nothing. When `zk new` returns a note that already exists, ingest tries again, up to 3 times in all, then exits with code 1 and leaves that note as it was |
+| `zk-chef lint [--staged] [--fix] [--children HUB]` | agent, hook | Runs every check; errors give exit code 1. `--fix` first rewrites stale link aliases to the targets' current titles (on a note's Hubs line and in its References, and on every line of a hub, source, log or the Index; aliases in note prose stay) and non-canonical frontmatter (`W_FRONTMATTER_FORMAT`), then lints; `--fix` with `--staged` or `--children` exits with code 2. `--children HUB` lists the pages whose Hubs line names `HUB` (exact members, not prose mentions) and does not lint; `--json` prints a list; an unknown or non-hub `HUB` exits with code 2. There is no `fix` verb |
+| `zk-chef review [SRC-ID reviewed\|disputed] [--no-commit]` | human only | Shows the raw path or the URL, asks you to confirm, signs the verdict and commits. Without arguments it walks the queue |
 | `zk-chef status` | agent | Lists new and re-review sources, disputed sources still cited, and lint counts |
-| `zk-chef export DIR [--generator hugo]` | agent | Writes the notes, hubs, sources and projects pages to `DIR` as Markdown, with frontmatter cut to a safe set of fields. `--generator hugo` (`-g hugo`) shapes the output for Hugo. With it, `DIR` is a Hugo site root. The pages go to `DIR/content/`. The export also creates and updates a scaffold (see Hugo below). Lint errors stop it with exit code 1. It never changes the vault. `DIR` must be outside the vault |
+| `zk-chef export DIR [--generator hugo [--style plain\|tufte]]` | agent | Writes the root page and the pages in `notes/` to `DIR` as Markdown, with frontmatter cut to a safe set of fields. `--generator hugo` (`-g hugo`) shapes the output for Hugo. With it, `DIR` is a Hugo site root. The pages go to `DIR/content/`. The export also creates and updates a scaffold in one of two Styles (see Hugo below). Lint errors stop it with exit code 1. It never changes the vault. `DIR` must be outside the vault |
 
 Lint codes and fixes are in `skills/zk-chef-ops/LINT.md`.
 
@@ -82,16 +87,16 @@ It runs lint first. Lint errors stop the export with exit code 1: the findings g
 
 What it writes:
 
-- the pages in `notes/`, `hubs/`, `sources/` and `projects/` (one level deep), and the root `index.md`, with the same paths;
-- `[[ID|Title]]` links as relative Markdown links, such as `[Title](../sources/ID.md)`;
-- only these frontmatter fields: `title`, `kind`, `status`, `superseded_by`, and for sources `review`, `url`, `citation`, `authors`, `published`;
-- a `Superseded by` line at the top of a superseded note;
+- the root `index.md` and the pages in `notes/`, with the same paths (`index.md` and `notes/<stem>.md`);
+- `[[ID|Title]]` links as relative Markdown links, such as `[Title](other.md)` from one page in `notes/` to another;
+- only these frontmatter fields: `title`, `date` (from the field), `kind`, `status` and `review` (unpacked from the `kind/`, `status/superseded` and `review/` tags), `superseded_by`, `tags` (only the `topic/` and `type/` tags), and for sources `url`, `accessed`, `authors`, `published`. `aliases` is not exported;
+- the vault's own `Superseded by [[stem|Title]]` line of a superseded note, as a Markdown link. The export adds no such line;
 - a `## Backlinks` section on a page that other pages link to, and a `## Members` section on a hub that other pages name in their `Hubs:` line. Both are sorted by title. A parent hub is a backlink, not a member.
 
 What it leaves out:
 
 - `raw/`, `keys/`, `AGENTS.md`, dot folders and every other file in the vault;
-- every frontmatter field not listed above, such as `id`, `raw` and `sha256`;
+- every frontmatter field not listed above, such as `aliases`, `raw` and `sha256`;
 - the `## Extract` section of a source. Its `## Review` section stays;
 - links in code fences and in `## Extract` and `## Review` sections stay as `[[…]]` text, and they make no backlinks.
 
@@ -110,14 +115,24 @@ The Hugo export differs from the generic export in these ways:
 
 - the pages go to `DIR/content/`, and the root page is `content/_index.md`, Hugo's home page. The manifest lists these pages only;
 - `kind`, `url` and `published` are written as `zk_kind`, `source_url` and `source_published`. Hugo reserves `kind` (it accepts only page kinds, so a value such as `hub` fails the build in Hugo 0.123 and newer), and `url` would change the page's URL;
-- each page gets a `date` from the first 12 digits of its ID (UTC). A page whose ID is not a date gets no `date`;
 - shortcode calls such as `{{< x >}}` in the text are escaped, so Hugo shows them as text;
-- the export creates a minimal site in `DIR`: `hugo.toml` and the layouts `layouts/baseof.html`, `home.html`, `list.html` and `single.html`. The layouts use the Tufte style ([Tufte CSS](https://github.com/edwardtufte/tufte-css) and the ET Book fonts), vendored in `static/vendored/tufte/`. Source pages show their review state and citation (URLs in the citation are links). A source without a citation shows its URL, authors and published date. A superseded page shows a banner.
+- the export creates a minimal site in `DIR`: `hugo.toml` and the layouts `layouts/baseof.html`, `home.html`, `list.html` and `single.html`. The Style decides what the layouts look like (see Styles below).
+
+#### Styles
+
+`--style` (`-s`) picks the Style of the site. It needs `--generator hugo`.
+
+- `plain` is a bare site. The layouts have no stylesheet. A source page shows its review state, URL, authors, published date and accessed date, one plain line each. `plain` deletes `static/vendored/tufte/`.
+- `tufte` uses the Tufte style ([Tufte CSS](https://github.com/edwardtufte/tufte-css) and the ET Book fonts), vendored in `static/vendored/tufte/`. Source pages show their review state, URL (a link), authors, published date and accessed date, from the frontmatter fields. A superseded page shows a banner.
+
+The export writes the Style to `DIR/.zk-chef-site.json` as `{"style": "<name>"}`. Without `--style`, it uses that file. When the file is missing, the Style is `tufte` if `DIR/static/vendored/tufte/` exists, and `plain` for a new site. An unknown Style, `--style` without `--generator hugo`, or a corrupt `.zk-chef-site.json` stops the export with exit code 2 and writes nothing.
+
+A Style switch follows the rule below: a layout that you did not edit is replaced with the layout of the new Style. A layout that you edited is kept, and the export prints `kept your <path>` and a diff.
 
 The export updates the scaffold by this rule. It looks at each scaffold file in `DIR`:
 
 - A missing file is created. To get a file back, delete it and run the export again.
-- A file that is byte for byte a version that zk-chef shipped is replaced with the current version.
+- A file that is byte for byte a version that zk-chef shipped, in any Style, is replaced with the current version.
 - Any other file counts as your edit and is kept. The export prints `kept your <path>` and a unified diff of your file against the current version, so you can merge changes by hand.
 - `static/vendored/` belongs to zk-chef. The export creates its files and overwrites them when they differ. Your edits there are lost. Use your own stylesheet.
 - `hugo.toml` is not created when `DIR` already has a Hugo config. A Hugo config is one of these: `hugo.{toml,yaml,yml,json}`, `config.{toml,yaml,yml,json}` or a `config/` folder. An existing `hugo.toml` is replaced only when it equals a shipped template rendered with the title of the root page now. If you change that title or edit the file, it counts as your edit.
@@ -140,19 +155,19 @@ npm ci
 cp quartz.config.default.yaml quartz.config.yaml
 ```
 
-In `quartz.config.yaml`, set `baseUrl` and `pageTitle`. Only four folders and `index.md` are copied, so `raw/` never enters `content/`. Then copy the vault in and build:
+In `quartz.config.yaml`, set `baseUrl` and `pageTitle`. Only `notes/` and `index.md` are copied, so `raw/` never enters `content/`. Then copy the vault in and build:
 
 ```sh
 VAULT=/path/to/vault
 rm -rf content && mkdir content
-cp -r "$VAULT"/{notes,hubs,sources,projects} "$VAULT/index.md" content/
+cp -r "$VAULT/notes" "$VAULT/index.md" content/
 npx quartz plugin install --from-config
 npx quartz build --serve   # or without --serve; output goes to public/
 ```
 
 Notes:
 
-- Quartz resolves a bare ID such as `[[202611091044tnn3|Title]]` when exactly one file has that name. Keep note names unique across folders, which the lint already requires.
+- Quartz resolves a bare ID such as `[[ab12cd|Title]]` when exactly one file has that name. Stems are unique and `notes/` is flat, which lint requires.
 - Quartz reads dates from git. Copied files give a "not tracked by git" warning and wrong dates; this is harmless.
 - A published note that links to a note in an ignored folder gets a broken link.
 - Quartz lists backlinks by frontmatter `title`. Every note has one.
@@ -186,7 +201,7 @@ Pushing a `v*` tag runs `.github/workflows/release.yml`. It builds four binaries
 ## Limits
 
 - The gate guards against mistakes, not against an agent set on bypassing the hook.
-- A review vouches for a raw file, not for the notes that cite it. Lint compares notes with each other, not with reality.
+- A review vouches for a raw file, or for a URL on its `accessed` date, not for the notes that cite it. Lint compares notes with each other, not with reality.
 - `## Extract` and the paraphrases in a source note are unsigned.
 - Search is keyword-only. Windows is not supported.
-- Not yet checked: that Obsidian resolves `[[ID|Title]]` across the four folders (`docs/build-notes.md`, item 2).
+- Not yet checked: that Obsidian resolves `[[ID|Title]]` in `notes/` (`docs/build-notes.md`, item 2).

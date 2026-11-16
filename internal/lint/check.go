@@ -8,21 +8,19 @@ import (
 	"strings"
 )
 
-var (
-	reviews  = []string{"unreviewed", "reviewed", "disputed"}
-	logTypes = []string{"decision", "meeting", "plan", "status"}
-)
+// Reviews are the values of the review/ tag.
+var Reviews = []string{"unreviewed", "reviewed", "disputed"}
 
 // adder records one finding.
 type adder func(code, path string, line int, msg string)
 
 // str returns the string value of a frontmatter key, or "" when it is absent or not a string.
-func (d *doc) str(key string) string {
-	s, _ := d.fm[key].(string)
+func (p *Page) str(key string) string {
+	s, _ := p.fm[key].(string)
 	return s
 }
 
-// pyRepr prints a frontmatter value the way Python's repr does for the messages v1 printed.
+// pyRepr prints a frontmatter value the way Python's repr does for the messages the earlier Python build printed.
 func pyRepr(v any) string {
 	switch x := v.(type) {
 	case nil:
@@ -36,79 +34,167 @@ func pyRepr(v any) string {
 	return fmt.Sprint(v)
 }
 
-func checkFrontmatter(d *doc, add adder) {
-	fm := d.fm
-	folder, _, _ := strings.Cut(d.path, "/")
-	if d.path == IndexPath {
-		folder = "hubs"
+// stemRe is the stem of every page but the root index: 6 lowercase letters and digits.
+var stemRe = regexp.MustCompile(`\A[a-z0-9]{6}\z`)
+
+// kindValues are the values of the kind/ tag.
+var kindValues = []string{"note", "hub", "source", "log"}
+
+// Kebab words, joined by "/" for topic/ tags. A type/ tag is one kebab word.
+var (
+	kebabRe = regexp.MustCompile(`\A[a-z0-9]+(-[a-z0-9]+)*\z`)
+	topicRe = regexp.MustCompile(`\A[a-z0-9]+(-[a-z0-9]+)*(/[a-z0-9]+(-[a-z0-9]+)*)*\z`)
+)
+
+// tagNamespaces are the namespaces zk-chef defines. A tag in one of them with a bad value is E_FRONTMATTER;
+// a tag in another namespace, or without "/", is W_UNKNOWN_TAG.
+var tagNamespaces = []string{"kind", "review", "status", "topic", "type"}
+
+// tagKnown reports whether tag is in one of the tagNamespaces.
+func tagKnown(tag string) bool {
+	ns, _, ok := strings.Cut(tag, "/")
+	return ok && slices.Contains(tagNamespaces, ns)
+}
+
+// knownKeys are the frontmatter keys every kind lists; keysByKind adds the keys of one kind.
+var (
+	knownKeys  = []string{"title", "date", "tags", "aliases"}
+	keysByKind = map[string][]string{
+		"note":   {"superseded_by"},
+		"source": {"superseded_by", "url", "accessed", "authors", "published", "raw", "sha256"},
 	}
-	for _, key := range []string{"id", "title", "kind"} {
-		if s, ok := fm[key].(string); !ok || strings.TrimSpace(s) == "" {
-			add("E_FRONTMATTER", d.path, 1, key+" must be a non-empty string (quote it in YAML)")
+)
+
+// checkKeys warns about each frontmatter key that the page's kind does not list, and each tag outside the namespaces zk-chef defines.
+func checkKeys(d *Page, add adder) {
+	var unknown []string
+	for key := range d.fm {
+		if !slices.Contains(knownKeys, key) && !slices.Contains(keysByKind[d.Kind()], key) {
+			unknown = append(unknown, key)
 		}
 	}
-	kind := d.str("kind")
-	switch {
-	case !slices.Contains(kindValues(), kind):
-		add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("kind %s is not note, hub, source or log", pyRepr(fm["kind"])))
-	case kind != folderKind[folder]:
-		add("E_WRONG_FOLDER", d.path, 1, fmt.Sprintf("kind %s does not belong in %s/", kind, folder))
+	slices.Sort(unknown)
+	for _, key := range unknown {
+		add("W_UNKNOWN_KEY", d.path, 1, fmt.Sprintf("key %s is not listed for kind %s", key, d.Kind()))
 	}
-	if _, has := fm["status"]; has {
+	for _, tag := range d.tags {
+		if !tagKnown(tag) {
+			add("W_UNKNOWN_TAG", d.path, 1, "tag "+tag+" is not a kind, review, status, topic or type tag")
+		}
+	}
+}
+
+// checkSupersedeLine requires, for a superseded page, the first non-blank body line after the Hubs line to be
+// "Superseded by [[superseded_by|Title]]".
+func checkSupersedeLine(d *Page, add adder) {
+	want := d.SupersededBy()
+	for _, l := range d.lines[1:] {
+		if strings.TrimSpace(l.text) == "" {
+			continue
+		}
+		if rest, ok := strings.CutPrefix(l.text, "Superseded by "); ok {
+			if m := linkRe.FindStringSubmatch(rest); m != nil && strings.HasPrefix(rest, "[[") {
+				if got := strings.TrimSpace(m[1]); got != want {
+					add("E_FRONTMATTER", d.path, l.n, fmt.Sprintf("Superseded by line names %s, but superseded_by is %s", got, want))
+				}
+				return
+			}
+		}
+		break
+	}
+	add("E_FRONTMATTER", d.path, d.lines[0].n, fmt.Sprintf("superseded page needs the line \"Superseded by [[%s|Title]]\" after the Hubs line", want))
+}
+
+func checkFrontmatter(d *Page, add adder) {
+	if d.path != IndexPath {
+		if strings.Contains(strings.TrimPrefix(d.path, NotesDir+"/"), "/") {
+			add("E_FRONTMATTER", d.path, 1, "subfolder in "+NotesDir+"/; the folder is flat")
+		}
+		if !stemRe.MatchString(d.stem) {
+			add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("stem %s must be 6 lowercase letters and digits", pyRepr(d.stem)))
+		}
+	}
+	if strings.TrimSpace(d.Title()) == "" {
+		add("E_FRONTMATTER", d.path, 1, "title must be a non-empty string (quote it in YAML)")
+	}
+	if v, has := d.fm["date"]; !has || v == nil || strings.TrimSpace(fmt.Sprint(v)) == "" {
+		add("E_FRONTMATTER", d.path, 1, "date is required (UTC, such as 2026-01-02T03:04:05Z)")
+	}
+	if d.tagsErr != "" {
+		add("E_FRONTMATTER", d.path, 1, d.tagsErr)
+		return
+	}
+	kinds := d.tagValues("kind")
+	switch {
+	case len(kinds) != 1:
+		add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("page needs exactly one kind/ tag (note, hub, source or log), found %d", len(kinds)))
+	case !slices.Contains(kindValues, kinds[0]):
+		add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("kind %s is not note, hub, source or log", pyRepr(kinds[0])))
+	}
+	kind := d.Kind()
+	if d.path == IndexPath && kind != "" && kind != "hub" {
+		add("E_FRONTMATTER", d.path, 1, "index.md must be kind hub")
+	}
+	for _, s := range d.tagValues("status") {
+		if s != "superseded" {
+			add("E_FRONTMATTER", d.path, 1, "status tag must be status/superseded, found status/"+s)
+		}
+	}
+	if d.Superseded() {
 		if kind == "hub" || kind == "log" {
-			add("E_FRONTMATTER", d.path, 1, kind+" must not have status")
-		} else if _, ok := fm["superseded_by"].(string); fm["status"] != "superseded" || !ok {
-			add("E_FRONTMATTER", d.path, 1, "status must be 'superseded' with superseded_by: ID")
+			add("E_FRONTMATTER", d.path, 1, kind+" must not be superseded")
+		} else if _, ok := d.fm["superseded_by"].(string); !ok {
+			add("E_FRONTMATTER", d.path, 1, "status/superseded needs superseded_by: STEM")
+		}
+	}
+	for _, v := range d.tagValues("topic") {
+		if !topicRe.MatchString(v) {
+			add("E_FRONTMATTER", d.path, 1, "topic tag must be topic/<kebab>[/<kebab>...], found topic/"+v)
+		}
+	}
+	for _, v := range d.tagValues("type") {
+		switch {
+		case kind != "log":
+			add("E_FRONTMATTER", d.path, 1, "only a log has a type/ tag, found type/"+v)
+		case !kebabRe.MatchString(v):
+			add("E_FRONTMATTER", d.path, 1, "type tag must be type/<kebab>, found type/"+v)
 		}
 	}
 	if kind == "source" {
-		for _, key := range []string{"raw", "sha256"} {
-			if d.str(key) == "" {
-				add("E_FRONTMATTER", d.path, 1, "source needs "+key+" (a string)")
-			}
+		checkSourceEvidence(d, add)
+		if r := d.tagValues("review"); len(r) != 1 || !slices.Contains(Reviews, r[0]) {
+			add("E_FRONTMATTER", d.path, 1, "source needs exactly one review/ tag, one of "+strings.Join(Reviews, ", "))
 		}
-		if d.str("url") != "" && d.str("citation") == "" {
-			add("E_FRONTMATTER", d.path, 1, "source with url needs citation (IEEE form)")
-		}
-		if !slices.Contains(reviews, d.str("review")) {
-			add("E_FRONTMATTER", d.path, 1, "review must be one of "+strings.Join(reviews, ", "))
-		}
-	}
-	if _, has := fm["type"]; has && kind == "log" && !slices.Contains(logTypes, d.str("type")) {
-		add("E_FRONTMATTER", d.path, 1, "type must be one of "+strings.Join(logTypes, ", "))
+	} else if kind != "" && len(d.tagValues("review")) > 0 {
+		add("E_FRONTMATTER", d.path, 1, "only a source has a review/ tag")
 	}
 }
 
-func kindValues() []string {
-	out := make([]string, 0, len(folderKind))
-	for _, k := range folderKind {
-		out = append(out, k)
-	}
-	return out
-}
-
-// hubMapMissing reports a hub whose members link each other but whose map holds neither an
-// ordered walk (1. ...) nor a GAP: line.
-func hubMapMissing(d *doc, members []string, linked map[string][]string) bool {
-	in := map[string]bool{}
-	for _, m := range members {
-		in[m] = true
-	}
-	interlinked := false
-	for _, m := range members {
-		for _, t := range linked[m] {
-			interlinked = interlinked || (t != m && in[t])
-		}
-	}
-	if !interlinked {
-		return false
-	}
+// checkLog warns when a log has no ## Updates section, an entry heading under it that is not a YYYY-MM-DD date,
+// or entries that are not newest first.
+func checkLog(d *Page, add adder) {
+	updates, newest := false, ""
 	for _, l := range d.scanned() {
-		if entryRe.MatchString(l.text) || strings.Contains(l.text, "GAP:") {
-			return false
+		if l.section != "Updates" {
+			continue
+		}
+		heading, isH3 := strings.CutPrefix(l.text, "### ")
+		heading = strings.TrimSpace(heading)
+		switch {
+		case strings.TrimSpace(l.text) == "## Updates":
+			updates = true
+		case !isH3:
+		case !validDate(strings.TrimSpace(heading), false):
+			add("W_LOG_HEADING", d.path, l.n, fmt.Sprintf("entry heading %s is not a YYYY-MM-DD date", pyRepr(heading)))
+		case newest != "" && heading > newest:
+			add("W_LOG_HEADING", d.path, l.n, fmt.Sprintf("entry %s is newer than the one above it; list newest first", heading))
+		default:
+			newest = heading
 		}
 	}
-	return true
+	if !updates {
+		add("W_LOG_HEADING", d.path, d.lines[0].n, "log needs a ## Updates section")
+	}
 }
 
 // citeRe finds [3] and [3, p. 4]. Go has no lookaround, so citations() checks the neighbours.
@@ -139,7 +225,7 @@ func citations(s string) []int {
 }
 
 // checkCitations covers claim notes only: hubs make no claims, sources paraphrase, logs are exempt.
-func checkCitations(d *doc, add adder) {
+func checkCitations(d *Page, add adder) {
 	type cite struct{ n, k int }
 	var (
 		refLines       []int

@@ -24,13 +24,12 @@ type Finding struct {
 }
 
 var (
-	linkRe     = regexp.MustCompile(`\[\[([^\]|]+)(?:\|([^\]]*))?\]\]`)
-	markerRe   = regexp.MustCompile(`\b(?:TODO|GAP|CONTRADICTION):`)
-	linkFullRe = regexp.MustCompile(`\A` + linkRe.String() + `\z`)
+	linkRe   = regexp.MustCompile(`\[\[([^\]|]+)(?:\|([^\]]*))?\]\]`)
+	markerRe = regexp.MustCompile(`\b(?:TODO|CONTRADICTION):`)
+	hubsRe   = regexp.MustCompile(`\AHubs: ` + linkRe.String() + `(?:, ` + linkRe.String() + `)*\z`)
 )
 
 type config struct {
-	IndexID       string   `toml:"index_id"`
 	WordCountWarn int      `toml:"word_count_warn"`
 	Pinned        []string `toml:"pinned_fingerprints"`
 }
@@ -40,27 +39,19 @@ func parseConfig(files map[string][]byte) (config, error) {
 	if err := toml.Unmarshal(files[ConfigPath], &cfg); err != nil {
 		return cfg, fmt.Errorf("%s: %w", ConfigPath, err)
 	}
-	if cfg.IndexID == "" {
-		return cfg, fmt.Errorf("%s: index_id is missing", ConfigPath)
-	}
 	return cfg, nil
 }
 
-// parseDocs parses every markdown file that sits directly in a note folder, sorted by path.
-func parseDocs(files map[string][]byte) []*doc {
-	var docs []*doc
+// parsePages parses index.md and every markdown file under notes/, subfolders included (lint reports them), sorted by path.
+func parsePages(files map[string][]byte) []*Page {
+	var pages []*Page
 	for p, b := range files {
-		if p == IndexPath {
-			docs = append(docs, parseDoc(p, strings.ToValidUTF8(string(b), "\ufffd")))
-			continue
-		}
-		folder, name, ok := strings.Cut(p, "/")
-		if _, isNoteFolder := folderKind[folder]; ok && isNoteFolder && strings.HasSuffix(name, ".md") && !strings.Contains(name, "/") {
-			docs = append(docs, parseDoc(p, strings.ToValidUTF8(string(b), "\ufffd")))
+		if p == IndexPath || strings.HasPrefix(p, NotesDir+"/") && strings.HasSuffix(p, ".md") {
+			pages = append(pages, ParsePage(p, strings.ToValidUTF8(string(b), "\ufffd")))
 		}
 	}
-	sort.Slice(docs, func(i, j int) bool { return docs[i].path < docs[j].path })
-	return docs
+	sort.Slice(pages, func(i, j int) bool { return pages[i].path < pages[j].path })
+	return pages
 }
 
 // Lint checks files (slash path -> bytes, as LoadWorktree returns) and returns the findings
@@ -76,30 +67,39 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 	add := func(code, path string, line int, msg string) {
 		out = append(out, Finding{code, path, line, msg})
 	}
-	var good []*doc
-	for _, d := range parseDocs(files) {
+	var good, parsed []*Page // parsed: no parse error; good: parsed with valid frontmatter
+	pages := parsePages(files)
+	firstOf := map[string]*Page{}
+	for _, d := range pages {
+		if first, dup := firstOf[d.stem]; dup {
+			add("E_DUPLICATE_ID", d.path, 1, fmt.Sprintf("ID %s also used by %s", d.stem, first.path))
+		} else {
+			firstOf[d.stem] = d
+		}
+	}
+	for _, d := range pages {
 		if d.err != "" {
 			add("E_FRONTMATTER", d.path, 1, d.err)
 			continue
 		}
+		parsed = append(parsed, d)
 		n := len(out)
 		checkFrontmatter(d, add)
 		if len(out) == n {
 			good = append(good, d)
 		}
+		if text := string(files[d.path]); canonicalFrontmatter(text) != text {
+			add("W_FRONTMATTER_FORMAT", d.path, 1, "frontmatter is not in canonical form; run zk-chef lint --fix")
+		}
 	}
-	byID := map[string]*doc{}
-	for _, d := range good {
-		id := d.str("id")
-		stem := strings.TrimSuffix(path.Base(d.path), ".md")
-		if id != stem {
-			add("E_DUPLICATE_ID", d.path, 1, fmt.Sprintf("id %s differs from filename %s", id, stem))
+	byID := map[string]*Page{}
+	for _, d := range parsed {
+		if byID[d.ID()] == nil {
+			byID[d.ID()] = d
 		}
-		if first, dup := byID[id]; dup {
-			add("E_DUPLICATE_ID", d.path, 1, fmt.Sprintf("id %s also used by %s", id, first.path))
-		} else {
-			byID[id] = d
-		}
+	}
+	for _, d := range parsed {
+		checkKeys(d, add)
 	}
 	for _, d := range good {
 		if v, has := d.fm["superseded_by"]; has {
@@ -107,16 +107,25 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 				add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("superseded_by %v does not exist", v))
 			}
 		}
+		if d.SupersededBy() != "" {
+			if !d.Superseded() {
+				add("E_FRONTMATTER", d.path, 1, "superseded_by needs status/superseded")
+			} else {
+				checkSupersedeLine(d, add)
+			}
+		}
 	}
 
-	if byID[cfg.IndexID] == nil {
-		add("E_UNREACHABLE", ConfigPath, 1, fmt.Sprintf("index hub %s not found", cfg.IndexID))
+	if byID[indexStem] == nil {
+		add("E_UNREACHABLE", IndexPath, 1, "index.md not found")
 	}
-	edges := map[string][]string{}  // hub id -> ids of the docs that name it in their Hubs line
-	linked := map[string][]string{} // doc id -> ids its body links, past the Hubs line
-	for _, d := range good {
-		live := d.fm["status"] != "superseded"
-		bodyLinks, words := 0, 0
+	edges := map[string][]string{}             // hub id -> ids of the pages that name it in their Hubs line
+	linked := map[string][]string{}            // page id -> ids its body links, past the Hubs line
+	type hubLink struct{ child, parent *Page } // a hub and one parent hub on its Hubs line
+	var hubLinks []hubLink
+	for _, d := range parsed {
+		live := !d.Superseded()
+		words := 0
 		for _, l := range d.scanned() {
 			for _, m := range linkRe.FindAllStringSubmatch(l.text, -1) {
 				target := byID[strings.TrimSpace(m[1])]
@@ -125,15 +134,14 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 					continue
 				}
 				// A link's ID cannot contain |, so | marks an alias, even an empty one.
-				if title := target.str("title"); d.aliasChecked(l) && strings.Contains(m[0], "|") && m[2] != title {
+				if title := target.Title(); d.aliasChecked(l) && strings.Contains(m[0], "|") && m[2] != title {
 					add("W_STALE_ALIAS", d.path, l.n, fmt.Sprintf("alias %s differs from title %s", pyRepr(m[2]), pyRepr(title)))
 				}
-				if live && target.fm["status"] == "superseded" {
-					add("W_SUPERSEDED_LINK", d.path, l.n, fmt.Sprintf("links %s, superseded by %v", target.str("id"), target.fm["superseded_by"]))
+				if live && target.Superseded() {
+					add("W_SUPERSEDED_LINK", d.path, l.n, fmt.Sprintf("links %s, superseded by %v", target.ID(), target.SupersededBy()))
 				}
-				if l.n != d.lines[0].n {
-					bodyLinks++
-					linked[d.str("id")] = append(linked[d.str("id")], target.str("id"))
+				if d.ID() == indexStem || l.n != d.lines[0].n { // index has no Hubs line
+					linked[d.ID()] = append(linked[d.ID()], target.ID())
 				}
 			}
 			if m := markerRe.FindString(l.text); m != "" {
@@ -143,34 +151,23 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 				words += len(strings.Fields(l.text))
 			}
 		}
-		if d.str("kind") == "note" {
-			if bodyLinks == 0 {
-				add("W_DEAD_END", d.path, d.lines[0].n, "links nothing besides its Hubs line")
-			}
+		valid := slices.Contains(good, d) // kind checks need valid frontmatter
+		if valid && d.Kind() == "note" {
 			checkCitations(d, add)
 			if words > cfg.WordCountWarn {
 				add("W_WORD_COUNT", d.path, d.lines[0].n, fmt.Sprintf("%d words", words))
 			}
+		} else if valid && d.Kind() == "log" {
+			checkLog(d, add)
 		}
-		if d.str("id") == cfg.IndexID {
+		if d.ID() == indexStem {
 			continue
 		}
 		first := d.lines[0]
 		text := strings.TrimRightFunc(first.text, unicode.IsSpace)
-		var hubs [][]string
-		ok := strings.HasPrefix(text, "Hubs: ")
-		if ok {
-			for _, part := range strings.Split(text[len("Hubs: "):], " · ") {
-				m := linkFullRe.FindStringSubmatch(part)
-				if m == nil {
-					ok = false
-					break
-				}
-				hubs = append(hubs, m)
-			}
-		}
-		if !ok {
-			add("E_HUBS_LINE", d.path, first.n, "first body line must be: Hubs: [[ID|Hub]] · [[ID|Hub]]")
+		hubs := linkRe.FindAllStringSubmatch(text, -1)
+		if !hubsRe.MatchString(text) {
+			add("E_HUBS_LINE", d.path, first.n, "first body line must be: Hubs: [[ID|Hub]], [[ID|Hub]]")
 			continue
 		}
 		for _, m := range hubs {
@@ -178,14 +175,22 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 			if target == nil {
 				continue
 			}
-			if target.str("kind") != "hub" || target.str("id") == d.str("id") {
+			if target.Kind() != "hub" || target.ID() == d.ID() {
 				add("E_HUBS_LINE", d.path, first.n, m[1]+" is not another hub")
 			} else {
-				edges[target.str("id")] = append(edges[target.str("id")], d.str("id"))
+				edges[target.ID()] = append(edges[target.ID()], d.ID())
+				if d.Kind() == "hub" {
+					hubLinks = append(hubLinks, hubLink{d, target})
+				}
 			}
 		}
 	}
-	reach, todo := map[string]bool{cfg.IndexID: true}, []string{cfg.IndexID}
+	for _, h := range hubLinks {
+		if child, parent := h.child, h.parent; !slices.Contains(linked[parent.ID()], child.ID()) {
+			add("W_HUB_UNLISTED", child.path, child.lines[0].n, fmt.Sprintf("hub %s does not link %s in its body", parent.ID(), child.ID()))
+		}
+	}
+	reach, todo := map[string]bool{indexStem: true}, []string{indexStem}
 	for len(todo) > 0 {
 		hub := todo[len(todo)-1]
 		todo = todo[:len(todo)-1]
@@ -197,38 +202,39 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 		}
 	}
 	for _, d := range good {
-		if !reach[d.str("id")] {
+		if !reach[d.ID()] {
 			add("E_UNREACHABLE", d.path, 1, "does not reach the Index hub through Hubs lines")
-		}
-	}
-	for _, d := range good {
-		if d.str("kind") == "hub" && d.str("id") != cfg.IndexID && hubMapMissing(d, edges[d.str("id")], linked) {
-			add("W_HUB_MAP", d.path, d.lines[0].n, "members link each other, but the map has no ordered walk or GAP: line")
 		}
 	}
 
 	rawPaths := map[string]bool{}
+	for _, d := range parsed {
+		if d.Kind() == "source" && d.source().HasRaw() {
+			rawPaths[d.str("raw")] = true
+		}
+	}
 	for _, d := range good {
-		if d.str("kind") != "source" {
+		if d.Kind() != "source" {
 			continue
 		}
-		raw, want := d.str("raw"), d.str("sha256")
-		rawPaths[raw] = true
+		raw, want, hasRaw := d.str("raw"), d.str("sha256"), d.source().HasRaw()
 		if !slices.ContainsFunc(d.lines, func(l line) bool { return l.section == "Review" }) {
 			add("E_REVIEW_HEADING", d.path, 1, "source needs a ## Review heading")
 		}
-		if !strings.HasPrefix(raw, "raw/"+d.str("id")+"-") {
-			add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("raw must be raw/%s-<name>", d.str("id")))
-		}
-		if b, found := files[raw]; !found {
-			add("E_SHA256", d.path, 1, fmt.Sprintf("raw file %s is missing", raw))
-		} else if sum := sha256.Sum256(b); hex.EncodeToString(sum[:]) != want {
-			add("E_SHA256", d.path, 1, raw+" does not match sha256 in the note")
+		if hasRaw {
+			if !rawNameOK(raw, d.ID()) {
+				add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("raw must be raw/%s or raw/%s.<ext>", d.ID(), d.ID()))
+			}
+			if b, found := files[raw]; !found {
+				add("E_SHA256", d.path, 1, fmt.Sprintf("raw file %s is missing", raw))
+			} else if sum := sha256.Sum256(b); hex.EncodeToString(sum[:]) != want {
+				add("E_SHA256", d.path, 1, raw+" does not match sha256 in the note")
+			}
 		}
 		checkReview(d, files, v, add)
 	}
 	for p := range files {
-		if strings.HasPrefix(p, "raw/") && !strings.HasPrefix(path.Base(p), ".") && !rawPaths[p] {
+		if strings.HasPrefix(p, RawDir+"/") && !strings.HasPrefix(path.Base(p), ".") && !rawPaths[p] {
 			add("E_RAW_ORPHAN", p, 1, "no source note names this file")
 		}
 	}

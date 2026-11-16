@@ -14,6 +14,9 @@ func TestVerbHelp(t *testing.T) {
 		if v.root && !strings.Contains(got.stdout, "--root") {
 			t.Errorf("%s --help does not list --root: %q", v.name, got.stdout)
 		}
+		if v.root && !strings.Contains(got.stdout, ", -r ") {
+			t.Errorf("%s --help does not list -r: %q", v.name, got.stdout)
+		}
 	}
 }
 
@@ -30,6 +33,21 @@ func TestRootSelection(t *testing.T) {
 	}
 	if got := run(env, "lint"); got.code != 0 {
 		t.Errorf("cwd root: code %d stdout %q, want 0", got.code, got.stdout)
+	}
+}
+
+// TestRootShortFlag: -r DIR acts as --root DIR.
+func TestRootShortFlag(t *testing.T) {
+	env := setupVault(t, "dev", with_(t, nil))
+	empty := t.TempDir()
+	for _, verb := range []string{"lint", "status"} {
+		if got := run(append(env, "ZK_CHEF_ROOT="+empty), verb, "-r", "."); got.code != 0 {
+			t.Errorf("%s -r over env: code %d stdout %q stderr %q, want 0", verb, got.code, got.stdout, got.stderr)
+		}
+		got := run(env, verb, "-r", empty)
+		if got.code != 2 || !strings.Contains(got.stderr, empty) {
+			t.Errorf("%s -r empty dir: code %d stderr %q, want 2 naming %s", verb, got.code, got.stderr, empty)
+		}
 	}
 }
 

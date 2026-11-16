@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -14,14 +15,22 @@ import (
 // ConfigPath is the vault config, relative to the vault root.
 const ConfigPath = ".zk-chef/config.toml"
 
-// folderKind maps each note folder to the kind it holds.
-var folderKind = map[string]string{"notes": "note", "hubs": "hub", "sources": "source", "projects": "log"}
-
-// IndexPath is the root index hub, which sits beside AGENTS.md.
+// IndexPath is the root index hub, which sits beside AGENTS.md. Its stem, indexStem, is the one fixed ID.
 const IndexPath = "index.md"
 
+const indexStem = "index"
+
+// NotesDir is the one folder of notes; it is flat.
+const NotesDir = "notes"
+
+// RawDir holds the raw copies of sources.
+const RawDir = "raw"
+
+// KeysDir holds the pinned public keys.
+const KeysDir = "keys"
+
 // loaded lists every folder lint reads, plus the root index file; raw/ and keys/ are read as bytes only.
-var loaded = []string{IndexPath, "notes", "hubs", "sources", "projects", "raw", "keys"}
+var loaded = []string{IndexPath, NotesDir, RawDir, KeysDir}
 
 // LoadWorktree reads the lint inputs under root into a map of slash paths to bytes.
 func LoadWorktree(root string) (map[string][]byte, error) {
@@ -68,7 +77,7 @@ func LoadStaged(root string) (map[string][]byte, error) {
 	seen := map[string]bool{}
 	for n := range strings.SplitSeq(string(listing), "\x00") {
 		top, _, _ := strings.Cut(n, "/")
-		if (n == ConfigPath || contains(loaded, top)) && !seen[n] {
+		if (n == ConfigPath || slices.Contains(loaded, top)) && !seen[n] {
 			seen[n] = true
 			names = append(names, n)
 		}
