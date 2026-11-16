@@ -868,6 +868,9 @@ func TestLintSupersede(t *testing.T) {
 			"notes/not002.md": doc("Old claim", "note", hubLine+"\n\nSuperseded by [[nope|X]]\n\nOld.", kv{"status", "superseded"}, kv{"superseded_by", "nope"})}, "nope"},
 		{"a superseded hub", superseded("hub", hubLine+"\n\nSuperseded by [[not003|New claim]]"), "must not be superseded"},
 		{"a superseded log", superseded("log", hubLine+"\n\nSuperseded by [[not003|New claim]]\n\n## Updates"), "must not be superseded"},
+		{"superseded_by without the status tag", map[string]string{
+			"notes/not002.md": doc("Old claim", "note", hubLine+"\n\nSuperseded by [[not003|New claim]]\n\nOld.", kv{"superseded_by", "not003"}),
+			"notes/not003.md": new}, "superseded_by needs status/superseded"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -999,6 +1002,7 @@ func TestLintFrontmatterFormat(t *testing.T) {
 		{"hub template page", "---\ntitle: \"Two\"\ndate: 2026-01-02T03:04:05Z\ntags: [kind/hub]\n" + tail, false},
 		{"log template page", "---\ntitle: \"Two\"\ndate: 2026-01-02T03:04:05Z\ntags: [kind/log]\n" + tail, false},
 		{"scaffold index.md", string(index), false},
+		{"title escaped as zk json writes it", "---\ntitle: \"R\\u0026D \\u003cx\\u003e\"\ndate: 2026-01-02T03:04:05Z\ntags: [kind/note]\n" + tail, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			p := "notes/not002.md"
@@ -1036,6 +1040,19 @@ func TestLintFixFrontmatterFormat(t *testing.T) {
 	}
 	if got = run(env, "lint", "--fix"); got.code != 0 || got.stdout != "0 errors, 0 warnings\n" {
 		t.Errorf("second lint --fix: code %d stdout %q, want nothing fixed", got.code, got.stdout)
+	}
+}
+
+// TestLintFixKeepsZkJSONEscapes: a page with the title escapes of zk's {{json title}} is canonical, so --fix leaves it as it is.
+func TestLintFixKeepsZkJSONEscapes(t *testing.T) {
+	orig := "---\ntitle: \"R\\u0026D \\u003cx\\u003e\"\ndate: 2026-01-02T03:04:05Z\ntags: [kind/note]\n---\nHubs: [[index|Index]]\n\nSee [[not001|Leaders are unique]].\n"
+	env := setupVault(t, "dev", with_(t, map[string]string{"notes/not002.md": orig}))
+	got := run(env, "lint", "--fix")
+	if got.code != 0 || got.stdout != "0 errors, 0 warnings\n" {
+		t.Errorf("lint --fix: code %d stdout %q, want nothing fixed and no warning", got.code, got.stdout)
+	}
+	if b, err := os.ReadFile("notes/not002.md"); err != nil || string(b) != orig {
+		t.Errorf("notes/not002.md = %q (%v), want it unchanged", b, err)
 	}
 }
 

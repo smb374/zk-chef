@@ -356,9 +356,9 @@ func exportVerb(inv *invocation) int {
 		rel, err := filepath.Rel(realRoot, resolved)
 		return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)), nil
 	}
-	dests := []string{""} // the paths in OUT that an export writes to or through
+	dests := []string{"", exportManifest} // the paths in OUT that an export writes to or through
 	if hugo {
-		dests = append(dests, "content", "content/_index.md", "hugo.toml", "layouts", "static")
+		dests = append(dests, "content", "content/_index.md", "hugo.toml", "layouts", "static", siteStateFile)
 		dests = append(dests, "content/"+lint.NotesDir)
 	} else {
 		dests = append(dests, "index.md", "_index.md")

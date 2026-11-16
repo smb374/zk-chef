@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -66,9 +68,23 @@ func SetReviewTag(m *yaml.Node, verdict string) {
 	}
 }
 
-// canonicalFrontmatter returns text with its frontmatter in the form EditFrontmatter writes. It returns text itself when the frontmatter is invalid.
+// uEscapeRe matches a \uXXXX escape in a double-quoted YAML scalar, as zk's {{json title}} writes for & < and >.
+var uEscapeRe = regexp.MustCompile(`\\u[0-9A-Fa-f]{4}`)
+
+func unescapeU(s string) string {
+	return uEscapeRe.ReplaceAllStringFunc(s, func(m string) string {
+		n, _ := strconv.ParseUint(m[2:], 16, 32)
+		return string(rune(n))
+	})
+}
+
+// canonicalFrontmatter returns text with its frontmatter in the form EditFrontmatter writes. It returns text itself when the
+// frontmatter is invalid, or when it differs from the canonical form only in \uXXXX escapes (yaml.v3 writes the plain character).
 func canonicalFrontmatter(text string) string {
 	if next, err := EditFrontmatter(text, func(*yaml.Node) error { return nil }); err == nil {
+		if unescapeU(next) == unescapeU(text) {
+			return text
+		}
 		return next
 	}
 	return text

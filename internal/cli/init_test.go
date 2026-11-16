@@ -416,9 +416,9 @@ func TestInitZkHint(t *testing.T) {
 	}
 }
 
-// TestZkAliasesPassTitle: zk note|source|hub|log --title sets the title of the new page, and a title
+// TestInitZkAliasesPassTitle: zk note|source|hub|log --title sets the title of the new page, and a title
 // with spaces, quotes or shell syntax stays one argument that the shell never runs.
-func TestZkAliasesPassTitle(t *testing.T) {
+func TestInitZkAliasesPassTitle(t *testing.T) {
 	ingestVault(t)
 	titles := []string{"B two words", `Say "hi"`, "it's $(touch injected) ; touch injected2 `touch injected3`"}
 	for _, alias := range []string{"note", "source", "hub", "log"} {

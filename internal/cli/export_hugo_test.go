@@ -334,6 +334,36 @@ func TestExportRefusesHugoStaticLinkIntoVault(t *testing.T) {
 	}
 }
 
+// TestExportRefusesStateFileLinkIntoVault: a dangling symlink at the manifest or the site state file of OUT must not make the write reach the vault.
+func TestExportRefusesStateFileLinkIntoVault(t *testing.T) {
+	env := setupVault(t, "dev", baseVault(t))
+	root, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, tt := range map[string]struct {
+		file string
+		args []string
+	}{
+		"generic manifest": {exportManifestName, []string{"export"}},
+		"hugo manifest":    {exportManifestName, []string{"export", "--generator", "hugo"}},
+		"hugo site state":  {siteStateFile, []string{"export", "--generator", "hugo"}},
+	} {
+		out := t.TempDir()
+		if err := os.Symlink(filepath.Join(root, "planted.json"), filepath.Join(out, tt.file)); err != nil { // the target does not exist
+			t.Fatal(err)
+		}
+		before := readTree(t, root)
+		got := run(env, append(tt.args, out)...)
+		if got.code != 2 || got.stdout != "" || !strings.Contains(got.stderr, "the vault or inside it") {
+			t.Errorf("%s: got code %d stdout %q stderr %q, want 2, no stdout and the vault guard error", name, got.code, got.stdout, got.stderr)
+		}
+		if after := readTree(t, root); !maps.Equal(before, after) {
+			t.Errorf("%s: vault changed by a refused export: %v vs %v", name, before, after)
+		}
+	}
+}
+
 func TestExportHugoSwitchKeepsScaffold(t *testing.T) {
 	out := t.TempDir()
 	env := setupVault(t, "dev", baseVault(t))

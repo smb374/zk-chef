@@ -104,8 +104,12 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 				add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("superseded_by %v does not exist", v))
 			}
 		}
-		if d.Superseded() && d.SupersededBy() != "" {
-			checkSupersedeLine(d, add)
+		if d.SupersededBy() != "" {
+			if !d.Superseded() {
+				add("E_FRONTMATTER", d.path, 1, "superseded_by needs status/superseded")
+			} else {
+				checkSupersedeLine(d, add)
+			}
 		}
 	}
 

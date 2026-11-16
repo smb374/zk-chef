@@ -12,16 +12,15 @@ import (
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
+	"github.com/smb374/zk-chef/internal/lint"
 	"github.com/smb374/zk-chef/internal/version"
+	"gopkg.in/yaml.v3"
 )
 
 // Assets holds the embedded "scaffold", "skills" and "export-scaffold" trees; main sets it.
 var Assets fs.FS
 
 var vaultFolders = []string{"notes", "raw", "keys"}
-
-// indexDatePlaceholder stands for the init time in the scaffold index.md.
-const indexDatePlaceholder = "INIT_DATE_UTC"
 
 // copyMissing copies files from src to dst without overwriting. It returns the created
 // paths and the paths whose existing file differs from the source, both slash-separated.
@@ -161,7 +160,14 @@ func stampIndexDate(dir string, created []string) error {
 		return err
 	}
 	now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-	return os.WriteFile(target, []byte(strings.Replace(string(b), indexDatePlaceholder, now, 1)), 0o644)
+	edited, err := lint.EditFrontmatter(string(b), func(m *yaml.Node) error {
+		lint.SetKey(m, "date", yaml.Node{Kind: yaml.ScalarNode, Tag: "!!timestamp", Value: now})
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(target, []byte(edited), 0o644)
 }
 
 const (
