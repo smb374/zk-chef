@@ -13,11 +13,15 @@ A Markdown file of the vault: the root page, or a file in `notes/`. Its **Kind**
 _Avoid_: Document, file
 
 **Kind**:
-What a Page is: `note` (one claim), `hub`, `source` or `log`. A tag on the Page, `kind:note` and so on. Each Page has exactly one.
+What a Page is: `note` (one claim), `hub`, `source` or `log`. A Tag on the Page, `kind/note` and so on. Each Page has exactly one.
 _Avoid_: Class, variety
 
+**Tag**:
+A string in the `tags` list of a Page, written `namespace/value`: `kind/note`, `review/reviewed`, `status/superseded`, `topic/ml/rnn`, `type/decision`. The Kind, the review state and the supersede state are Tags. In `topic/ml/rnn` the namespace is `topic` and the value is `ml/rnn`.
+_Avoid_: Label, category
+
 **Source**:
-A Page of Kind `source` that records a work that notes cite. It has evidence: a URL with the date it was accessed, a raw copy kept in `raw/`, or both. Its review state is a tag, `review:unreviewed`, `review:reviewed` or `review:disputed`.
+A Page of Kind `source` that records a work that notes cite. It has evidence: a URL with the date it was accessed, a raw copy kept in `raw/`, or both. Its review state is a Tag, `review/unreviewed`, `review/reviewed` or `review/disputed`.
 _Avoid_: Reference, citation
 
 **Log**:

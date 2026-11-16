@@ -1,6 +1,6 @@
 # Kind and state are tags, and the file stem is the ID
 
-From v0.3.0 a note's kind (`kind:note`), review state (`review:…`) and supersede state (`status:superseded`) are tags, and its ID is only its 6-character lowercase file stem in one flat `notes/` folder. zk can filter by tags (`zk list --tag "kind:source, review:unreviewed"`) but not by custom frontmatter keys, so tags make these states queryable with zk alone. Folders by kind and an `id:` field only repeated what the stem and the tag already say. The stem is lowercase because zk resolves links without case and macOS and Windows file systems fold case.
+From v0.3.0 a note's kind (`kind/note`), review state (`review/…`) and supersede state (`status/superseded`) are tags, and its ID is only its 6-character lowercase file stem in one flat `notes/` folder. zk can filter by tags (`zk list --tag "kind/source, review/unreviewed"`) but not by custom frontmatter keys, so tags make these states queryable with zk alone. Folders by kind and an `id:` field only repeated what the stem and the tag already say. The stem is lowercase because zk resolves links without case and macOS and Windows file systems fold case. ADR 0005 changed the tag separator from `:` to `/`.
 
 ## Considered Options
 
