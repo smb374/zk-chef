@@ -20,7 +20,7 @@ func TestExportHugoStyleWritesMatchingLayouts(t *testing.T) {
 		t.Fatalf("tufte: code %d stderr %q, want 0", got.code, got.stderr)
 	}
 	plain, tufte := readTree(t, plainOut), readTree(t, tufteOut)
-	if base := plain["layouts/baseof.html"]; strings.Contains(base, "tufte") || !strings.Contains(base, "this site needs Hugo 0.169.0 or newer") {
+	if base := plain["layouts/baseof.html"]; strings.Contains(base, "tufte") || !strings.Contains(base, "this site needs Hugo "+hugoFloor+" or newer") {
 		t.Errorf("plain layouts/baseof.html = %q, want the floor check and no Tufte", base)
 	}
 	if single := plain["layouts/single.html"]; !strings.Contains(single, ".Params.review") || strings.Contains(single, "status-") {

@@ -48,7 +48,7 @@ func gate(root string, stderr io.Writer) bool {
 		fmt.Fprintf(stderr, "zk-chef: %s: min_version %v is not a semantic version\n", path, raw)
 		return false
 	}
-	if cmp, err := version.Compare(minVersion, firstTagVersion); err == nil && cmp < 0 {
+	if cmp, err := version.Compare(minVersion, firstTagVersion+"-0"); err == nil && cmp < 0 {
 		fmt.Fprintf(stderr, "zk-chef: %s: min_version %s is a v0.2.x vault; zk-chef %s reads v0.3 vaults only\nrun zk-chef init in a new directory; there is no migration\n", path, minVersion, firstTagVersion)
 		return false
 	}

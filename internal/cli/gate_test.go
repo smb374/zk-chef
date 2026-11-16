@@ -75,6 +75,12 @@ func TestGateRefusesV02Vault(t *testing.T) {
 			})
 		}
 	}
+	t.Run("0.3.0-rc.1 passes", func(t *testing.T) {
+		got := runIn(t, "dev", vaultWith(`"0.3.0-rc.1"`), "lint")
+		if strings.Contains(got.stderr, "v0.2.x") {
+			t.Errorf("stderr %q: gate refused a 0.3.0-rc.1 vault", got.stderr)
+		}
+	})
 	t.Run("0.3.0 passes", func(t *testing.T) {
 		got := runIn(t, "dev", vaultWith(`"0.3.0"`), "lint")
 		if strings.Contains(got.stderr, "v0.2.x") {

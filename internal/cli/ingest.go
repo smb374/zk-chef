@@ -25,8 +25,6 @@ import (
 // HTTPClient downloads ingest URLs. Tests replace it with a fake Transport.
 var HTTPClient = &http.Client{Timeout: 60 * time.Second}
 
-var unsafeNameRe = regexp.MustCompile(`[^A-Za-z0-9._-]`)
-
 // rawExtRe is an extension ingest keeps for a raw file: a dot and lowercase letters and digits.
 var rawExtRe = regexp.MustCompile(`\A\.[a-z0-9]+\z`)
 
@@ -65,7 +63,7 @@ func ingestVerb(inv *invocation) int {
 		if err != nil || !st.Mode().IsRegular() {
 			return fail(inv, src+": not a regular file")
 		}
-		name = unsafeNameRe.ReplaceAllString(filepath.Base(src), "-")
+		name = filepath.Base(src)
 	}
 	files, err := lint.LoadWorktree(root)
 	if err != nil {
@@ -215,7 +213,7 @@ func zkNewSource(zk, root string, inv *invocation) (string, error) {
 	return "", fmt.Errorf("zk new returned the existing note %s 3 times; nothing written", filepath.ToSlash(rel))
 }
 
-// urlName is the safe raw file name for rawURL: its last path segment, or "download".
+// urlName is the raw file name for rawURL: its last path segment, or "download".
 func urlName(rawURL string) (string, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -228,7 +226,7 @@ func urlName(rawURL string) (string, error) {
 	if name == "" {
 		return "download", nil
 	}
-	return unsafeNameRe.ReplaceAllString(name, "-"), nil
+	return name, nil
 }
 
 // stageURL downloads rawURL to a new temp file in dir and returns its path, sha256 (hex) and Content-Type.

@@ -69,7 +69,7 @@ To refresh:
 
 ## Floor guard check
 
-The Hugo floor is 0.169.0, the newest Hugo at the time of v0.2.2. It is set in three places that must agree: `min` in `export-scaffold/hugo/hugo.toml.tmpl`, the `errorf` guard at the top of `export-scaffold/hugo/layouts/baseof.html`, and `hugoFloor` in `internal/cli/hugo.go`.
+The Hugo floor is 0.169.0, the newest Hugo at the time of v0.2.2. It is set in four places that must agree: `min` in `export-scaffold/hugo/hugo.toml.tmpl`, the `errorf` guard at the top of `export-scaffold/hugo/layouts/baseof.html`, the same guard in `export-scaffold/hugo-plain/layouts/baseof.html`, and `hugoFloor` in `internal/cli/hugo.go`.
 
 **CI pin.** CI and release install Hugo `0.169.0` only (`hugo-version` in `.github/workflows/ci.yml` and `release.yml`), not `latest`. `TestWorkflowsPinHugo` checks it. When a newer Hugo ships, add a second pin (a matrix of the floor and the newest) so CI builds on both.
 

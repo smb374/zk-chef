@@ -70,7 +70,11 @@ func resolveStyle(out, flag string) (string, error) {
 
 // writeStyle records style in the state file in out.
 func writeStyle(out, style string) error {
-	return os.WriteFile(filepath.Join(out, siteStateFile), []byte(`{"style": "`+style+"\"}\n"), 0o644)
+	q, err := json.Marshal(style)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(out, siteStateFile), []byte(`{"style": `+string(q)+"}\n"), 0o644)
 }
 
 // scaffoldReport lists the slash paths, relative to OUT, that an export created, replaced with the current version, and kept as the user's edit. diffs maps each kept path to the unified diff of the user's file to the current version.

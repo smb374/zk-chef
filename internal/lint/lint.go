@@ -72,7 +72,7 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 	firstOf := map[string]*Page{}
 	for _, d := range docs {
 		if first, dup := firstOf[d.stem]; dup {
-			add("E_DUPLICATE_ID", d.path, 1, fmt.Sprintf("stem %s also used by %s", d.stem, first.path))
+			add("E_DUPLICATE_ID", d.path, 1, fmt.Sprintf("ID %s also used by %s", d.stem, first.path))
 		} else {
 			firstOf[d.stem] = d
 		}
