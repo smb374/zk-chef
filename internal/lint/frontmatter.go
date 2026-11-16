@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -68,21 +67,26 @@ func SetReviewTag(m *yaml.Node, verdict string) {
 	}
 }
 
-// uEscapeRe matches a \uXXXX escape in a double-quoted YAML scalar, as zk's {{json title}} writes for & < and >.
-var uEscapeRe = regexp.MustCompile(`\\u[0-9A-Fa-f]{4}`)
+// dqRe matches a double-quoted YAML scalar on one line.
+var dqRe = regexp.MustCompile(`"(?:[^"\\\n]|\\.)*"`)
 
-func unescapeU(s string) string {
-	return uEscapeRe.ReplaceAllStringFunc(s, func(m string) string {
-		n, _ := strconv.ParseUint(m[2:], 16, 32)
-		return string(rune(n))
+// sameScalars rewrites every double-quoted scalar to its decoded value, so two texts that differ only in how yaml.v3 and zk
+// spell a scalar (\u0026 or &, \U0001F680 or the emoji) compare equal. The \x00 delimiters keep a value apart from its neighbours.
+func sameScalars(s string) string {
+	return dqRe.ReplaceAllStringFunc(s, func(tok string) string {
+		var v string
+		if yaml.Unmarshal([]byte(tok), &v) != nil {
+			return tok
+		}
+		return "\x00" + v + "\x00"
 	})
 }
 
 // canonicalFrontmatter returns text with its frontmatter in the form EditFrontmatter writes. It returns text itself when the
-// frontmatter is invalid, or when it differs from the canonical form only in \uXXXX escapes (yaml.v3 writes the plain character).
+// frontmatter is invalid, or when it differs from the canonical form only in how double-quoted scalars are spelled.
 func canonicalFrontmatter(text string) string {
 	if next, err := EditFrontmatter(text, func(*yaml.Node) error { return nil }); err == nil {
-		if unescapeU(next) == unescapeU(text) {
+		if sameScalars(next) == sameScalars(text) {
 			return text
 		}
 		return next

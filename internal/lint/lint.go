@@ -208,14 +208,14 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 		if d.Kind() != "source" {
 			continue
 		}
-		raw, want := d.str("raw"), d.str("sha256")
-		if raw != "" {
+		raw, want, hasRaw := d.str("raw"), d.str("sha256"), d.source().HasRaw()
+		if hasRaw {
 			rawPaths[raw] = true
 		}
 		if !slices.ContainsFunc(d.lines, func(l line) bool { return l.section == "Review" }) {
 			add("E_REVIEW_HEADING", d.path, 1, "source needs a ## Review heading")
 		}
-		if raw != "" {
+		if hasRaw {
 			if !rawNameOK(raw, d.ID()) {
 				add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("raw must be raw/%s or raw/%s.<ext>", d.ID(), d.ID()))
 			}

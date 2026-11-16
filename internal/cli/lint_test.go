@@ -1003,6 +1003,9 @@ func TestLintFrontmatterFormat(t *testing.T) {
 		{"log template page", "---\ntitle: \"Two\"\ndate: 2026-01-02T03:04:05Z\ntags: [kind/log]\n" + tail, false},
 		{"scaffold index.md", string(index), false},
 		{"title escaped as zk json writes it", "---\ntitle: \"R\\u0026D \\u003cx\\u003e\"\ndate: 2026-01-02T03:04:05Z\ntags: [kind/note]\n" + tail, false},
+		{"raw emoji title as zk writes it", "---\ntitle: \"🚀 Launch\"\ndate: 2026-01-02T03:04:05Z\ntags: [kind/note]\n" + tail, false},
+		{"raw U+2028 in title", "---\ntitle: \"a\u2028b\"\ndate: 2026-01-02T03:04:05Z\ntags: [kind/note]\n" + tail, false},
+		{"layout defect with emoji title", "---\ntitle:   \"🚀 x\"\ndate: 2026-01-02T03:04:05Z\ntags: [ kind/note ,topic/x]\n" + tail, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			p := "notes/not002.md"
@@ -1053,6 +1056,56 @@ func TestLintFixKeepsZkJSONEscapes(t *testing.T) {
 	}
 	if b, err := os.ReadFile("notes/not002.md"); err != nil || string(b) != orig {
 		t.Errorf("notes/not002.md = %q (%v), want it unchanged", b, err)
+	}
+}
+
+// TestLintFixKeepsRawScalars: a page whose double-quoted scalars hold raw non-ASCII characters is canonical, so --fix leaves it as it is.
+func TestLintFixKeepsRawScalars(t *testing.T) {
+	for _, title := range []string{"🚀 Launch", "a\u2028b"} {
+		orig := "---\ntitle: \"" + title + "\"\ndate: 2026-01-02T03:04:05Z\ntags: [kind/note]\n---\nHubs: [[index|Index]]\n\nSee [[not001|Leaders are unique]].\n"
+		t.Run(title, func(t *testing.T) {
+			env := setupVault(t, "dev", with_(t, map[string]string{"notes/not002.md": orig}))
+			got := run(env, "lint", "--fix")
+			if got.code != 0 || got.stdout != "0 errors, 0 warnings\n" {
+				t.Errorf("lint --fix: code %d stdout %q, want nothing fixed and no warning", got.code, got.stdout)
+			}
+			if b, err := os.ReadFile("notes/not002.md"); err != nil || string(b) != orig {
+				t.Errorf("notes/not002.md = %q (%v), want it unchanged", b, err)
+			}
+		})
+	}
+}
+
+// TestLintFixEmojiTitleWithLayoutDefect: --fix repairs a real layout defect on a page with an emoji title, and a second --fix changes nothing.
+func TestLintFixEmojiTitleWithLayoutDefect(t *testing.T) {
+	orig := "---\ntitle:   \"🚀 x\"\ndate: 2026-01-02T03:04:05Z\ntags: [ kind/note ,topic/x]\n---\nHubs: [[index|Index]]\n\nSee [[not001|Leaders are unique]].\n"
+	env := setupVault(t, "dev", with_(t, map[string]string{"notes/not002.md": orig}))
+	if got := run(env, "lint", "--fix"); got.code != 0 || got.stdout != "fixed notes/not002.md\n0 errors, 0 warnings\n" {
+		t.Errorf("first lint --fix: code %d stdout %q, want the page fixed and no warning", got.code, got.stdout)
+	}
+	fixed, err := os.ReadFile("notes/not002.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := run(env, "lint", "--fix"); got.code != 0 || got.stdout != "0 errors, 0 warnings\n" {
+		t.Errorf("second lint --fix: code %d stdout %q, want nothing fixed", got.code, got.stdout)
+	}
+	if b, _ := os.ReadFile("notes/not002.md"); string(b) != string(fixed) {
+		t.Errorf("second --fix changed the page: %q, want %q", b, fixed)
+	}
+}
+
+// TestLintRealZkNoteTitle: a page that real zk writes from the note template for an emoji title has no W_FRONTMATTER_FORMAT.
+func TestLintRealZkNoteTitle(t *testing.T) {
+	env := ingestVault(t)
+	cmd := exec.Command("zk", "note", "--title", "🚀 Launch", "--no-input", "--print-path")
+	cmd.Env = append(os.Environ(), env...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("zk note: %v: %s", err, out)
+	}
+	got := run(env, "lint", "--json")
+	if strings.Contains(got.stdout, "W_FRONTMATTER_FORMAT") {
+		t.Errorf("lint after zk note: %s, want no W_FRONTMATTER_FORMAT", got.stdout)
 	}
 }
 
