@@ -93,17 +93,17 @@ type Source struct {
 }
 
 // dateStr returns a date frontmatter value as YYYY-MM-DD. YAML reads an unquoted date as a time.
-func (d *Page) dateStr(key string) string {
-	if t, ok := d.fm[key].(time.Time); ok {
+func (p *Page) dateStr(key string) string {
+	if t, ok := p.fm[key].(time.Time); ok {
 		return t.Format("2006-01-02")
 	}
-	return d.str(key)
+	return p.str(key)
 }
 
 // ParseSource reads a source note. It fails when the note has no valid frontmatter,
 // is not kind source, or has neither raw with sha256 nor url with accessed.
 func ParseSource(p, text string) (Source, error) {
-	d := parseDoc(p, text)
+	d := ParsePage(p, text)
 	if d.err != "" {
 		return Source{}, errors.New(d.err)
 	}

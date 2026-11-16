@@ -16,7 +16,7 @@ func Fix(root string) ([]string, error) {
 	}
 	var docs []*Page
 	titles := map[string]string{}
-	for _, d := range parseDocs(files) {
+	for _, d := range parsePages(files) {
 		if d.err != "" {
 			continue
 		}

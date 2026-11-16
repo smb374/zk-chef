@@ -52,7 +52,7 @@ func ComputeStatus(files map[string][]byte) (Status, error) {
 			}
 		}
 	}
-	for _, d := range parseDocs(files) {
+	for _, d := range parsePages(files) {
 		if d.err != "" || d.Kind() == "source" || d.Superseded() {
 			continue
 		}
@@ -77,7 +77,7 @@ func ComputeStatus(files map[string][]byte) (Status, error) {
 
 // latestVerified returns the fields of the newest signed block of src when that block verifies.
 func latestVerified(v *verifier, src Source, files map[string][]byte) (map[string]string, bool) {
-	blocks := reviewBlocks(parseDoc(src.Path, string(files[src.Path])))
+	blocks := reviewBlocks(ParsePage(src.Path, string(files[src.Path])))
 	if len(blocks) == 0 {
 		return nil, false
 	}

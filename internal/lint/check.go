@@ -15,8 +15,8 @@ var Reviews = []string{"unreviewed", "reviewed", "disputed"}
 type adder func(code, path string, line int, msg string)
 
 // str returns the string value of a frontmatter key, or "" when it is absent or not a string.
-func (d *Page) str(key string) string {
-	s, _ := d.fm[key].(string)
+func (p *Page) str(key string) string {
+	s, _ := p.fm[key].(string)
 	return s
 }
 

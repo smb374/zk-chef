@@ -42,12 +42,12 @@ func parseConfig(files map[string][]byte) (config, error) {
 	return cfg, nil
 }
 
-// parseDocs parses index.md and every markdown file under notes/, subfolders included (lint reports them), sorted by path.
-func parseDocs(files map[string][]byte) []*Page {
+// parsePages parses index.md and every markdown file under notes/, subfolders included (lint reports them), sorted by path.
+func parsePages(files map[string][]byte) []*Page {
 	var docs []*Page
 	for p, b := range files {
 		if p == IndexPath || strings.HasPrefix(p, NotesDir+"/") && strings.HasSuffix(p, ".md") {
-			docs = append(docs, parseDoc(p, strings.ToValidUTF8(string(b), "\ufffd")))
+			docs = append(docs, ParsePage(p, strings.ToValidUTF8(string(b), "\ufffd")))
 		}
 	}
 	sort.Slice(docs, func(i, j int) bool { return docs[i].path < docs[j].path })
@@ -68,7 +68,7 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 		out = append(out, Finding{code, path, line, msg})
 	}
 	var good []*Page
-	docs := parseDocs(files)
+	docs := parsePages(files)
 	firstOf := map[string]*Page{}
 	for _, d := range docs {
 		if first, dup := firstOf[d.stem]; dup {
