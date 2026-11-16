@@ -100,6 +100,20 @@ func (p *Page) dateStr(key string) string {
 	return p.str(key)
 }
 
+// source reads the source fields of the page, without validating them.
+func (p *Page) source() Source {
+	return Source{
+		ID:       p.ID(),
+		Title:    p.Title(),
+		Path:     p.path,
+		Raw:      p.str("raw"),
+		SHA256:   p.str("sha256"),
+		URL:      p.str("url"),
+		Accessed: p.dateStr("accessed"),
+		Review:   p.Review(),
+	}
+}
+
 // ParseSource reads a source note. It fails when the note has no valid frontmatter,
 // is not kind source, or has neither raw with sha256 nor url with accessed.
 func ParseSource(p, text string) (Source, error) {
@@ -110,16 +124,7 @@ func ParseSource(p, text string) (Source, error) {
 	if d.Kind() != "source" {
 		return Source{}, errors.New("kind is not source")
 	}
-	s := Source{
-		ID:       d.ID(),
-		Title:    d.Title(),
-		Path:     p,
-		Raw:      d.str("raw"),
-		SHA256:   d.str("sha256"),
-		URL:      d.str("url"),
-		Accessed: d.dateStr("accessed"),
-		Review:   d.Review(),
-	}
+	s := d.source()
 	hasRaw, hasURL := s.HasRaw(), s.hasURL()
 	if hasControl(s.URL) || hasControl(s.Accessed) {
 		return Source{}, errors.New("url and accessed must not contain control characters")

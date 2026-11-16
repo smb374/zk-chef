@@ -44,14 +44,14 @@ func parseConfig(files map[string][]byte) (config, error) {
 
 // parsePages parses index.md and every markdown file under notes/, subfolders included (lint reports them), sorted by path.
 func parsePages(files map[string][]byte) []*Page {
-	var docs []*Page
+	var pages []*Page
 	for p, b := range files {
 		if p == IndexPath || strings.HasPrefix(p, NotesDir+"/") && strings.HasSuffix(p, ".md") {
-			docs = append(docs, ParsePage(p, strings.ToValidUTF8(string(b), "\ufffd")))
+			pages = append(pages, ParsePage(p, strings.ToValidUTF8(string(b), "\ufffd")))
 		}
 	}
-	sort.Slice(docs, func(i, j int) bool { return docs[i].path < docs[j].path })
-	return docs
+	sort.Slice(pages, func(i, j int) bool { return pages[i].path < pages[j].path })
+	return pages
 }
 
 // Lint checks files (slash path -> bytes, as LoadWorktree returns) and returns the findings
@@ -68,16 +68,16 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 		out = append(out, Finding{code, path, line, msg})
 	}
 	var good []*Page
-	docs := parsePages(files)
+	pages := parsePages(files)
 	firstOf := map[string]*Page{}
-	for _, d := range docs {
+	for _, d := range pages {
 		if first, dup := firstOf[d.stem]; dup {
 			add("E_DUPLICATE_ID", d.path, 1, fmt.Sprintf("ID %s also used by %s", d.stem, first.path))
 		} else {
 			firstOf[d.stem] = d
 		}
 	}
-	for _, d := range docs {
+	for _, d := range pages {
 		if d.err != "" {
 			add("E_FRONTMATTER", d.path, 1, d.err)
 			continue
@@ -112,8 +112,8 @@ func Lint(files map[string][]byte) ([]Finding, error) {
 	if byID[indexStem] == nil {
 		add("E_UNREACHABLE", IndexPath, 1, "index.md not found")
 	}
-	edges := map[string][]string{}             // hub id -> ids of the docs that name it in their Hubs line
-	linked := map[string][]string{}            // doc id -> ids its body links, past the Hubs line
+	edges := map[string][]string{}             // hub id -> ids of the pages that name it in their Hubs line
+	linked := map[string][]string{}            // page id -> ids its body links, past the Hubs line
 	type hubLink struct{ child, parent *Page } // a hub and one parent hub on its Hubs line
 	var hubLinks []hubLink
 	for _, d := range good {

@@ -10,9 +10,9 @@ import (
 // Pages maps the ID of each parsable note in files to its page.
 func Pages(files map[string][]byte) map[string]*Page {
 	out := map[string]*Page{}
-	for _, d := range parsePages(files) {
-		if d.err == "" {
-			out[d.ID()] = d
+	for _, p := range parsePages(files) {
+		if p.err == "" {
+			out[p.ID()] = p
 		}
 	}
 	return out
@@ -21,7 +21,13 @@ func Pages(files map[string][]byte) map[string]*Page {
 // Children returns the paths of the parsable pages whose Hubs line names hub, sorted by path.
 // It fails when hub is not the ID of a parsable hub page.
 func Children(files map[string][]byte, hub string) ([]string, error) {
-	pages := Pages(files)
+	all := parsePages(files)
+	pages := map[string]*Page{}
+	for _, p := range all {
+		if p.err == "" {
+			pages[p.ID()] = p
+		}
+	}
 	if pages[hub] == nil {
 		return nil, fmt.Errorf("no page with id %s", hub)
 	}
@@ -29,9 +35,9 @@ func Children(files map[string][]byte, hub string) ([]string, error) {
 		return nil, fmt.Errorf("%s is not a hub", hub)
 	}
 	out := []string{}
-	for _, d := range parsePages(files) {
-		if hubs, _ := d.Links(); d.err == "" && slices.Contains(hubs, hub) {
-			out = append(out, d.path)
+	for _, p := range all {
+		if hubs, _ := p.Links(); p.err == "" && slices.Contains(hubs, hub) {
+			out = append(out, p.path)
 		}
 	}
 	return out, nil

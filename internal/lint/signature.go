@@ -192,17 +192,17 @@ func checkReview(d *Page, files map[string][]byte, v *verifier, add adder) {
 		return // a bad latest block is already E_SIGNATURE
 	}
 	// A note with raw and sha256 is signed in the raw form, even when it has a url too.
-	raw, sha := d.str("raw"), d.str("sha256")
-	want := [][2]string{{"url", d.str("url")}, {"accessed", d.dateStr("accessed")}, {"verdict", review}}
-	if raw != "" && sha != "" {
-		want = [][2]string{{"path", raw}, {"sha256", sha}, {"verdict", review}}
+	src := d.source()
+	want := [][2]string{{"url", src.URL}, {"accessed", src.Accessed}, {"verdict", review}}
+	if src.HasRaw() {
+		want = [][2]string{{"path", src.Raw}, {"sha256", src.SHA256}, {"verdict", review}}
 	}
 	for _, kv := range want {
 		if latest[kv[0]] != kv[1] {
 			add("E_REVIEW_MISMATCH", d.path, 1, fmt.Sprintf("latest block %s %s differs from note %s", kv[0], pyRepr(latest[kv[0]]), pyRepr(kv[1])))
 		}
 	}
-	if b, found := files[raw]; found {
+	if b, found := files[src.Raw]; found {
 		if sum := sha256.Sum256(b); latest["sha256"] != hex.EncodeToString(sum[:]) {
 			add("E_REVIEW_MISMATCH", d.path, 1, "latest block sha256 differs from the raw file")
 		}
