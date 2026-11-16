@@ -14,7 +14,7 @@ A vault holds **claims**: one per note, titled by the claim, joined by **link co
 
 1. **Search.** Run `zk list --quiet --match "<topic>"`. Done when you know whether a live note already makes your claim; if one does, use "Edit a note".
 2. **Title the claim.** Create the file with `zk note --title "<claim>"` (`zk-chef-ops`, "Commands"). The title is one complete, positive sentence: "Raft elects at most one leader per term". Done when the title alone tells a reader what the note asserts. A title that needs "and" joining two predicates or two subjects is two notes; split it before you write the body.
-3. **Place it.** List the hubs (`zk list --quiet --tag kind:hub --format "[[{{filename-stem}}|{{title}}]]"`). Fill the first body line as `Hubs: [[stem|Hub]], [[stem|Hub]]`: links joined with `, `, one for every hub whose category the claim fits. Until a cluster justifies a new hub, use the closest existing one. Add a `topic:<value>` tag to `tags` when the claim has a topic (lowercase kebab case, `/` for nesting, such as `topic:ml/rnn`).
+3. **Place it.** List the hubs (`zk list --quiet --tag kind/hub --format "[[{{filename-stem}}|{{title}}]]"`). Fill the first body line as `Hubs: [[stem|Hub]], [[stem|Hub]]`: links joined with `, `, one for every hub whose category the claim fits. Until a cluster justifies a new hub, use the closest existing one. Add a `topic/<value>` tag to `tags` when the claim has a topic (lowercase kebab case, `/` for nesting, such as `topic/ml/rnn`).
 4. **Write the body.** State the claim in your own words: what it says, when it holds, what follows. Mark a claim that goes beyond the cited source with "Inference:" at its start, and cite the sources it builds on. For a fast-changing subject (products, tools, versions), state the "as of" date of the evidence in the body. Factor by concept. Material about one source belongs in its source note. A claim true only inside one project belongs under that project's hub.
 5. **Add link context.** Put each body link in a sentence that states the relationship: supports, contradicts, refines, is an example of, depends on, follows from. Done when a reader can decide to follow each link without opening it. A link alias in a note sentence is your wording: `zk-chef lint --fix` does not change it, so write it to fit the sentence.
 6. **Cite the evidence** (see "Citations").
@@ -33,12 +33,12 @@ Edit in place while the claim stays the same: wording, link context, links, evid
   - a URL (the default for web sources): `2. A. Author, "Title," Site, Oct. 30, 2026. [Online]. Available: https://example.org/x`. After ingest, the entry ends with `, Archive: [[stem|Title]]`.
   - the human: `3. [user, 2026-11-08] statement`
 - **Numbering:** order of first inline use, from 1, without gaps. Renumber on every edit that changes the order. Done when every inline `[n]` has entry n and every entry is cited inline.
-- **Review status:** an unreviewed source is citable. When a note or an answer rests on a source, report that source's `review:` tag in the reply. When a claim is load-bearing and its source is unreviewed, say so in the note body, so a reader of the note sees it. A `disputed` source needs a sentence that says why you cite it.
+- **Review status:** an unreviewed source is citable. When a note or an answer rests on a source, report that source's `review/` tag in the reply. When a claim is load-bearing and its source is unreviewed, say so in the note body, so a reader of the note sees it. A `disputed` source needs a sentence that says why you cite it.
 - A note without evidence has no References section.
 
 ## Source notes
 
-A source note is a **reference note**, like a wiki `File:` page. `zk-chef ingest` makes the file, its tags (`kind:source`, `review:unreviewed`), its Hubs line and its evidence fields (`url` with `accessed`, `raw` with `sha256`). Title: the work's short title. Body, in order:
+A source note is a **reference note**, like a wiki `File:` page. `zk-chef ingest` makes the file, its tags (`kind/source`, `review/unreviewed`), its Hubs line and its evidence fields (`url` with `accessed`, `raw` with `sha256`). Title: the work's short title. Body, in order:
 
 1. The Hubs line, as ingest wrote it. Add a hub when the source also belongs to another topic.
 2. One line on why the file was ingested.
@@ -52,7 +52,7 @@ Ideas the file prompts go into concept notes that cite the source.
 
 ## Hubs
 
-A hub is a **category**, like a wiki `Category:` page. Its title is a noun phrase: "Consensus protocols". It is a file in `notes/` with the tag `kind:hub`, made with `zk hub --title "<title>"`. Its Hubs line names its parent hub, so every hub reaches the Index. The Index is the one exception: it is `index.md` in the vault root, beside `AGENTS.md`, and links as `[[index|Index]]`.
+A hub is a **category**, like a wiki `Category:` page. Its title is a noun phrase: "Consensus protocols". It is a file in `notes/` with the tag `kind/hub`, made with `zk hub --title "<title>"`. Its Hubs line names its parent hub, so every hub reaches the Index. The Index is the one exception: it is `index.md` in the vault root, beside `AGENTS.md`, and links as `[[index|Index]]`.
 
 - **Members** join through their own Hubs lines; `zk-chef lint --children HUB-STEM` lists them.
 - **Child hubs:** the parent's body links each child hub, in its map. Lint warns (`W_HUB_UNLISTED`) when it does not. A top-level hub is linked from the Index.
@@ -65,7 +65,7 @@ A hub is a **category**, like a wiki `Category:` page. Its title is a noun phras
 
 ## Logs
 
-A log holds project material: decisions, meetings, plans, status. Create it with `zk log --title "<title>"`; the title is free. The template gives it the tag `kind:log` and a `## Updates` section. The Hubs line names the project hub. Add a `type:<value>` tag when one fits (`type:decision`, `type:meeting`, `type:plan` or `type:status`; lowercase kebab case; only logs have a `type:` tag). Add `topic:<value>` tags as for a note.
+A log holds project material: decisions, meetings, plans, status. Create it with `zk log --title "<title>"`; the title is free. The template gives it the tag `kind/log` and a `## Updates` section. The Hubs line names the project hub. Add a `type/<value>` tag when one fits (`type/decision`, `type/meeting`, `type/plan` or `type/status`; lowercase kebab case; only logs have a `type/` tag). Add `topic/<value>` tags as for a note.
 
 Write each update under `## Updates` as a `### YYYY-MM-DD` heading, newest first. Other H2 sections may come before `## Updates`. Edit the log in place as the project moves. A lesson that holds beyond the project becomes a note under its topic hub, and the log links it.
 

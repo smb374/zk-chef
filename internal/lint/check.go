@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// Reviews are the values of the review: tag.
+// Reviews are the values of the review/ tag.
 var Reviews = []string{"unreviewed", "reviewed", "disputed"}
 
 // adder records one finding.
@@ -37,31 +37,23 @@ func pyRepr(v any) string {
 // stemRe is the stem of every page but the root index: 6 lowercase letters and digits.
 var stemRe = regexp.MustCompile(`\A[a-z0-9]{6}\z`)
 
-// kindValues are the values of the kind: tag.
+// kindValues are the values of the kind/ tag.
 var kindValues = []string{"note", "hub", "source", "log"}
 
-// Kebab words, joined by "/" for topic: tags. A type: tag is one kebab word.
+// Kebab words, joined by "/" for topic/ tags. A type/ tag is one kebab word.
 var (
 	kebabRe = regexp.MustCompile(`\A[a-z0-9]+(-[a-z0-9]+)*\z`)
 	topicRe = regexp.MustCompile(`\A[a-z0-9]+(-[a-z0-9]+)*(/[a-z0-9]+(-[a-z0-9]+)*)*\z`)
 )
 
-// tagKnown reports whether tag belongs to the namespaces the page's kind allows.
-func tagKnown(tag, kind string) bool {
-	ns, v, _ := strings.Cut(tag, ":")
-	switch ns {
-	case "kind":
-		return slices.Contains(kindValues, v)
-	case "review":
-		return kind == "source" && slices.Contains(Reviews, v)
-	case "status":
-		return v == "superseded"
-	case "topic":
-		return topicRe.MatchString(v)
-	case "type":
-		return kind == "log" && kebabRe.MatchString(v)
-	}
-	return false
+// tagNamespaces are the namespaces zk-chef defines. A tag in one of them with a bad value is E_FRONTMATTER;
+// a tag in another namespace, or without "/", is W_UNKNOWN_TAG.
+var tagNamespaces = []string{"kind", "review", "status", "topic", "type"}
+
+// tagKnown reports whether tag is in one of the tagNamespaces.
+func tagKnown(tag string) bool {
+	ns, _, ok := strings.Cut(tag, "/")
+	return ok && slices.Contains(tagNamespaces, ns)
 }
 
 // knownKeys are the frontmatter keys every kind lists; keysByKind adds the keys of one kind.
@@ -73,7 +65,7 @@ var (
 	}
 )
 
-// checkKeys warns about each frontmatter key that the page's kind does not list, and each tag outside the namespaces it allows.
+// checkKeys warns about each frontmatter key that the page's kind does not list, and each tag outside the namespaces zk-chef defines.
 func checkKeys(d *Page, add adder) {
 	var unknown []string
 	for key := range d.fm {
@@ -86,8 +78,8 @@ func checkKeys(d *Page, add adder) {
 		add("W_UNKNOWN_KEY", d.path, 1, fmt.Sprintf("key %s is not listed for kind %s", key, d.Kind()))
 	}
 	for _, tag := range d.tags {
-		if !tagKnown(tag, d.Kind()) {
-			add("W_UNKNOWN_TAG", d.path, 1, "tag "+tag+" is not allowed for kind "+d.Kind())
+		if !tagKnown(tag) {
+			add("W_UNKNOWN_TAG", d.path, 1, "tag "+tag+" is not a kind, review, status, topic or type tag")
 		}
 	}
 }
@@ -135,7 +127,7 @@ func checkFrontmatter(d *Page, add adder) {
 	kinds := d.tagValues("kind")
 	switch {
 	case len(kinds) != 1:
-		add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("page needs exactly one kind: tag (note, hub, source or log), found %d", len(kinds)))
+		add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("page needs exactly one kind/ tag (note, hub, source or log), found %d", len(kinds)))
 	case !slices.Contains(kindValues, kinds[0]):
 		add("E_FRONTMATTER", d.path, 1, fmt.Sprintf("kind %s is not note, hub, source or log", pyRepr(kinds[0])))
 	}
@@ -145,23 +137,36 @@ func checkFrontmatter(d *Page, add adder) {
 	}
 	for _, s := range d.tagValues("status") {
 		if s != "superseded" {
-			add("E_FRONTMATTER", d.path, 1, "status tag must be status:superseded, found status:"+s)
+			add("E_FRONTMATTER", d.path, 1, "status tag must be status/superseded, found status/"+s)
 		}
 	}
 	if d.Superseded() {
 		if kind == "hub" || kind == "log" {
 			add("E_FRONTMATTER", d.path, 1, kind+" must not be superseded")
 		} else if _, ok := d.fm["superseded_by"].(string); !ok {
-			add("E_FRONTMATTER", d.path, 1, "status:superseded needs superseded_by: STEM")
+			add("E_FRONTMATTER", d.path, 1, "status/superseded needs superseded_by: STEM")
+		}
+	}
+	for _, v := range d.tagValues("topic") {
+		if !topicRe.MatchString(v) {
+			add("E_FRONTMATTER", d.path, 1, "topic tag must be topic/<kebab>[/<kebab>...], found topic/"+v)
+		}
+	}
+	for _, v := range d.tagValues("type") {
+		switch {
+		case kind != "log":
+			add("E_FRONTMATTER", d.path, 1, "only a log has a type/ tag, found type/"+v)
+		case !kebabRe.MatchString(v):
+			add("E_FRONTMATTER", d.path, 1, "type tag must be type/<kebab>, found type/"+v)
 		}
 	}
 	if kind == "source" {
 		checkSourceEvidence(d, add)
 		if r := d.tagValues("review"); len(r) != 1 || !slices.Contains(Reviews, r[0]) {
-			add("E_FRONTMATTER", d.path, 1, "source needs exactly one review: tag, one of "+strings.Join(Reviews, ", "))
+			add("E_FRONTMATTER", d.path, 1, "source needs exactly one review/ tag, one of "+strings.Join(Reviews, ", "))
 		}
 	} else if kind != "" && len(d.tagValues("review")) > 0 {
-		add("E_FRONTMATTER", d.path, 1, "only a source has a review: tag")
+		add("E_FRONTMATTER", d.path, 1, "only a source has a review/ tag")
 	}
 }
 

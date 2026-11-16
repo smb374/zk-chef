@@ -27,11 +27,11 @@ type kv [2]string
 
 // doc builds a v0.3 page: title, date and a tags list that starts with the kind. The ID is the file stem, so doc takes none.
 func doc(title, kind, body string, extra ...kv) string {
-	tags := []string{"kind:" + kind}
+	tags := []string{"kind/" + kind}
 	var fm strings.Builder
 	for _, e := range extra {
 		if e[0] == "review" || e[0] == "status" {
-			tags = append(tags, e[0]+":"+e[1])
+			tags = append(tags, e[0]+"/"+e[1])
 			continue
 		}
 		fm.WriteString(e[0] + ": " + e[1] + "\n")
@@ -344,20 +344,20 @@ func TestLintPageFormat(t *testing.T) {
 	note := func(fm string) string {
 		return "---\n" + fm + "---\nHubs: [[hubsrc|Sources]]\n\nSee [[not001|Leaders are unique]].\n"
 	}
-	valid := "title: Other\ndate: 2026-01-02T03:04:05Z\ntags: [kind:note]\n"
+	valid := "title: Other\ndate: 2026-01-02T03:04:05Z\ntags: [kind/note]\n"
 	tests := []struct {
 		name    string
 		changes map[string]string
 		want    []finding // exactly these findings; the message is checked by substring
 	}{
 		{"a valid page is clean", map[string]string{"notes/notaaa.md": note(valid)}, nil},
-		{"no kind tag", map[string]string{"notes/notaaa.md": note("title: Other\ndate: 2026-01-02T03:04:05Z\ntags: [topic:x]\n")},
+		{"no kind tag", map[string]string{"notes/notaaa.md": note("title: Other\ndate: 2026-01-02T03:04:05Z\ntags: [topic/x]\n")},
 			[]finding{{"E_FRONTMATTER", "notes/notaaa.md", 1, "kind"}}},
-		{"two kind tags", map[string]string{"notes/notaaa.md": note("title: Other\ndate: 2026-01-02T03:04:05Z\ntags: [kind:note, kind:hub]\n")},
+		{"two kind tags", map[string]string{"notes/notaaa.md": note("title: Other\ndate: 2026-01-02T03:04:05Z\ntags: [kind/note, kind/hub]\n")},
 			[]finding{{"E_FRONTMATTER", "notes/notaaa.md", 1, "kind"}}},
-		{"unknown kind", map[string]string{"notes/notaaa.md": note("title: Other\ndate: 2026-01-02T03:04:05Z\ntags: [kind:essay]\n")},
+		{"unknown kind", map[string]string{"notes/notaaa.md": note("title: Other\ndate: 2026-01-02T03:04:05Z\ntags: [kind/essay]\n")},
 			[]finding{{"E_FRONTMATTER", "notes/notaaa.md", 1, "kind"}}},
-		{"no date", map[string]string{"notes/notaaa.md": note("title: Other\ntags: [kind:note]\n")},
+		{"no date", map[string]string{"notes/notaaa.md": note("title: Other\ntags: [kind/note]\n")},
 			[]finding{{"E_FRONTMATTER", "notes/notaaa.md", 1, "date"}}},
 		{"no tags", map[string]string{"notes/notaaa.md": note("title: Other\ndate: 2026-01-02T03:04:05Z\n")},
 			[]finding{{"E_FRONTMATTER", "notes/notaaa.md", 1, "tags"}}},
@@ -591,7 +591,7 @@ func TestLintFixAliasScope(t *testing.T) {
 		{"no kind", "", "notes/xxx001.md", all, false}, // lint drops a page with no kind
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			tags := "[kind:" + tc.kind + "]"
+			tags := "[kind/" + tc.kind + "]"
 			if tc.kind == "" {
 				tags = "[]"
 			}
@@ -765,7 +765,7 @@ func taggedPage(title string, tags []string, body string) string {
 	return "---\ntitle: " + title + "\ndate: 2026-01-02T03:04:05Z\ntags: [" + strings.Join(tags, ", ") + "]\n---\n" + body + "\n"
 }
 
-// TestLintUnknownTag: a tag outside kind:, review: (sources), status:superseded, topic: and type: (logs) is W_UNKNOWN_TAG.
+// TestLintUnknownTag: a tag without "/" or in an unknown namespace is W_UNKNOWN_TAG; a valid topic or log type tag is silent.
 func TestLintUnknownTag(t *testing.T) {
 	noteBody := hubLine + "\n\nSee [[not001|Leaders are unique]]."
 	logBody := hubLine + "\n\n## Updates"
@@ -774,17 +774,10 @@ func TestLintUnknownTag(t *testing.T) {
 		page string
 		want string // the tag the message names; empty means silent
 	}{
-		{"topic with nested kebab segments", taggedPage("Two", []string{"kind:note", "topic:ml/rnn-2", "topic:x"}, noteBody), ""},
-		{"type on a log", taggedPage("Two", []string{"kind:log", "type:decision"}, logBody), ""},
-		{"a bare tag", taggedPage("Two", []string{"kind:note", "custom"}, noteBody), "custom"},
-		{"an unknown namespace", taggedPage("Two", []string{"kind:note", "area:ml"}, noteBody), "area:ml"},
-		{"topic with capitals", taggedPage("Two", []string{"kind:note", "topic:ML"}, noteBody), "topic:ML"},
-		{"topic with an empty segment", taggedPage("Two", []string{"kind:note", "topic:a//b"}, noteBody), "topic:a//b"},
-		{"topic with a trailing slash", taggedPage("Two", []string{"kind:note", "topic:a/"}, noteBody), "topic:a/"},
-		{"empty topic", taggedPage("Two", []string{"kind:note", "topic:"}, noteBody), "topic:"},
-		{"type on a note", taggedPage("Two", []string{"kind:note", "type:decision"}, noteBody), "type:decision"},
-		{"type with a slash", taggedPage("Two", []string{"kind:log", "type:a/b"}, logBody), "type:a/b"},
-		{"type with capitals", taggedPage("Two", []string{"kind:log", "type:Decision"}, logBody), "type:Decision"},
+		{"topic with nested kebab segments", taggedPage("Two", []string{"kind/note", "topic/ml/rnn-2", "topic/x"}, noteBody), ""},
+		{"type on a log", taggedPage("Two", []string{"kind/log", "type/decision"}, logBody), ""},
+		{"a bare tag", taggedPage("Two", []string{"kind/note", "custom"}, noteBody), "custom"},
+		{"an unknown namespace", taggedPage("Two", []string{"kind/note", "area/ml"}, noteBody), "area/ml"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -804,7 +797,52 @@ func TestLintUnknownTag(t *testing.T) {
 	})
 }
 
-// TestLintSupersede: status:superseded needs superseded_by to an existing page and the body line
+// TestLintTagNamespaces: a bad value in a known namespace is E_FRONTMATTER only; an unknown namespace, a tag without "/" or an old ":" tag is W_UNKNOWN_TAG.
+func TestLintTagNamespaces(t *testing.T) {
+	noteBody := hubLine + "\n\nSee [[not001|Leaders are unique]]."
+	tests := []struct {
+		name      string
+		tags      []string
+		wantError string // substring of the E_FRONTMATTER message; empty means no error
+		wantWarn  bool
+	}{
+		{"unknown kind value", []string{"kind/essay"}, "kind", false},
+		{"bad status value", []string{"kind/note", "status/draft"}, "status", false},
+		{"review on a note", []string{"kind/note", "review/maybe"}, "review", false},
+		{"bad topic value", []string{"kind/note", "topic/ML"}, "topic", false},
+		{"empty topic segment", []string{"kind/note", "topic/a//b"}, "topic", false},
+		{"type with a slash", []string{"kind/log", "type/a/b"}, "type", false},
+		{"type with capitals", []string{"kind/log", "type/Decision"}, "type", false},
+		{"type on a note", []string{"kind/note", "type/decision"}, "type", false},
+		{"a bare tag", []string{"kind/note", "custom"}, "", true},
+		{"an unknown namespace", []string{"kind/note", "foo/bar"}, "", true},
+		{"an old colon kind tag is no kind", []string{"kind:note"}, "kind", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			found := findingsOf(t, with_(t, map[string]string{"notes/not002.md": taggedPage("Two", tt.tags, noteBody)}))
+			var errMsg string
+			warn := false
+			for _, f := range found {
+				if f.Path != "notes/not002.md" {
+					continue
+				}
+				if f.Code == "E_FRONTMATTER" {
+					errMsg += f.Msg + "\n"
+				}
+				warn = warn || f.Code == "W_UNKNOWN_TAG"
+			}
+			if (tt.wantError == "") != (errMsg == "") || !strings.Contains(errMsg, tt.wantError) {
+				t.Errorf("E_FRONTMATTER messages %q, want one containing %q", errMsg, tt.wantError)
+			}
+			if warn != tt.wantWarn {
+				t.Errorf("W_UNKNOWN_TAG = %v, want %v", warn, tt.wantWarn)
+			}
+		})
+	}
+}
+
+// TestLintSupersede: status/superseded needs superseded_by to an existing page and the body line
 // "Superseded by [[stem|Title]]" after the Hubs line; a hub or a log cannot be superseded.
 func TestLintSupersede(t *testing.T) {
 	new := doc("New claim", "note", hubLine+"\n\nSee [[not001|Leaders are unique]].")

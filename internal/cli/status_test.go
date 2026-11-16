@@ -74,15 +74,15 @@ func TestStatusNewVersusReReview(t *testing.T) {
 		mustReview(t, env, id, "reviewed")
 	}
 	replaceInFile(t, "notes/src003.md", "verdict: reviewed", "verdict: disputed")
-	replaceInFile(t, "notes/src003.md", "review:reviewed", "review:unreviewed")
-	replaceInFile(t, "notes/src004.md", "review:reviewed", "review:unreviewed")
+	replaceInFile(t, "notes/src003.md", "review/reviewed", "review/unreviewed")
+	replaceInFile(t, "notes/src004.md", "review/reviewed", "review/unreviewed")
 	newRaw := "new edition\n"
 	writeFile(t, "raw/src001.bin", newRaw)
 	if err := os.Chtimes("raw/src001.bin", time.Unix(1e9, 0), time.Unix(1e9, 0)); err != nil {
 		t.Fatal(err)
 	}
 	replaceInFile(t, "notes/src001.md", "sha256: "+rawSHA, fmt.Sprintf("sha256: %x", sha256.Sum256([]byte(newRaw))))
-	replaceInFile(t, "notes/src001.md", "review:reviewed", "review:unreviewed")
+	replaceInFile(t, "notes/src001.md", "review/reviewed", "review/unreviewed")
 
 	r := statusJSON(t, env)
 	wantNew := []statusSource{{"src002", "notes/src002.md"}, {"src003", "notes/src003.md"}, {"src004", "notes/src004.md"}}
@@ -109,7 +109,7 @@ func TestStatusURLOnlyNewVersusReReview(t *testing.T) {
 		mustReview(t, env, id, "reviewed")
 	}
 	for _, id := range []string{"srcu01", "srcu02", "srcu03"} {
-		replaceInFile(t, "notes/"+id+".md", "review:reviewed", "review:unreviewed")
+		replaceInFile(t, "notes/"+id+".md", "review/reviewed", "review/unreviewed")
 	}
 	replaceInFile(t, "notes/srcu02.md", "accessed: 2026-01-03", "accessed: 2026-02-04")
 	replaceInFile(t, "notes/srcu03.md", "url: https://example.com/srcu03", "url: https://example.com/moved")

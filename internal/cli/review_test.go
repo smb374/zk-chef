@@ -81,8 +81,8 @@ func TestReviewSignsURLOnlySource(t *testing.T) {
 	}
 	note := readFile(t, "notes/srcurl.md")
 	want := "vault-review v2\nurl: https://example.com/srcurl\naccessed: 2026-01-03\nverdict: reviewed\ndate: "
-	if !strings.Contains(note, want) || !strings.Contains(note, "\ntags: [kind:source, review:reviewed]\n") {
-		t.Errorf("note %q, want the tag review:reviewed and a block containing %q", note, want)
+	if !strings.Contains(note, want) || !strings.Contains(note, "\ntags: [kind/source, review/reviewed]\n") {
+		t.Errorf("note %q, want the tag review/reviewed and a block containing %q", note, want)
 	}
 	if lint := run(env, "lint"); lint.code != 0 || lint.stdout != "0 errors, 0 warnings\n" {
 		t.Errorf("lint after review: code %d stdout %q, want clean", lint.code, lint.stdout)
@@ -92,15 +92,15 @@ func TestReviewSignsURLOnlySource(t *testing.T) {
 	}
 }
 
-// TestReviewRewritesOnlyTheReviewTag: a title or url that holds "review:unreviewed" stays unchanged, for inline and block tag lists.
+// TestReviewRewritesOnlyTheReviewTag: a title or url that holds "review/unreviewed" stays unchanged, for inline and block tag lists.
 func TestReviewRewritesOnlyTheReviewTag(t *testing.T) {
-	inline := "tags: [kind:source, review:unreviewed]\n"
-	block := "tags:\n  - kind:source\n  - review:unreviewed\n"
+	inline := "tags: [kind/source, review/unreviewed]\n"
+	block := "tags:\n  - kind/source\n  - review/unreviewed\n"
 	for _, tc := range []struct{ name, title, url, tags, want string }{
-		{"title inline", "Note review:unreviewed", "https://example.com/a", inline, "tags: [kind:source, review:reviewed]\n"},
-		{"title block", "Note review:unreviewed", "https://example.com/a", block, "tags:\n  - kind:source\n  - review:reviewed\n"},
-		{"url inline", "Plain", "https://example.com/?q=review:unreviewed", inline, "tags: [kind:source, review:reviewed]\n"},
-		{"url block", "Plain", "https://example.com/?q=review:unreviewed", block, "tags:\n  - kind:source\n  - review:reviewed\n"},
+		{"title inline", "Note review/unreviewed", "https://example.com/a", inline, "tags: [kind/source, review/reviewed]\n"},
+		{"title block", "Note review/unreviewed", "https://example.com/a", block, "tags:\n  - kind/source\n  - review/reviewed\n"},
+		{"url inline", "Plain", "https://example.com/?q=review/unreviewed", inline, "tags: [kind/source, review/reviewed]\n"},
+		{"url block", "Plain", "https://example.com/?q=review/unreviewed", block, "tags:\n  - kind/source\n  - review/reviewed\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := newSigner(t)
@@ -130,8 +130,8 @@ func TestReviewSignsAndCommits(t *testing.T) {
 		t.Fatalf("got code %d stdout %q stderr %q, want 0 \"signed src001: reviewed\\n\"", got.code, got.stdout, got.stderr)
 	}
 	note := readNote(t)
-	if !strings.Contains(note, "\ntags: [kind:source, review:reviewed]\n") || strings.Contains(note, "\nreview:") || strings.Count(note, "BEGIN PGP SIGNED MESSAGE") != 1 {
-		t.Errorf("note %q, want the tag review:reviewed (no review: field) and one signed block", note)
+	if !strings.Contains(note, "\ntags: [kind/source, review/reviewed]\n") || strings.Contains(note, "\nreview:") || strings.Count(note, "BEGIN PGP SIGNED MESSAGE") != 1 {
+		t.Errorf("note %q, want the tag review/reviewed (no review: field) and one signed block", note)
 	}
 	if lint := run(env, "lint"); lint.code != 0 || lint.stdout != "0 errors, 0 warnings\n" {
 		t.Errorf("lint after review: code %d stdout %q, want clean", lint.code, lint.stdout)
@@ -219,8 +219,8 @@ func TestReviewSecondVerdictGoesFirst(t *testing.T) {
 		t.Fatalf("second: code %d stdout %q stderr %q, want 0 %q", got.code, got.stdout, got.stderr, want)
 	}
 	note := readNote(t)
-	if n := strings.Count(note, "BEGIN PGP SIGNED MESSAGE"); n != 2 || !strings.Contains(note, "\ntags: [kind:source, review:disputed]\n") {
-		t.Errorf("note %q, want two blocks and the tag review:disputed", note)
+	if n := strings.Count(note, "BEGIN PGP SIGNED MESSAGE"); n != 2 || !strings.Contains(note, "\ntags: [kind/source, review/disputed]\n") {
+		t.Errorf("note %q, want two blocks and the tag review/disputed", note)
 	}
 	if first := strings.Index(note, "verdict: disputed"); first < 0 || first > strings.Index(note, "verdict: reviewed") {
 		t.Errorf("note %q, want the disputed block before the reviewed block", note)
@@ -281,7 +281,7 @@ func TestReviewQueueKeys(t *testing.T) {
 		t.Errorf("stdout %q lists the reviewed source or signs src005", got.stdout)
 	}
 	for id, want := range map[string]string{"src001": "reviewed", "src002": "disputed", "src003": "unreviewed", "src004": "reviewed", "src005": "unreviewed"} {
-		if note := readFile(t, "notes/"+id+".md"); !strings.Contains(note, "tags: [kind:source, review:"+want+"]\n") {
+		if note := readFile(t, "notes/"+id+".md"); !strings.Contains(note, "tags: [kind/source, review/"+want+"]\n") {
 			t.Errorf("notes/%s.md review is not %s:\n%s", id, want, note)
 		}
 	}
@@ -309,7 +309,7 @@ func TestReviewQueueURLOnlySource(t *testing.T) {
 	if strings.Contains(got.stdout, "srcu01: Title srcu01\nraw:") {
 		t.Errorf("stdout %q shows a raw line for the URL-only source", got.stdout)
 	}
-	if note := readFile(t, "notes/srcu01.md"); !strings.Contains(note, "tags: [kind:source, review:reviewed]\n") {
+	if note := readFile(t, "notes/srcu01.md"); !strings.Contains(note, "tags: [kind/source, review/reviewed]\n") {
 		t.Errorf("srcu01 not reviewed:\n%s", note)
 	}
 }
@@ -338,7 +338,7 @@ func TestReviewQueueEOFEndsLikeQuit(t *testing.T) {
 	if got.code != 0 || !strings.HasSuffix(got.stdout, "reviewed 1, disputed 0, skipped 0\n") {
 		t.Errorf("got code %d stdout %q, want 0 and reviewed 1, disputed 0, skipped 0", got.code, got.stdout)
 	}
-	if note := readFile(t, "notes/src002.md"); !strings.Contains(note, "review:unreviewed]\n") {
+	if note := readFile(t, "notes/src002.md"); !strings.Contains(note, "review/unreviewed]\n") {
 		t.Errorf("src002 changed after EOF:\n%s", note)
 	}
 }
@@ -354,10 +354,10 @@ func TestReviewQueueHashMismatchSkips(t *testing.T) {
 	if !strings.Contains(got.stderr, "raw file changed since ingest; inspect it, then update sha256") {
 		t.Errorf("stderr %q, want the refusal", got.stderr)
 	}
-	if note := readFile(t, "notes/src001.md"); !strings.Contains(note, "review:unreviewed]\n") {
+	if note := readFile(t, "notes/src001.md"); !strings.Contains(note, "review/unreviewed]\n") {
 		t.Errorf("src001 changed despite the mismatch:\n%s", note)
 	}
-	if note := readFile(t, "notes/src002.md"); !strings.Contains(note, "review:reviewed]\n") {
+	if note := readFile(t, "notes/src002.md"); !strings.Contains(note, "review/reviewed]\n") {
 		t.Errorf("src002 not reviewed after the skip:\n%s", note)
 	}
 }

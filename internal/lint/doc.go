@@ -90,7 +90,7 @@ func ParsePage(path, text string) *Page {
 func (p *Page) readTags() {
 	raw, ok := p.fm["tags"]
 	if !ok {
-		p.tagsErr = "tags is required (a list such as [kind:note])"
+		p.tagsErr = "tags is required (a list such as [kind/note])"
 		return
 	}
 	list, isList := raw.([]any)
@@ -109,11 +109,11 @@ func (p *Page) readTags() {
 	}
 }
 
-// tagValues returns the values of the tags in namespace ns ("kind" gives "note" for kind:note), in file order.
+// tagValues returns the values of the tags in namespace ns ("kind" gives "note" for kind/note), in file order.
 func (p *Page) tagValues(ns string) []string {
 	var out []string
 	for _, t := range p.tags {
-		if v, ok := strings.CutPrefix(t, ns+":"); ok {
+		if v, ok := strings.CutPrefix(t, ns+"/"); ok {
 			out = append(out, v)
 		}
 	}

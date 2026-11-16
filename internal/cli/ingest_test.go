@@ -72,7 +72,7 @@ func TestIngestFile(t *testing.T) {
 	for _, want := range []string{
 		"raw: " + rawPath + "\n",
 		fmt.Sprintf("sha256: %x\n", sha256.Sum256([]byte(content))),
-		"tags: [kind:source, review:unreviewed]\n",
+		"tags: [kind/source, review/unreviewed]\n",
 		"title: \"My Title\"\n",
 	} {
 		if !strings.Contains(note, want) {
@@ -82,7 +82,7 @@ func TestIngestFile(t *testing.T) {
 	if strings.Contains(note, "url:") || strings.Contains(note, "accessed:") {
 		t.Errorf("file ingest set url or accessed:\n%s", note)
 	}
-	if strings.Count(note, "raw:") != 1 || strings.Count(note, "sha256:") != 1 || strings.Count(note, "review:") != 1 {
+	if strings.Count(note, "raw:") != 1 || strings.Count(note, "sha256:") != 1 || strings.Count(note, "review/") != 1 {
 		t.Errorf("template keys duplicated:\n%s", note)
 	}
 }
@@ -189,7 +189,7 @@ func TestIngestURL(t *testing.T) {
 			for _, want := range []string{
 				"raw: " + rawPath + "\n",
 				fmt.Sprintf("sha256: %x\n", sha256.Sum256([]byte(body))),
-				"tags: [kind:source, review:unreviewed]\n",
+				"tags: [kind/source, review/unreviewed]\n",
 				"url: " + strconv.Quote(tt.url) + "\n",
 			} {
 				if !strings.Contains(note, want) {
@@ -256,7 +256,7 @@ func TestIngestNoRaw(t *testing.T) {
 		t.Fatalf("exit %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
 	}
 	note := readFile(t, "notes/"+m[1]+".md")
-	for _, want := range []string{"url: \"https://example.com/p.pdf\"\n", "tags: [kind:source, review:unreviewed]\n"} {
+	for _, want := range []string{"url: \"https://example.com/p.pdf\"\n", "tags: [kind/source, review/unreviewed]\n"} {
 		if !strings.Contains(note, want) {
 			t.Errorf("note lacks %q:\n%s", want, note)
 		}
@@ -292,7 +292,7 @@ func fakeZk(t *testing.T, clashes int) string {
 n=$(cat "$COUNT_FILE" 2>/dev/null || echo 0)
 echo $((n + 1)) > "$COUNT_FILE"
 if [ "$n" -lt "$CLASHES" ]; then echo notes/old001.md; exit 0; fi
-printf -- '---\ntitle: "T"\ndate: 2026-01-02T03:04:05Z\ntags: [kind:source, review:unreviewed]\n---\nHubs: ' > notes/new001.md
+printf -- '---\ntitle: "T"\ndate: 2026-01-02T03:04:05Z\ntags: [kind/source, review/unreviewed]\n---\nHubs: ' > notes/new001.md
 echo notes/new001.md
 `
 	if err := os.WriteFile(filepath.Join(bin, "zk"), []byte(script), 0o755); err != nil {

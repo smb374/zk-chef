@@ -48,7 +48,7 @@ func (p *Page) Err() error {
 // ID is the file stem.
 func (p *Page) ID() string { return p.stem }
 
-// Kind is the value of the page's single kind: tag, or "" when the page has none or several.
+// Kind is the value of the page's single kind/ tag, or "" when the page has none or several.
 func (p *Page) Kind() string {
 	if k := p.tagValues("kind"); len(k) == 1 {
 		return k[0]
@@ -59,7 +59,7 @@ func (p *Page) Kind() string {
 // Title is the frontmatter title, or "" when it is absent or not a string.
 func (p *Page) Title() string { return p.str("title") }
 
-// Review is the value of the page's first review: tag, or "" when it has none.
+// Review is the value of the page's first review/ tag, or "" when it has none.
 func (p *Page) Review() string {
 	if r := p.tagValues("review"); len(r) > 0 {
 		return r[0]
@@ -67,8 +67,8 @@ func (p *Page) Review() string {
 	return ""
 }
 
-// Superseded reports whether the page has the tag status:superseded.
-func (p *Page) Superseded() bool { return slices.Contains(p.tags, "status:superseded") }
+// Superseded reports whether the page has the tag status/superseded.
+func (p *Page) Superseded() bool { return slices.Contains(p.tags, "status/superseded") }
 
 // SupersededBy is the frontmatter superseded_by, or "" when it is absent or not a string.
 func (p *Page) SupersededBy() string { return p.str("superseded_by") }

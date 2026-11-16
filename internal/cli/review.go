@@ -27,13 +27,13 @@ func failCode(inv *invocation, code int, msg string) int {
 }
 
 var (
-	reviewTagRe  = regexp.MustCompile(`\breview:(?:` + strings.Join(lint.Reviews, "|") + `)\b`)
+	reviewTagRe  = regexp.MustCompile(`\breview/(?:` + strings.Join(lint.Reviews, "|") + `)\b`)
 	reviewHeadRe = regexp.MustCompile(`(?m)^## Review[ \t]*\n\n?`)
 	tagsLineRe   = regexp.MustCompile(`^tags:(.*)$`)
 	tagItemRe    = regexp.MustCompile(`^\s+-\s`)
 )
 
-// setReviewTag replaces the review: tag inside the tags value of head, an inline list or a block list.
+// setReviewTag replaces the review/ tag inside the tags value of head, an inline list or a block list.
 func setReviewTag(head, verdict string) string {
 	lines := strings.SplitAfter(head, "\n")
 	inTags := false
@@ -42,10 +42,10 @@ func setReviewTag(head, verdict string) string {
 		case m != nil:
 			inTags = strings.TrimSpace(m[1]) == ""
 			if !inTags {
-				lines[i] = reviewTagRe.ReplaceAllLiteralString(l, "review:"+verdict)
+				lines[i] = reviewTagRe.ReplaceAllLiteralString(l, "review/"+verdict)
 			}
 		case inTags && tagItemRe.MatchString(l):
-			lines[i] = reviewTagRe.ReplaceAllLiteralString(l, "review:"+verdict)
+			lines[i] = reviewTagRe.ReplaceAllLiteralString(l, "review/"+verdict)
 		default:
 			inTags = false
 		}

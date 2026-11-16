@@ -45,7 +45,7 @@ var exportSourceKeys = []string{"url", "accessed", "authors", "published"}
 var exportHugoKeys = map[string]string{"kind": "zk_kind", "url": "source_url", "published": "source_published"}
 
 // exportFrontmatter builds the frontmatter of an exported page from the YAML mapping fm and the page model, in this order:
-// title and date from the fields; kind, review and status unpacked from the tags; superseded_by; the topic: and type: tags as tags
+// title and date from the fields; kind, review and status unpacked from the tags; superseded_by; the topic/ and type/ tags as tags
 // (aliases and every other tag stay behind); and the exportSourceKeys for a source. When hugo is set it renames the keys in exportHugoKeys.
 func exportFrontmatter(fm string, page *lint.Page, hugo bool) (string, error) {
 	var doc yaml.Node
@@ -80,7 +80,7 @@ func exportFrontmatter(fm string, page *lint.Page, hugo bool) (string, error) {
 	put("superseded_by", fields["superseded_by"])
 	tags := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Style: yaml.FlowStyle}
 	for _, tag := range page.Tags() {
-		if strings.HasPrefix(tag, "topic:") || strings.HasPrefix(tag, "type:") {
+		if strings.HasPrefix(tag, "topic/") || strings.HasPrefix(tag, "type/") {
 			tags.Content = append(tags.Content, str(tag))
 		}
 	}

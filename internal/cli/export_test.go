@@ -662,7 +662,7 @@ func TestExportGenericKeepsKind(t *testing.T) {
 func dated(t *testing.T) map[string]string {
 	t.Helper()
 	return with_(t, map[string]string{
-		"notes/notdat.md": "---\ntitle: Dated note\ndate: 2027-05-06T07:08:09Z\ntags: [kind:note]\n---\n" + hubLine + "\n\nBody.\n",
+		"notes/notdat.md": "---\ntitle: Dated note\ndate: 2027-05-06T07:08:09Z\ntags: [kind/note]\n---\n" + hubLine + "\n\nBody.\n",
 	})
 }
 
@@ -684,14 +684,14 @@ func TestExportDateComesFromTheField(t *testing.T) {
 
 func TestExportTagsKeepTopicAndTypeOnly(t *testing.T) {
 	files := with_(t, map[string]string{
-		"notes/notaaa.md": "---\ntitle: Tagged\ndate: 2026-01-02T03:04:05Z\ntags: [kind:log, topic:ml/rnn, type:decision, topic:x, custom]\naliases: [Other name]\n---\n" + hubLine + "\n\nBody.\n",
+		"notes/notaaa.md": "---\ntitle: Tagged\ndate: 2026-01-02T03:04:05Z\ntags: [kind/log, topic/ml/rnn, type/decision, topic/x, custom]\naliases: [Other name]\n---\n" + hubLine + "\n\nBody.\n",
 	})
 	for name, page := range map[string]string{"generic": exportOK(t, files)["notes/notaaa.md"], "hugo": exportHugoOK(t, files)["content/notes/notaaa.md"]} {
 		kind := "kind"
 		if name == "hugo" {
 			kind = "zk_kind"
 		}
-		want := "---\ntitle: Tagged\ndate: 2026-01-02T03:04:05Z\n" + kind + ": log\ntags: ['topic:ml/rnn', 'type:decision', 'topic:x']\n---\n"
+		want := "---\ntitle: Tagged\ndate: 2026-01-02T03:04:05Z\n" + kind + ": log\ntags: [topic/ml/rnn, type/decision, topic/x]\n---\n"
 		if !strings.HasPrefix(page, want) {
 			t.Errorf("%s page = %q, want it to start with %q", name, page, want)
 		}

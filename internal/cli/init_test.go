@@ -108,8 +108,8 @@ func TestInitFreshVault(t *testing.T) {
 		if err != nil || date.Before(before) || date.After(after) {
 			t.Errorf("index.md date %s (%v), want a time between %s and %s", m[1], err, before, after)
 		}
-		if !strings.Contains(index, "\ntags: [kind:hub]\n") || strings.Contains(index, "\nid:") {
-			t.Errorf("index.md:\n%s\nwant tags: [kind:hub] and no id: field", index)
+		if !strings.Contains(index, "\ntags: [kind/hub]\n") || strings.Contains(index, "\nid:") {
+			t.Errorf("index.md:\n%s\nwant tags: [kind/hub] and no id: field", index)
 		}
 	})
 
@@ -175,7 +175,7 @@ func TestInitFreshVault(t *testing.T) {
 
 	t.Run("one template per kind", func(t *testing.T) {
 		for _, tt := range []struct{ kind, tags string }{
-			{"note", "[kind:note]"}, {"source", "[kind:source, review:unreviewed]"}, {"hub", "[kind:hub]"}, {"log", "[kind:log]"},
+			{"note", "[kind/note]"}, {"source", "[kind/source, review/unreviewed]"}, {"hub", "[kind/hub]"}, {"log", "[kind/log]"},
 		} {
 			text := readFile(t, filepath.Join(v, ".zk", "templates", tt.kind+".md"))
 			for _, want := range []string{"\ntitle: {{json title}}\n", "\ntags: " + tt.tags + "\n", "\ndate: {{sh 'date -u +%Y-%m-%dT%H:%M:%SZ'}}\n"} {

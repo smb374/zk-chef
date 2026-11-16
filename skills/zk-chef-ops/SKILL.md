@@ -8,7 +8,7 @@ description: >
 
 This skill owns the commands, the history and the checks. `zettel-writing` owns what you write inside a note.
 
-Run every command from the vault root, or give `zk-chef` the vault with `--root DIR` (short form `-r DIR`) or the `ZK_CHEF_ROOT` env var. `--root` applies to `zk-chef` only; run `zk` and `git` from the vault root. `zk-chef <verb> --help` shows the flags of a verb. Every page is a file in the flat folder `notes/`, except the root page `index.md`. A page's ID is its file stem: 6 random lowercase letters and digits (`index` for the root page). Links are `[[stem|Title]]`. Kind and state are tags in the frontmatter: `kind:note|hub|source|log`, `review:unreviewed|reviewed|disputed` (sources only), `status:superseded`, `topic:<kebab>`, `type:<kebab>` (logs only).
+Run every command from the vault root, or give `zk-chef` the vault with `--root DIR` (short form `-r DIR`) or the `ZK_CHEF_ROOT` env var. `--root` applies to `zk-chef` only; run `zk` and `git` from the vault root. `zk-chef <verb> --help` shows the flags of a verb. Every page is a file in the flat folder `notes/`, except the root page `index.md`. A page's ID is its file stem: 6 random lowercase letters and digits (`index` for the root page). Links are `[[stem|Title]]`. Kind and state are tags in the frontmatter: `kind/note|hub|source|log`, `review/unreviewed|reviewed|disputed` (sources only), `status/superseded`, `topic/<kebab>`, `type/<kebab>` (logs only).
 
 ## Commands
 
@@ -17,11 +17,11 @@ Run every command from the vault root, or give `zk-chef` the vault with `--root 
   - **Clash rule.** A stem is random. When a new stem equals an existing one, zk prints the path of the existing page and writes nothing new. Before each create call, run `zk list --quiet --format "{{path}}" notes`. When the printed path (absolute) ends with one of the paths in that list, the stem clashed: do not write in that page, and run the command again.
 - **Query:** run `zk index --quiet` first, then `zk list --quiet --format "{{path}}  {{title}}"` with one of:
   - `--match "<query>"`: full-text search of the pages, including `## Extract`.
-  - `--tag kind:source`, `--tag review:unreviewed`, `--tag status:superseded`, `--tag topic:ml/rnn`: pages with that tag. Repeat `--tag` to narrow.
+  - `--tag kind/source`, `--tag review/unreviewed`, `--tag status/superseded`, `--tag topic/ml/rnn`: pages with that tag. Repeat `--tag` to narrow.
   - `--link-to notes/STEM.md` (the Index: `index.md`): pages that link the target, such as its citers.
   - `--linked-by notes/STEM.md`: pages that the target links.
   - `--orphan`: pages nothing links.
-  - `--tag kind:hub` with `--format "[[{{filename-stem}}|{{title}}]]"`: ready-made links to every hub.
+  - `--tag kind/hub` with `--format "[[{{filename-stem}}|{{title}}]]"`: ready-made links to every hub.
 - **Members of a hub:** `zk-chef lint --children HUB-STEM` lists the pages whose Hubs line names the hub (not pages that only mention it). `--json` prints a list. An unknown stem, or a stem that is not a hub, exits with code 2.
 - **Check:** `zk-chef lint`. Findings read `path:line: CODE message`. Errors block the commit; warnings never do. Read `LINT.md` in this folder for any code you do not know.
 - **Refresh aliases:** `zk-chef lint --fix` first rewrites stale link aliases to the target's current title, then lints. It changes the Hubs line and `## References` of a note, and every scanned line of a hub, source, log or the Index. It leaves an alias in note prose as it is.
@@ -32,12 +32,12 @@ Cite a web URL directly in `## References` (`zettel-writing`, "Citations"). Inge
 
 **Propose.** After a task that cites URLs, list the load-bearing ones, numbered, each with a reason in one line. A URL is load-bearing when a claim fails without it. Skip a URL that only gives context. Done when each listed URL has a number and a reason. Ingest nothing until the human answers with numbers.
 
-1. Pick the hubs the source joins (`zk list --quiet --tag kind:hub --format "[[{{filename-stem}}|{{title}}]]"`). When no hub fits, add one first ("Add a hub"). `ingest` needs at least one hub and the vault has no default Sources hub.
+1. Pick the hubs the source joins (`zk list --quiet --tag kind/hub --format "[[{{filename-stem}}|{{title}}]]"`). When no hub fits, add one first ("Add a hub"). `ingest` needs at least one hub and the vault has no default Sources hub.
 2. For each approved source, run `zk-chef ingest -t "<short title of the work>" --hub HUB-STEM PATH|URL`. Repeat `--hub` for each hub. A stem that is not a hub exits with code 2 and writes nothing.
    - **PATH:** copies the file to `raw/<stem>.<ext>` and sets `raw:` and `sha256:`.
    - **URL:** also sets `url:` and `accessed:` (today, UTC), and downloads the bytes to `raw/<stem>.<ext>` (HTML stays HTML). The extension comes from the last part of the URL path. When that has none, it comes from the Content-Type (`text/html` gives `.html`). When that has none too, the file has no extension.
    - **URL with `--no-raw`:** sets `url:` and `accessed:` and downloads nothing. Use it when the human wants a source cited without a copy of its bytes. `--no-raw` with a PATH exits with code 2. A review of such a source vouches for what the URL showed on `accessed`, not for bytes in the vault.
-   - It sets the tags `kind:source` and `review:unreviewed`, writes the hubs on the Hubs line and prints the note path (`--json` adds `raw`, `sha256`, `url` and `accessed`). When zk returns an existing page, it tries again, up to 3 times in all, then exits with code 1 and leaves that page as it was.
+   - It sets the tags `kind/source` and `review/unreviewed`, writes the hubs on the Hubs line and prints the note path (`--json` adds `raw`, `sha256`, `url` and `accessed`). When zk returns an existing page, it tries again, up to 3 times in all, then exits with code 1 and leaves that page as it was.
    - It does not write the body, `authors`, `published`, `## Extract` or `## Review`.
 3. Write the body as `zettel-writing` describes under "Source notes". Add the empty `## Review` heading.
 4. In each note that cites the URL directly, keep its References entry and append `, Archive: [[stem|Title]]`. Find the notes by searching the vault for the URL as literal text. Done when every direct entry for the URL ends with the Archive link.
@@ -50,12 +50,12 @@ An unreviewed source is citable at once.
 A source with a raw file:
 
 1. Overwrite `raw/<stem>.<ext>` (keep the name).
-2. Set `sha256:` to the new hash and the tag `review:unreviewed`. Leave `## Review` as it is; older blocks stay valid.
+2. Set `sha256:` to the new hash and the tag `review/unreviewed`. Leave `## Review` as it is; older blocks stay valid.
 3. List the citers with `zk list --quiet --link-to notes/SRC-STEM.md`. Open each one, check every claim and locator that cites the source against the new file, and edit what changed.
 4. Commit the file, the note and the citer edits together with `edit: <what>`. Done when every citer is checked.
 5. Tell the human the source needs a new review.
 
-A URL-only source: read the URL again, set `accessed:` to today and the tag `review:unreviewed`, and continue with step 3.
+A URL-only source: read the URL again, set `accessed:` to today and the tag `review/unreviewed`, and continue with step 3.
 
 **A different file name** (or a different URL). Ingest the file as a new source, then supersede the old source note.
 
@@ -64,7 +64,7 @@ A URL-only source: read the URL again, set `accessed:` to today and the tag `rev
 Supersede when the claim itself changed. Wording, link and citation fixes are edits in place. A hub or a log cannot be superseded.
 
 1. Write the replacement NEW (`zettel-writing`, "Write a note"; for a source, "Ingest a source").
-2. On OLD, add the tag `status:superseded` to `tags`, add `superseded_by: NEW-STEM` to the frontmatter, and write the line `Superseded by [[NEW-STEM|NEW title]]` after the Hubs line, with a blank line between. Leave OLD's content as it is.
+2. On OLD, add the tag `status/superseded` to `tags`, add `superseded_by: NEW-STEM` to the frontmatter, and write the line `Superseded by [[NEW-STEM|NEW title]]` after the Hubs line, with a blank line between. Leave OLD's content as it is.
 3. For each live note in `zk list --quiet --link-to notes/OLD-STEM.md`, point its link at NEW. Done when lint shows no `W_SUPERSEDED_LINK`.
 4. Run lint and commit with `supersede: <what>`.
 
@@ -102,6 +102,6 @@ Run `zk-chef export [-g hugo [-s plain|tufte]] DIR` when the human wants a copy 
 
 ## Review belongs to the human
 
-`zk-chef review SRC-STEM reviewed|disputed` signs the verdict. When a task needs a review, name that command in your reply and stop there. Do not hand-edit `## Review`, and do not set `review:reviewed` or `review:disputed`. You set `review:unreviewed` only when the source changed.
+`zk-chef review SRC-STEM reviewed|disputed` signs the verdict. When a task needs a review, name that command in your reply and stop there. Do not hand-edit `## Review`, and do not set `review/reviewed` or `review/disputed`. You set `review/unreviewed` only when the source changed.
 
-In your reply, also list open items the vault shows: `zk-chef doctor` failures (for example `pinned-key`: the human runs `zk-chef key add`), unreviewed sources that notes rest on (`zk list --quiet --tag review:unreviewed`), and untracked tool folders (`.obsidian/`, `.zk/notebook.db`) that belong in `.gitignore`.
+In your reply, also list open items the vault shows: `zk-chef doctor` failures (for example `pinned-key`: the human runs `zk-chef key add`), unreviewed sources that notes rest on (`zk list --quiet --tag review/unreviewed`), and untracked tool folders (`.obsidian/`, `.zk/notebook.db`) that belong in `.gitignore`.
